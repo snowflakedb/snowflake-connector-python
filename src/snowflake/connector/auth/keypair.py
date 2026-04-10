@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
@@ -43,7 +39,8 @@ class AuthByKeyPair(AuthByPlugin):
 
     def __init__(
         self,
-        private_key: bytes | RSAPrivateKey,
+        private_key: bytes | str | RSAPrivateKey,
+        private_key_passphrase: bytes | None = None,
         lifetime_in_seconds: int = LIFETIME,
         **kwargs,
     ) -> None:
@@ -75,7 +72,8 @@ class AuthByKeyPair(AuthByPlugin):
             ).total_seconds()
         )
 
-        self._private_key: bytes | RSAPrivateKey | None = private_key
+        self._private_key: bytes | str | RSAPrivateKey | None = private_key
+        self._private_key_passphrase: bytes | None = private_key_passphrase
         self._jwt_token = ""
         self._jwt_token_exp = 0
         self._lifetime = timedelta(
@@ -105,17 +103,29 @@ class AuthByKeyPair(AuthByPlugin):
 
         now = datetime.now(timezone.utc).replace(tzinfo=None)
 
+        if isinstance(self._private_key, str):
+            try:
+                self._private_key = base64.b64decode(self._private_key)
+            except Exception as e:
+                raise ProgrammingError(
+                    msg=f"Failed to decode private key: {e}\nPlease provide a valid "
+                    "unencrypted rsa private key in base64-encoded DER format as a "
+                    "str object",
+                    errno=ER_INVALID_PRIVATE_KEY,
+                )
+
         if isinstance(self._private_key, bytes):
             try:
                 private_key = load_der_private_key(
                     data=self._private_key,
-                    password=None,
+                    password=self._private_key_passphrase,
                     backend=default_backend(),
                 )
             except Exception as e:
                 raise ProgrammingError(
                     msg=f"Failed to load private key: {e}\nPlease provide a valid "
-                    "unencrypted rsa private key in DER format as bytes object",
+                    "rsa private key in DER format as bytes object. If the key is "
+                    "encrypted, provide the passphrase via private_key_passphrase",
                     errno=ER_INVALID_PRIVATE_KEY,
                 )
 

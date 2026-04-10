@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 """Various constants."""
 
 from __future__ import annotations
@@ -16,6 +12,8 @@ SNOWFLAKE_CONNECTOR_VERSION = ".".join(str(v) for v in VERSION[0:3])
 PYTHON_VERSION = ".".join(str(v) for v in sys.version_info[:3])
 OPERATING_SYSTEM = platform.system()
 PLATFORM = platform.platform()
+OS_VERSION = platform.version()
+ISA = platform.machine()
 IMPLEMENTATION = platform.python_implementation()
 COMPILER = platform.python_compiler()
 

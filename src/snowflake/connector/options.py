@@ -1,13 +1,9 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import importlib
 import os
 import warnings
-from importlib.metadata import distributions
+from importlib.metadata import PackageNotFoundError, distribution
 from logging import getLogger
 from types import ModuleType
 from typing import Union
@@ -52,6 +48,30 @@ class MissingKeyring(MissingOptionalDependency):
     _dep_name = "keyring"
 
 
+class MissingBotocore(MissingOptionalDependency):
+    """The class is specifically for boto optional dependency."""
+
+    _dep_name = "botocore"
+
+
+class MissingBoto3(MissingOptionalDependency):
+    """The class is specifically for boto3 optional dependency."""
+
+    _dep_name = "boto3"
+
+
+class MissingAioBotocore(MissingOptionalDependency):
+    """The class is specifically for boto optional dependency."""
+
+    _dep_name = "aiobotocore"
+
+
+class MissingAioBoto3(MissingOptionalDependency):
+    """The class is specifically for boto3 optional dependency."""
+
+    _dep_name = "aioboto3"
+
+
 ModuleLikeObject = Union[ModuleType, MissingOptionalDependency]
 
 
@@ -85,13 +105,13 @@ def _import_or_missing_pandas_option() -> (
             os.environ["ARROW_DEFAULT_MEMORY_POOL"] = "system"
 
         # Check whether we have the currently supported pyarrow installed
-        installed_packages = {
-            package.metadata["Name"]: package for package in distributions()
-        }
-        if {"pyarrow", "snowflake-connector-python"} <= installed_packages.keys():
-            dependencies = installed_packages[
-                "snowflake-connector-python"
-            ].metadata.get_all("Requires-Dist", [])
+        try:
+            pyarrow_dist = distribution("pyarrow")
+            snowflake_connector_dist = distribution("snowflake-connector-python")
+
+            dependencies = snowflake_connector_dist.metadata.get_all(
+                "Requires-Dist", []
+            )
             pandas_pyarrow_extra = None
             for dependency in dependencies:
                 dep = Requirement(dependency)
@@ -103,16 +123,15 @@ def _import_or_missing_pandas_option() -> (
                     pandas_pyarrow_extra = dep
                     break
 
-            installed_pyarrow_version = installed_packages["pyarrow"].version
+            installed_pyarrow_version = pyarrow_dist.version
             if not pandas_pyarrow_extra.specifier.contains(installed_pyarrow_version):
                 warn_incompatible_dep(
                     "pyarrow", installed_pyarrow_version, pandas_pyarrow_extra
                 )
 
-        else:
+        except PackageNotFoundError as e:
             logger.info(
-                "Cannot determine if compatible pyarrow is installed because of missing package(s) from "
-                "{}".format(list(installed_packages.keys()))
+                f"Cannot determine if compatible pyarrow is installed because of missing package(s): {e}"
             )
         return pandas, pyarrow, True
     except ImportError:
@@ -131,6 +150,30 @@ def _import_or_missing_keyring_option() -> tuple[ModuleLikeObject, bool]:
         return MissingKeyring(), False
 
 
+def _import_or_missing_boto_option() -> tuple[ModuleLikeObject, ModuleLikeObject, bool]:
+    """This function tries importing the following packages: botocore and boto3."""
+    try:
+        botocore = importlib.import_module("botocore")
+        boto3 = importlib.import_module("boto3")
+        return botocore, boto3, True
+    except ImportError:
+        return MissingBotocore(), MissingBoto3(), False
+
+
+def _import_or_missing_aioboto_option() -> (
+    tuple[ModuleLikeObject, ModuleLikeObject, bool]
+):
+    """This function tries importing the following packages: botocore and boto3."""
+    try:
+        aiobotocore = importlib.import_module("aiobotocore")
+        aioboto3 = importlib.import_module("aioboto3")
+        return aiobotocore, aioboto3, True
+    except ImportError:
+        return MissingAioBotocore(), MissingAioBoto3(), False
+
+
 # Create actual constants to be imported from this file
 pandas, pyarrow, installed_pandas = _import_or_missing_pandas_option()
 keyring, installed_keyring = _import_or_missing_keyring_option()
+botocore, boto3, installed_boto = _import_or_missing_boto_option()
+aiobotocore, aioboto3, installed_aioboto = _import_or_missing_aioboto_option()

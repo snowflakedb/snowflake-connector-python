@@ -1,1 +1,5 @@
-@snowflakedb/snowpark-python-api
+* @snowflakedb/snow-drivers-warsaw
+/src/snowflake/connector/ocsp_* @snowflakedb/pki-oversight @snowflakedb/snow-drivers-warsaw
+/src/snowflake/connector/crl.py @snowflakedb/pki-oversight @snowflakedb/snow-drivers-warsaw
+/src/snowflake/connector/crl_cache.py @snowflakedb/pki-oversight @snowflakedb/snow-drivers-warsaw
+/src/snowflake/connector/ssl_wrap_socket.py @snowflakedb/pki-oversight @snowflakedb/snow-drivers-warsaw

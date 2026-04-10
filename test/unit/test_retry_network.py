@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import errno
@@ -24,7 +20,9 @@ from snowflake.connector.compat import (
     GATEWAY_TIMEOUT,
     INTERNAL_SERVER_ERROR,
     OK,
+    PERMANENT_REDIRECT,
     SERVICE_UNAVAILABLE,
+    TEMPORARY_REDIRECT,
     UNAUTHORIZED,
     BadStatusLine,
     IncompleteRead,
@@ -33,7 +31,7 @@ from snowflake.connector.errors import (
     DatabaseError,
     Error,
     ForbiddenError,
-    InterfaceError,
+    HttpError,
     OperationalError,
     OtherHTTPRetryableError,
     ServiceUnavailableError,
@@ -42,17 +40,28 @@ from snowflake.connector.network import (
     STATUS_TO_EXCEPTION,
     RetryRequest,
     SnowflakeRestful,
+    is_retryable_http_code,
 )
 
-from .mock_utils import mock_connection, mock_request_with_action, zero_backoff
+from .mock_utils import (
+    get_mock_session_manager,
+    mock_connection,
+    mock_request_with_action,
+    zero_backoff,
+)
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
     import snowflake.connector.vendored.urllib3.contrib.pyopenssl
     from snowflake.connector.vendored import requests, urllib3
+    from snowflake.connector.vendored.requests.exceptions import (
+        SSLError,
+        TooManyRedirects,
+    )
 except ImportError:  # pragma: no cover
     import requests
     import urllib3
+    from requests.exceptions import SSLError, TooManyRedirects
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -100,7 +109,17 @@ def test_retry_reason(mockRequestExec):
             },
         }
         cnt.c += 1
-        if "retry" in sql:
+        if "redirect 307" in sql:
+            # error = HTTP 307 redirect
+            if cnt.c == 1:
+                raise RetryRequest(OtherHTTPRetryableError(errno=307))
+            return success_result
+        elif "redirect 308" in sql:
+            # error = HTTP 308 redirect
+            if cnt.c == 1:
+                raise RetryRequest(OtherHTTPRetryableError(errno=308))
+            return success_result
+        elif "retry" in sql:
             # error = HTTP Error 429
             if cnt.c < 3:  # retry twice for 429 error
                 raise RetryRequest(OtherHTTPRetryableError(errno=429))
@@ -137,6 +156,17 @@ def test_retry_reason(mockRequestExec):
     cnt.reset()
     conn.cmd_query("unknown error", 0, uuid4())
     assert "retryReason=100" in url
+    assert "retryCount=1" in url
+
+    # ensure 307/308 redirect retryReason is propagated correctly
+    cnt.reset()
+    conn.cmd_query("redirect 307", 0, uuid4())
+    assert "retryReason=307" in url
+    assert "retryCount=1" in url
+
+    cnt.reset()
+    conn.cmd_query("redirect 308", 0, uuid4())
+    assert "retryReason=308" in url
     assert "retryCount=1" in url
 
     # ensure query requests have retryReason reset to 0 when no reason is given
@@ -221,7 +251,7 @@ def test_request_exec():
 
     # unauthorized
     type(request_mock).status_code = PropertyMock(return_value=UNAUTHORIZED)
-    with pytest.raises(InterfaceError):
+    with pytest.raises(HttpError):
         rest._request_exec(session=session, **default_parameters)
 
     # unauthorized with catch okta unauthorized error
@@ -303,7 +333,9 @@ def test_fetch():
     def fake_request_exec(**kwargs):
         headers = kwargs.get("headers")
         cnt = headers["cnt"]
-        time.sleep(3)
+        time.sleep(
+            0.1
+        )  # Realistic network delay simulation without excessive test slowdown
         if cnt.c <= 1:
             # the first two raises failure
             cnt.c += 1
@@ -320,25 +352,27 @@ def test_fetch():
 
     # first two attempts will fail but third will success
     cnt.reset()
-    ret = rest.fetch(timeout=10, **default_parameters)
+    ret = rest.fetch(timeout=5, **default_parameters)
     assert ret == {"success": True, "data": "valid data"}
     assert not rest._connection.errorhandler.called  # no error
 
     # first attempt to reach timeout even if the exception is retryable
     cnt.reset()
-    ret = rest.fetch(timeout=1, **default_parameters)
+    ret = rest.fetch(
+        timeout=0.001, **default_parameters
+    )  # Timeout well before 0.1s sleep completes
     assert ret == {}
     assert rest._connection.errorhandler.called  # error
 
     # not retryable excpetion
     cnt.set(NOT_RETRYABLE)
     with pytest.raises(NotRetryableException):
-        rest.fetch(timeout=7, **default_parameters)
+        rest.fetch(timeout=5, **default_parameters)
 
     # first attempt fails and will not retry
     cnt.reset()
     default_parameters["no_retry"] = True
-    ret = rest.fetch(timeout=10, **default_parameters)
+    ret = rest.fetch(timeout=5, **default_parameters)
     assert ret == {}
     assert cnt.c == 1  # failed on first call - did not retry
     assert rest._connection.errorhandler.called  # error
@@ -382,7 +416,9 @@ def test_secret_masking(caplog):
 
 
 def test_retry_connection_reset_error(caplog):
-    connection = mock_connection()
+    connection = mock_connection(
+        session_manager=get_mock_session_manager(allow_send=True)
+    )
     connection.errorhandler = Mock(return_value=None)
 
     rest = SnowflakeRestful(
@@ -470,3 +506,257 @@ def test_retry_request_timeout(mockSessionRequest, next_action_result):
     # 13 seconds should be enough for authenticator to attempt thrice
     # however, loosen restrictions to avoid thread scheduling causing failure
     assert 1 < mockSessionRequest.call_count < 5
+
+
+def test_sslerror_with_econnreset_retries():
+    """Test that SSLError with ECONNRESET raises RetryRequest."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    default_parameters = {
+        "method": "POST",
+        "full_url": "https://testaccount.snowflakecomputing.com/",
+        "headers": {},
+        "data": '{"code": 12345}',
+        "token": None,
+    }
+
+    # Test SSLError with ECONNRESET in the message
+    econnreset_ssl_error = SSLError("Connection broken: ECONNRESET")
+    session = MagicMock()
+    session.request = Mock(side_effect=econnreset_ssl_error)
+
+    with pytest.raises(RetryRequest, match="Connection broken: ECONNRESET"):
+        rest._request_exec(session=session, **default_parameters)
+
+
+def test_sslerror_without_econnreset_does_not_retry():
+    """Test that SSLError without ECONNRESET does not retry but raises OperationalError."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    default_parameters = {
+        "method": "POST",
+        "full_url": "https://testaccount.snowflakecomputing.com/",
+        "headers": {},
+        "data": '{"code": 12345}',
+        "token": None,
+    }
+
+    # Test SSLError without ECONNRESET in the message
+    regular_ssl_error = SSLError("SSL handshake failed")
+    session = MagicMock()
+    session.request = Mock(side_effect=regular_ssl_error)
+
+    # This should raise OperationalError, not RetryRequest
+    with pytest.raises(OperationalError):
+        rest._request_exec(session=session, **default_parameters)
+
+
+def test_is_retryable_http_code_includes_307_308():
+    """Test that 307 and 308 redirect status codes are considered retryable."""
+    assert is_retryable_http_code(TEMPORARY_REDIRECT) is True
+    assert is_retryable_http_code(PERMANENT_REDIRECT) is True
+
+
+@pytest.mark.parametrize("status_code", [TEMPORARY_REDIRECT, PERMANENT_REDIRECT])
+def test_redirect_status_raises_retry_request(status_code):
+    """Test that 307/308 responses raise RetryRequest for non-login URLs."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    request_mock = MagicMock()
+    type(request_mock).status_code = PropertyMock(return_value=status_code)
+    request_mock.history = []
+
+    session = MagicMock()
+    session.request.return_value = request_mock
+
+    with pytest.raises(RetryRequest):
+        rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
+
+
+@pytest.mark.parametrize("status_code", [TEMPORARY_REDIRECT, PERMANENT_REDIRECT])
+def test_redirect_login_raises_operational_error(status_code):
+    """Test that 307/308 on login URLs raises OperationalError (not RetryRequest)."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    request_mock = MagicMock()
+    type(request_mock).status_code = PropertyMock(return_value=status_code)
+    request_mock.history = []
+
+    session = MagicMock()
+    session.request.return_value = request_mock
+
+    with pytest.raises(OperationalError):
+        rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/session/v1/login-request?request_id=abc",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
+
+
+@pytest.mark.parametrize("status_code", [TEMPORARY_REDIRECT, PERMANENT_REDIRECT])
+@patch("snowflake.connector.vendored.requests.sessions.Session.request")
+def test_redirect_retry_through_real_request_exec(mockSessionRequest, status_code):
+    """Test the full retry path: _request_exec sees 307/308, raises RetryRequest,
+    fetch() retries, second _request_exec call returns 200.
+
+    This patches Session.request at the library level (like test_login_request_timeout)
+    so the real fetch() → _request_exec_wrapper() → _request_exec() path is exercised.
+    """
+    output_data = {"success": True, "code": 12345}
+
+    # First call: return redirect status (simulates redirect not auto-followed)
+    redirect_response = MagicMock(
+        status_code=status_code, history=[], close=lambda: None
+    )
+
+    # Second call: return 200 success
+    success_response = MagicMock(status_code=OK, history=[], close=lambda: None)
+    success_response.json.return_value = output_data
+
+    mockSessionRequest.side_effect = [redirect_response, success_response]
+
+    connection = mock_connection(backoff_policy=zero_backoff)
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    ret = rest.fetch(
+        method="POST",
+        full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+        headers={},
+        data='{"code": 12345}',
+        timeout=10,
+    )
+    assert ret == output_data
+    assert mockSessionRequest.call_count == 2
+
+
+def test_redirect_history_logged(caplog):
+    """Test that redirect history is logged at debug level."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    # Create a mock redirect history entry
+    hist_response = MagicMock()
+    hist_response.status_code = 307
+    hist_response.headers = {"Location": "/internal-redirect-target"}
+
+    # Create the final 200 response with history
+    output_data = {"success": True, "code": 12345}
+    request_mock = MagicMock()
+    type(request_mock).status_code = PropertyMock(return_value=OK)
+    request_mock.json.return_value = output_data
+    request_mock.history = [hist_response]
+
+    session = MagicMock()
+    session.request.return_value = request_mock
+
+    with caplog.at_level(logging.DEBUG):
+        ret = rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
+
+    assert ret == output_data
+    assert (
+        "Request was redirected: HTTP 307 to /internal-redirect-target" in caplog.text
+    )
+
+
+def test_too_many_redirects_raises_retry_request():
+    """TooManyRedirects from session.request() must raise RetryRequest for query URLs.
+
+    requests raises TooManyRedirects (not returns a 307) when the redirect chain
+    exceeds max_redirects. This is the Python equivalent of .NET's HttpClient
+    returning a 307/308 response at the redirect limit — both should be retried.
+    """
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    session = MagicMock()
+    session.request.side_effect = TooManyRedirects("exceeded redirect limit")
+
+    with pytest.raises(RetryRequest):
+        rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
+
+
+def test_too_many_redirects_on_login_raises_operational_error():
+    """TooManyRedirects on login URL must raise OperationalError, not RetryRequest."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    session = MagicMock()
+    session.request.side_effect = TooManyRedirects("exceeded redirect limit")
+
+    with pytest.raises(OperationalError):
+        rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/session/v1/login-request?request_id=abc",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )

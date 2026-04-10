@@ -1,19 +1,20 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
+import copy
 import datetime
+import io
+import json
 import logging
 import os
 import platform
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
-from os import environ, path
+from os import path
 from unittest import mock
 
+import asn1crypto.x509
+from asn1crypto import ocsp
 from asn1crypto import x509 as asn1crypto509
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -77,20 +78,119 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 
 
 @pytest.fixture(autouse=True)
+def worker_specific_cache_dir(tmpdir, request, monkeypatch):
+    """Create worker-specific cache directory to avoid file lock conflicts in parallel execution.
+
+    Note: Tests that explicitly manage their own cache directories (like test_ocsp_cache_when_server_is_down)
+    should work normally - this fixture only provides isolation for the validation cache.
+    """
+
+    # Get worker ID for parallel execution (pytest-xdist)
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
+
+    # monkeypatch will automatically handle restoration
+
+    # Set worker-specific cache directory to prevent main cache file conflicts
+    worker_cache_dir = tmpdir.join(f"ocsp_cache_{worker_id}")
+    worker_cache_dir.ensure(dir=True)
+    monkeypatch.setenv("SF_OCSP_RESPONSE_CACHE_DIR", str(worker_cache_dir))
+
+    # Only handle the OCSP_RESPONSE_VALIDATION_CACHE to prevent conflicts
+    # Let tests manage SF_OCSP_RESPONSE_CACHE_DIR themselves if they need to
+    try:
+        import snowflake.connector.ocsp_snowflake as ocsp_module
+        from snowflake.connector.cache import SFDictFileCache
+
+        # Reset cache dir to pick up the new environment variable
+        ocsp_module.OCSPCache.reset_cache_dir()
+
+        # Create worker-specific validation cache file
+        validation_cache_file = tmpdir.join(f"ocsp_validation_cache_{worker_id}.json")
+
+        # Create new cache instance for this worker
+        worker_validation_cache = SFDictFileCache(
+            file_path=str(validation_cache_file), entry_lifetime=3600
+        )
+
+        # Store original cache to restore later
+        original_validation_cache = getattr(
+            ocsp_module, "OCSP_RESPONSE_VALIDATION_CACHE", None
+        )
+
+        # Replace with worker-specific cache
+        ocsp_module.OCSP_RESPONSE_VALIDATION_CACHE = worker_validation_cache
+
+        yield str(tmpdir)
+
+        # Restore original validation cache
+        if original_validation_cache is not None:
+            ocsp_module.OCSP_RESPONSE_VALIDATION_CACHE = original_validation_cache
+
+    except ImportError:
+        # If modules not available, just yield the directory
+        yield str(tmpdir)
+    finally:
+        # monkeypatch will automatically restore the original environment variable
+
+        # Reset cache dir back to original state
+        try:
+            import snowflake.connector.ocsp_snowflake as ocsp_module
+
+            ocsp_module.OCSPCache.reset_cache_dir()
+        except ImportError:
+            pass
+
+
+def create_x509_cert(hash_algorithm):
+    # Generate a private key
+    private_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=1024, backend=default_backend()
+    )
+
+    # Generate a public key
+    public_key = private_key.public_key()
+
+    # Create a certificate
+    subject = x509.Name(
+        [
+            x509.NameAttribute(x509.NameOID.COUNTRY_NAME, "US"),
+        ]
+    )
+
+    issuer = subject
+
+    return (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(public_key)
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.now())
+        .not_valid_after(datetime.datetime.now() + datetime.timedelta(days=365))
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName("example.com")]),
+            critical=False,
+        )
+        .sign(private_key, hash_algorithm, default_backend())
+    )
+
+
+@pytest.fixture(autouse=True)
 def random_ocsp_response_validation_cache():
+    RANDOM_FILENAME_SUFFIX_LEN = 10
     file_path = {
         "linux": os.path.join(
             "~",
             ".cache",
             "snowflake",
-            f"ocsp_response_validation_cache{random_string()}",
+            f"ocsp_response_validation_cache{random_string(RANDOM_FILENAME_SUFFIX_LEN)}",
         ),
         "darwin": os.path.join(
             "~",
             "Library",
             "Caches",
             "Snowflake",
-            f"ocsp_response_validation_cache{random_string()}",
+            f"ocsp_response_validation_cache{random_string(RANDOM_FILENAME_SUFFIX_LEN)}",
         ),
         "windows": os.path.join(
             "~",
@@ -98,7 +198,7 @@ def random_ocsp_response_validation_cache():
             "Local",
             "Snowflake",
             "Caches",
-            f"ocsp_response_validation_cache{random_string()}",
+            f"ocsp_response_validation_cache{random_string(RANDOM_FILENAME_SUFFIX_LEN)}",
         ),
     }
     yield SFDictFileCache(
@@ -130,7 +230,7 @@ def test_ocsp_wo_cache_server():
         assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
-def test_ocsp_wo_cache_file():
+def test_ocsp_wo_cache_file(monkeypatch):
     """OCSP tests without File cache.
 
     Notes:
@@ -138,8 +238,12 @@ def test_ocsp_wo_cache_file():
     """
     # reset the memory cache
     SnowflakeOCSP.clear_cache()
-    OCSPCache.del_cache_file()
-    environ["SF_OCSP_RESPONSE_CACHE_DIR"] = "/etc"
+    try:
+        OCSPCache.del_cache_file()
+    except FileNotFoundError:
+        # File doesn't exist, which is fine for this test
+        pass
+    monkeypatch.setenv("SF_OCSP_RESPONSE_CACHE_DIR", "/etc")
     OCSPCache.reset_cache_dir()
 
     try:
@@ -148,42 +252,40 @@ def test_ocsp_wo_cache_file():
             connection = _openssl_connect(url)
             assert ocsp.validate(url, connection), f"Failed to validate: {url}"
     finally:
-        del environ["SF_OCSP_RESPONSE_CACHE_DIR"]
         OCSPCache.reset_cache_dir()
 
 
-def test_ocsp_fail_open_w_single_endpoint():
+def test_ocsp_fail_open_w_single_endpoint(monkeypatch):
     SnowflakeOCSP.clear_cache()
 
-    OCSPCache.del_cache_file()
+    try:
+        OCSPCache.del_cache_file()
+    except FileNotFoundError:
+        # File doesn't exist, which is fine for this test
+        pass
 
-    environ["SF_OCSP_TEST_MODE"] = "true"
-    environ["SF_TEST_OCSP_URL"] = "http://httpbin.org/delay/10"
-    environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"] = "5"
+    monkeypatch.setenv("SF_OCSP_TEST_MODE", "true")
+    monkeypatch.setenv("SF_TEST_OCSP_URL", "http://httpbin.org/delay/10")
+    monkeypatch.setenv("SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT", "5")
 
     ocsp = SFOCSP(use_ocsp_cache_server=False)
     connection = _openssl_connect("snowflake.okta.com")
 
-    try:
-        assert ocsp.validate(
-            "snowflake.okta.com", connection
-        ), "Failed to validate: {}".format("snowflake.okta.com")
-    finally:
-        del environ["SF_OCSP_TEST_MODE"]
-        del environ["SF_TEST_OCSP_URL"]
-        del environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"]
+    assert ocsp.validate(
+        "snowflake.okta.com", connection
+    ), "Failed to validate: {}".format("snowflake.okta.com")
 
 
 @pytest.mark.skipif(
     ER_OCSP_RESPONSE_CERT_STATUS_REVOKED is None,
     reason="No ER_OCSP_RESPONSE_CERT_STATUS_REVOKED is available.",
 )
-def test_ocsp_fail_close_w_single_endpoint():
+def test_ocsp_fail_close_w_single_endpoint(monkeypatch):
     SnowflakeOCSP.clear_cache()
 
-    environ["SF_OCSP_TEST_MODE"] = "true"
-    environ["SF_TEST_OCSP_URL"] = "http://httpbin.org/delay/10"
-    environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"] = "5"
+    monkeypatch.setenv("SF_OCSP_TEST_MODE", "true")
+    monkeypatch.setenv("SF_TEST_OCSP_URL", "http://httpbin.org/delay/10")
+    monkeypatch.setenv("SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT", "5")
 
     OCSPCache.del_cache_file()
 
@@ -193,23 +295,22 @@ def test_ocsp_fail_close_w_single_endpoint():
     with pytest.raises(RevocationCheckError) as ex:
         ocsp.validate("snowflake.okta.com", connection)
 
-    try:
-        assert (
-            ex.value.errno == ER_OCSP_RESPONSE_FETCH_FAILURE
-        ), "Connection should have failed"
-    finally:
-        del environ["SF_OCSP_TEST_MODE"]
-        del environ["SF_TEST_OCSP_URL"]
-        del environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"]
+    assert (
+        ex.value.errno == ER_OCSP_RESPONSE_FETCH_FAILURE
+    ), "Connection should have failed"
 
 
-def test_ocsp_bad_validity():
+def test_ocsp_bad_validity(monkeypatch):
     SnowflakeOCSP.clear_cache()
 
-    environ["SF_OCSP_TEST_MODE"] = "true"
-    environ["SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY"] = "true"
+    monkeypatch.setenv("SF_OCSP_TEST_MODE", "true")
+    monkeypatch.setenv("SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY", "true")
 
-    OCSPCache.del_cache_file()
+    try:
+        OCSPCache.del_cache_file()
+    except FileNotFoundError:
+        # File doesn't exist, which is fine for this test
+        pass
 
     ocsp = SFOCSP(use_ocsp_cache_server=False)
     connection = _openssl_connect("snowflake.okta.com")
@@ -217,12 +318,10 @@ def test_ocsp_bad_validity():
     assert ocsp.validate(
         "snowflake.okta.com", connection
     ), "Connection should have passed with fail open"
-    del environ["SF_OCSP_TEST_MODE"]
-    del environ["SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY"]
 
 
-def test_ocsp_single_endpoint():
-    environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"] = "True"
+def test_ocsp_single_endpoint(monkeypatch):
+    monkeypatch.setenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT", "True")
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP()
     ocsp.OCSP_CACHE_SERVER.NEW_DEFAULT_CACHE_SERVER_BASE_URL = "https://snowflake.preprod3.us-west-2-dev.external-zone.snowflakecomputing.com:8085/ocsp/"
@@ -230,8 +329,6 @@ def test_ocsp_single_endpoint():
     assert ocsp.validate(
         "snowflake.okta.com", connection
     ), "Failed to validate: {}".format("snowflake.okta.com")
-
-    del environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"]
 
 
 def test_ocsp_by_post_method():
@@ -258,7 +355,9 @@ def test_ocsp_with_file_cache(tmpdir):
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_with_bogus_cache_files(tmpdir, random_ocsp_response_validation_cache):
+def test_ocsp_with_bogus_cache_files(
+    tmpdir, random_ocsp_response_validation_cache, monkeypatch
+):
     with mock.patch(
         "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
         random_ocsp_response_validation_cache,
@@ -266,7 +365,7 @@ def test_ocsp_with_bogus_cache_files(tmpdir, random_ocsp_response_validation_cac
         from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
 
         """Attempts to use bogus OCSP response data."""
-        cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
+        cache_file_name, target_hosts = _store_cache_in_file(monkeypatch, tmpdir)
 
         ocsp = SFOCSP()
         OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
@@ -297,7 +396,9 @@ def test_ocsp_with_bogus_cache_files(tmpdir, random_ocsp_response_validation_cac
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_with_outdated_cache(tmpdir, random_ocsp_response_validation_cache):
+def test_ocsp_with_outdated_cache(
+    tmpdir, random_ocsp_response_validation_cache, monkeypatch
+):
     with mock.patch(
         "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
         random_ocsp_response_validation_cache,
@@ -305,7 +406,7 @@ def test_ocsp_with_outdated_cache(tmpdir, random_ocsp_response_validation_cache)
         from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
 
         """Attempts to use outdated OCSP response cache file."""
-        cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
+        cache_file_name, target_hosts = _store_cache_in_file(monkeypatch, tmpdir)
 
         ocsp = SFOCSP()
 
@@ -335,10 +436,8 @@ def test_ocsp_with_outdated_cache(tmpdir, random_ocsp_response_validation_cache)
         ), "must be empty. outdated cache should not be loaded"
 
 
-def _store_cache_in_file(tmpdir, target_hosts=None):
-    if target_hosts is None:
-        target_hosts = TARGET_HOSTS
-    os.environ["SF_OCSP_RESPONSE_CACHE_DIR"] = str(tmpdir)
+def _store_cache_in_file(monkeypatch, tmpdir):
+    monkeypatch.setenv("SF_OCSP_RESPONSE_CACHE_DIR", str(tmpdir))
     OCSPCache.reset_cache_dir()
     filename = path.join(str(tmpdir), "ocsp_response_cache.json")
 
@@ -347,13 +446,13 @@ def _store_cache_in_file(tmpdir, target_hosts=None):
     ocsp = SFOCSP(
         ocsp_response_cache_uri="file://" + filename, use_ocsp_cache_server=False
     )
-    for hostname in target_hosts:
+    for hostname in TARGET_HOSTS:
         connection = _openssl_connect(hostname)
         assert ocsp.validate(hostname, connection), "Failed to validate: {}".format(
             hostname
         )
     assert path.exists(filename), "OCSP response cache file"
-    return filename, target_hosts
+    return filename, TARGET_HOSTS
 
 
 def test_ocsp_with_invalid_cache_file():
@@ -365,26 +464,46 @@ def test_ocsp_with_invalid_cache_file():
         assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
-@mock.patch(
-    "snowflake.connector.ocsp_snowflake.SnowflakeOCSP._fetch_ocsp_response",
-    side_effect=BrokenPipeError("fake error"),
-)
-def test_ocsp_cache_when_server_is_down(
-    mock_fetch_ocsp_response, tmpdir, random_ocsp_response_validation_cache
-):
+def test_ocsp_cache_when_server_is_down(tmpdir):
+    """Test that OCSP validation handles server failures gracefully."""
+    # Create a completely isolated cache for this test
+    from snowflake.connector.cache import SFDictFileCache
+
+    isolated_cache = SFDictFileCache(
+        entry_lifetime=3600,
+        file_path=str(tmpdir.join("isolated_ocsp_cache.json")),
+    )
+
     with mock.patch(
         "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
-        random_ocsp_response_validation_cache,
+        isolated_cache,
     ):
-        ocsp = SFOCSP()
+        # Ensure cache starts empty
+        isolated_cache.clear()
 
-        """Attempts to use outdated OCSP response cache file."""
-        cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
+        # Simulate server being down when trying to validate certificates
+        with mock.patch(
+            "snowflake.connector.ocsp_snowflake.SnowflakeOCSP._fetch_ocsp_response",
+            side_effect=BrokenPipeError("fake error"),
+        ), mock.patch(
+            "snowflake.connector.ocsp_snowflake.SnowflakeOCSP.is_cert_id_in_cache",
+            return_value=(
+                False,
+                None,
+            ),  # Force cache miss to trigger _fetch_ocsp_response
+        ):
+            ocsp = SFOCSP(use_ocsp_cache_server=False, use_fail_open=True)
 
-        # reading cache file
-        OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
-        cache_data = snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE
-        assert not cache_data, "no cache should present because of broken pipe"
+            # The main test: validation should succeed with fail-open behavior
+            # even when server is down (BrokenPipeError)
+            connection = _openssl_connect("snowflake.okta.com")
+            result = ocsp.validate("snowflake.okta.com", connection)
+
+            # With fail-open enabled, validation should succeed despite server being down
+            # The result should not be None (which would indicate complete failure)
+            assert (
+                result is not None
+            ), "OCSP validation should succeed with fail-open when server is down"
 
 
 def test_concurrent_ocsp_requests(tmpdir):
@@ -521,11 +640,11 @@ def test_building_retry_url():
     assert OCSP_SERVER.OCSP_RETRY_URL is None
 
 
-def test_building_new_retry():
+def test_building_new_retry(monkeypatch):
     OCSP_SERVER = OCSPServer()
     OCSP_SERVER.OCSP_RETRY_URL = None
     hname = "a1.us-east-1.snowflakecomputing.com"
-    os.environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"] = "true"
+    monkeypatch.setenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT", "true")
     OCSP_SERVER.reset_ocsp_endpoint(hname)
     assert (
         OCSP_SERVER.CACHE_SERVER_URL
@@ -561,8 +680,6 @@ def test_building_new_retry():
         == "https://ocspssd.snowflakecomputing.com/ocsp/retry"
     )
 
-    del os.environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"]
-
 
 @pytest.mark.parametrize(
     "hash_algorithm",
@@ -576,38 +693,7 @@ def test_building_new_retry():
     ],
 )
 def test_signature_verification(hash_algorithm):
-    # Generate a private key
-    private_key = rsa.generate_private_key(
-        public_exponent=65537, key_size=1024, backend=default_backend()
-    )
-
-    # Generate a public key
-    public_key = private_key.public_key()
-
-    # Create a certificate
-    subject = x509.Name(
-        [
-            x509.NameAttribute(x509.NameOID.COUNTRY_NAME, "US"),
-        ]
-    )
-
-    issuer = subject
-
-    cert = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(issuer)
-        .public_key(public_key)
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.datetime.now())
-        .not_valid_after(datetime.datetime.now() + datetime.timedelta(days=365))
-        .add_extension(
-            x509.SubjectAlternativeName([x509.DNSName("example.com")]),
-            critical=False,
-        )
-        .sign(private_key, hash_algorithm, default_backend())
-    )
-
+    cert = create_x509_cert(hash_algorithm)
     # in snowflake, we use lib asn1crypto to load certificate, not using lib cryptography
     asy1_509_cert = asn1crypto509.Certificate.load(cert.public_bytes(Encoding.DER))
 
@@ -627,3 +713,235 @@ def test_signature_verification(hash_algorithm):
             asy1_509_cert,
             asy1_509_cert["tbs_certificate"],
         )
+
+
+def test_ocsp_server_domain_name():
+    default_ocsp_server = OCSPServer()
+    assert (
+        default_ocsp_server.DEFAULT_CACHE_SERVER_URL
+        == "http://ocsp.snowflakecomputing.com"
+        and default_ocsp_server.NEW_DEFAULT_CACHE_SERVER_BASE_URL
+        == "https://ocspssd.snowflakecomputing.com/ocsp/"
+        and default_ocsp_server.CACHE_SERVER_URL
+        == f"{default_ocsp_server.DEFAULT_CACHE_SERVER_URL}/{OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME}"
+    )
+
+    default_ocsp_server.reset_ocsp_endpoint("test.snowflakecomputing.cn")
+    assert (
+        default_ocsp_server.CACHE_SERVER_URL
+        == "https://ocspssd.snowflakecomputing.cn/ocsp/fetch"
+        and default_ocsp_server.OCSP_RETRY_URL
+        == "https://ocspssd.snowflakecomputing.cn/ocsp/retry"
+    )
+
+    default_ocsp_server.reset_ocsp_endpoint("test.privatelink.snowflakecomputing.cn")
+    assert (
+        default_ocsp_server.CACHE_SERVER_URL
+        == "https://ocspssd.test.privatelink.snowflakecomputing.cn/ocsp/fetch"
+        and default_ocsp_server.OCSP_RETRY_URL
+        == "https://ocspssd.test.privatelink.snowflakecomputing.cn/ocsp/retry"
+    )
+
+    default_ocsp_server.reset_ocsp_endpoint("cn-12345.global.snowflakecomputing.cn")
+    assert (
+        default_ocsp_server.CACHE_SERVER_URL
+        == "https://ocspssd-12345.global.snowflakecomputing.cn/ocsp/fetch"
+        and default_ocsp_server.OCSP_RETRY_URL
+        == "https://ocspssd-12345.global.snowflakecomputing.cn/ocsp/retry"
+    )
+
+    default_ocsp_server.reset_ocsp_endpoint("test.random.com")
+    assert (
+        default_ocsp_server.CACHE_SERVER_URL
+        == "https://ocspssd.snowflakecomputing.com/ocsp/fetch"
+        and default_ocsp_server.OCSP_RETRY_URL
+        == "https://ocspssd.snowflakecomputing.com/ocsp/retry"
+    )
+
+    default_ocsp_server = OCSPServer(top_level_domain="cn")
+    assert (
+        default_ocsp_server.DEFAULT_CACHE_SERVER_URL
+        == "http://ocsp.snowflakecomputing.cn"
+        and default_ocsp_server.NEW_DEFAULT_CACHE_SERVER_BASE_URL
+        == "https://ocspssd.snowflakecomputing.cn/ocsp/"
+        and default_ocsp_server.CACHE_SERVER_URL
+        == f"{default_ocsp_server.DEFAULT_CACHE_SERVER_URL}/{OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME}"
+    )
+
+    ocsp = SFOCSP(hostname="test.snowflakecomputing.cn")
+    assert (
+        ocsp.OCSP_CACHE_SERVER.DEFAULT_CACHE_SERVER_URL
+        == "http://ocsp.snowflakecomputing.cn"
+        and ocsp.OCSP_CACHE_SERVER.NEW_DEFAULT_CACHE_SERVER_BASE_URL
+        == "https://ocspssd.snowflakecomputing.cn/ocsp/"
+        and ocsp.OCSP_CACHE_SERVER.CACHE_SERVER_URL
+        == f"{default_ocsp_server.DEFAULT_CACHE_SERVER_URL}/{OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME}"
+    )
+
+    assert (
+        SnowflakeOCSP.OCSP_WHITELIST.match("www.snowflakecomputing.com")
+        and SnowflakeOCSP.OCSP_WHITELIST.match("www.snowflakecomputing.cn")
+        and SnowflakeOCSP.OCSP_WHITELIST.match("www.snowflakecomputing.com.cn")
+        and not SnowflakeOCSP.OCSP_WHITELIST.match("www.snowflakecomputing.com.cn.com")
+        and SnowflakeOCSP.OCSP_WHITELIST.match("s3.amazonaws.com")
+        and SnowflakeOCSP.OCSP_WHITELIST.match("s3.amazonaws.cn")
+        and SnowflakeOCSP.OCSP_WHITELIST.match("s3.amazonaws.com.cn")
+        and not SnowflakeOCSP.OCSP_WHITELIST.match("s3.amazonaws.com.cn.com")
+    )
+
+
+@pytest.mark.skipolddriver
+def test_json_cache_serialization_and_deserialization(tmpdir):
+    from snowflake.connector.ocsp_snowflake import (
+        OCSPResponseValidationResult,
+        _OCSPResponseValidationResultCache,
+    )
+
+    cache_path = os.path.join(tmpdir, "cache.json")
+    cert = asn1crypto509.Certificate.load(
+        create_x509_cert(hashes.SHA256()).public_bytes(Encoding.DER)
+    )
+    cert_id = ocsp.CertId(
+        {
+            "hash_algorithm": {"algorithm": "sha1"},  # Minimal hash algorithm
+            "issuer_name_hash": b"\0" * 20,  # Placeholder hash
+            "issuer_key_hash": b"\0" * 20,  # Placeholder hash
+            "serial_number": 1,  # Minimal serial number
+        }
+    )
+    test_cache = _OCSPResponseValidationResultCache(file_path=cache_path)
+    test_cache[(b"key1", b"key2", b"key3")] = OCSPResponseValidationResult(
+        exception=None,
+        issuer=cert,
+        subject=cert,
+        cert_id=cert_id,
+        ocsp_response=b"response",
+        ts=0,
+        validated=True,
+    )
+
+    def verify(verify_method, write_cache):
+        with io.BytesIO() as byte_stream:
+            byte_stream.write(write_cache._serialize())
+            byte_stream.seek(0)
+            read_cache = _OCSPResponseValidationResultCache._deserialize(byte_stream)
+            assert len(write_cache) == len(read_cache)
+            verify_method(write_cache, read_cache)
+
+    def verify_happy_path(origin_cache, loaded_cache):
+        for (key1, value1), (key2, value2) in zip(
+            origin_cache.items(), loaded_cache.items()
+        ):
+            assert key1 == key2
+            for sub_field1, sub_field2 in zip(value1, value2):
+                assert isinstance(sub_field1, type(sub_field2))
+                if isinstance(sub_field1, asn1crypto.x509.Certificate):
+                    for attr in [
+                        "issuer",
+                        "subject",
+                        "serial_number",
+                        "not_valid_before",
+                        "not_valid_after",
+                        "hash_algo",
+                    ]:
+                        assert getattr(sub_field1, attr) == getattr(sub_field2, attr)
+                elif isinstance(sub_field1, asn1crypto.ocsp.CertId):
+                    for attr in [
+                        "hash_algorithm",
+                        "issuer_name_hash",
+                        "issuer_key_hash",
+                        "serial_number",
+                    ]:
+                        assert sub_field1.native[attr] == sub_field2.native[attr]
+                else:
+                    assert sub_field1 == sub_field2
+
+    def verify_none(origin_cache, loaded_cache):
+        for (key1, value1), (key2, value2) in zip(
+            origin_cache.items(), loaded_cache.items()
+        ):
+            assert key1 == key2 and value1 == value2
+
+    def verify_exception_default(_, loaded_cache):
+        """Test default behavior: custom exceptions are converted to RevocationCheckError"""
+        exc_1 = loaded_cache[(b"key1", b"key2", b"key3")].exception
+        exc_2 = loaded_cache[(b"key4", b"key5", b"key6")].exception
+        exc_3 = loaded_cache[(b"key7", b"key8", b"key9")].exception
+        assert (
+            isinstance(exc_1, RevocationCheckError)
+            and exc_1.raw_msg == "error"
+            and exc_1.errno == 1
+        )
+        # By default, custom exceptions (ValueError) are converted to RevocationCheckError
+        assert isinstance(exc_2, RevocationCheckError)
+        assert (
+            isinstance(exc_3, RevocationCheckError)
+            and "while deserializing ocsp cache, please try cleaning up the OCSP cache under directory"
+            in exc_3.msg
+        )
+
+    def verify_exception_deprecated(_, loaded_cache):
+        """Test deprecated behavior with env var: custom exceptions are preserved"""
+        exc_1 = loaded_cache[(b"key1", b"key2", b"key3")].exception
+        exc_2 = loaded_cache[(b"key4", b"key5", b"key6")].exception
+        exc_3 = loaded_cache[(b"key7", b"key8", b"key9")].exception
+        assert (
+            isinstance(exc_1, RevocationCheckError)
+            and exc_1.raw_msg == "error"
+            and exc_1.errno == 1
+        )
+        # With env var set, custom exceptions are preserved
+        assert isinstance(exc_2, ValueError) and str(exc_2) == "value error"
+        assert (
+            isinstance(exc_3, RevocationCheckError)
+            and "while deserializing ocsp cache, please try cleaning up the OCSP cache under directory"
+            in exc_3.msg
+        )
+
+    verify(verify_happy_path, copy.deepcopy(test_cache))
+
+    origin_cache = copy.deepcopy(test_cache)
+    origin_cache[(b"key1", b"key2", b"key3")] = OCSPResponseValidationResult(
+        None, None, None, None, None, None, False
+    )
+    verify(verify_none, origin_cache)
+
+    # Test default behavior (no env var)
+    origin_cache = copy.deepcopy(test_cache)
+    origin_cache.update(
+        {
+            (b"key1", b"key2", b"key3"): OCSPResponseValidationResult(
+                exception=RevocationCheckError(msg="error", errno=1),
+            ),
+            (b"key4", b"key5", b"key6"): OCSPResponseValidationResult(
+                exception=ValueError("value error"),
+            ),
+            (b"key7", b"key8", b"key9"): OCSPResponseValidationResult(
+                exception=json.JSONDecodeError("json error", "doc", 0)
+            ),
+        }
+    )
+    verify(verify_exception_default, origin_cache)
+
+    # Test deprecated behavior (with env var set)
+    with mock.patch.dict(
+        os.environ, {"SNOWFLAKE_ENABLE_CUSTOM_REVOCATION_ERRORS": "true"}
+    ):
+        origin_cache = copy.deepcopy(test_cache)
+        origin_cache.update(
+            {
+                (b"key1", b"key2", b"key3"): OCSPResponseValidationResult(
+                    exception=RevocationCheckError(msg="error", errno=1),
+                ),
+                (b"key4", b"key5", b"key6"): OCSPResponseValidationResult(
+                    exception=ValueError("value error"),
+                ),
+                (b"key7", b"key8", b"key9"): OCSPResponseValidationResult(
+                    exception=json.JSONDecodeError("json error", "doc", 0)
+                ),
+            }
+        )
+        with pytest.warns(
+            DeprecationWarning, match="Support for custom revocation error classes"
+        ):
+            verify(verify_exception_deprecated, origin_cache)

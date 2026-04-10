@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 from collections import defaultdict
@@ -35,6 +31,13 @@ DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
 DBAPI_TYPE_NUMBER = 2
 DBAPI_TYPE_TIMESTAMP = 3
+
+_DEFAULT_HOSTNAME_TLD = "com"
+_CHINA_HOSTNAME_TLD = "cn"
+_TOP_LEVEL_DOMAIN_REGEX = r"\.[a-zA-Z]{1,63}$"
+_SNOWFLAKE_HOST_SUFFIX_REGEX = r"snowflakecomputing(\.[a-zA-Z]{1,63}){1,2}$"
+
+_PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS = "ENABLE_FIX_1375538"
 
 
 class FieldType(NamedTuple):
@@ -177,6 +180,19 @@ FIELD_TYPES: tuple[FieldType, ...] = (
     ),
     FieldType(name="VECTOR", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=vector_pa_type),
     FieldType(name="MAP", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=map_pa_type),
+    FieldType(
+        name="FILE", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()
+    ),
+    FieldType(
+        name="INTERVAL_YEAR_MONTH",
+        dbapi_type=[DBAPI_TYPE_NUMBER],
+        pa_type=lambda _: pa.int64(),
+    ),
+    FieldType(
+        name="INTERVAL_DAY_TIME",
+        dbapi_type=[DBAPI_TYPE_NUMBER],
+        pa_type=lambda _: pa.int64(),
+    ),
 )
 
 FIELD_NAME_TO_ID: DefaultDict[Any, int] = defaultdict(int)
@@ -317,7 +333,7 @@ PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED = "CLIENT_OUT_OF_BAND_TELEMETRY_ENABLED"
 PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL = "CLIENT_STORE_TEMPORARY_CREDENTIAL"
 PARAMETER_CLIENT_REQUEST_MFA_TOKEN = "CLIENT_REQUEST_MFA_TOKEN"
 PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL = (
-    "CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTAIL"
+    "CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL"
 )
 PARAMETER_QUERY_CONTEXT_CACHE_SIZE = "QUERY_CONTEXT_CACHE_SIZE"
 PARAMETER_TIMEZONE = "TIMEZONE"
@@ -338,6 +354,9 @@ HTTP_HEADER_SERVICE_NAME = "X-Snowflake-Service"
 
 HTTP_HEADER_VALUE_OCTET_STREAM = "application/octet-stream"
 
+# OCSP
+OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT: int = -1
+
 
 @unique
 class OCSPMode(Enum):
@@ -349,12 +368,14 @@ class OCSPMode(Enum):
         FAIL_OPEN: A response indicating a revoked certificate results in a failed connection. A response with any
             other certificate errors or statuses allows the connection to occur, but denotes the message in the logs
             at the WARNING level with the relevant details in JSON format.
-        INSECURE: The connection will occur anyway.
+        INSECURE (deprecated): The connection will occur anyway.
+        DISABLE_OCSP_CHECKS: The OCSP check will not happen. If the certificate is valid then connection will occur.
     """
 
     FAIL_CLOSED = "FAIL_CLOSED"
     FAIL_OPEN = "FAIL_OPEN"
     INSECURE = "INSECURE"
+    DISABLE_OCSP_CHECKS = "DISABLE_OCSP_CHECKS"
 
 
 @unique
@@ -399,6 +420,7 @@ class IterUnit(Enum):
     TABLE_UNIT = "table"
 
 
+# File Transfer
 # Amazon S3 multipart upload limits
 # https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html
 S3_DEFAULT_CHUNK_SIZE = 8 * 1024**2
@@ -410,8 +432,29 @@ S3_MAX_PARTS = 10000
 S3_CHUNK_SIZE = 8388608  # boto3 default
 AZURE_CHUNK_SIZE = 4 * megabyte
 
+# https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
+REQUEST_CONNECTION_TIMEOUT = 10
+REQUEST_READ_TIMEOUT = 600
+
 DAY_IN_SECONDS = 60 * 60 * 24
 
 # TODO: all env variables definitions should be here
 ENV_VAR_PARTNER = "SF_PARTNER"
 ENV_VAR_TEST_MODE = "SNOWFLAKE_TEST_MODE"
+ENV_VAR_DISABLE_PLATFORM_DETECTION = "SNOWFLAKE_DISABLE_PLATFORM_DETECTION"
+ENV_VAR_ENABLE_CUSTOM_REVOCATION_ERRORS = "SNOWFLAKE_ENABLE_CUSTOM_REVOCATION_ERRORS"
+
+# Boolean positive values (lowercased) for environment variable checks
+ENV_VAR_BOOL_POSITIVE_VALUES_LOWERCASED = ["true"]
+
+_DOMAIN_NAME_MAP = {_DEFAULT_HOSTNAME_TLD: "GLOBAL", _CHINA_HOSTNAME_TLD: "CHINA"}
+
+_CONNECTIVITY_ERR_MSG = (
+    "Verify that the hostnames and port numbers in SYSTEM$ALLOWLIST are added to your firewall's allowed list."
+    "\nTo further troubleshoot your connection you may reference the following article: "
+    "https://docs.snowflake.com/en/user-guide/client-connectivity-troubleshooting/overview."
+)
+
+_OAUTH_DEFAULT_SCOPE = "session:role:{role}"
+OAUTH_TYPE_AUTHORIZATION_CODE = "oauth_authorization_code"
+OAUTH_TYPE_CLIENT_CREDENTIALS = "oauth_client_credentials"

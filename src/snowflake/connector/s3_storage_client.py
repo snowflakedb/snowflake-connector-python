@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import binascii
@@ -61,13 +57,20 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         chunk_size: int,
         use_accelerate_endpoint: bool | None = None,
         use_s3_regional_url: bool = False,
+        unsafe_file_write: bool = False,
     ) -> None:
         """Rest client for S3 storage.
 
         Args:
             stage_info:
         """
-        super().__init__(meta, stage_info, chunk_size, credentials=credentials)
+        super().__init__(
+            meta,
+            stage_info,
+            chunk_size,
+            credentials=credentials,
+            unsafe_file_write=unsafe_file_write,
+        )
         # Signature version V4
         # Addressing style Virtual Host
         self.region_name: str = stage_info["region"]
@@ -79,7 +82,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 self.stage_info["location"]
             )
         )
-        self.use_s3_regional_url = use_s3_regional_url
+        self.use_s3_regional_url = (
+            use_s3_regional_url
+            or "useS3RegionalUrl" in stage_info
+            and stage_info["useS3RegionalUrl"]
+            or "useRegionalUrl" in stage_info
+            and stage_info["useRegionalUrl"]
+        )
         self.location_type = stage_info.get("locationType")
 
         # if GS sends us an endpoint, it's likely for FIPS. Use it.
@@ -111,9 +120,17 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             return False
         else:
             if use_accelerate_endpoint is None:
-                use_accelerate_endpoint = self._get_bucket_accelerate_config(
-                    self.s3location.bucket_name
-                )
+                if str(self.s3location.bucket_name).lower().startswith("sfc-"):
+                    # SNOW-2324060: no s3:GetAccelerateConfiguration and no intention to add either
+                    # for internal stage, thus previously the client got HTTP403 on /accelerate call
+                    logger.debug(
+                        "Not attempting to get bucket transfer accelerate endpoint for internal stage."
+                    )
+                    use_accelerate_endpoint = False
+                else:
+                    use_accelerate_endpoint = self._get_bucket_accelerate_config(
+                        self.s3location.bucket_name
+                    )
 
             if use_accelerate_endpoint:
                 self.endpoint = (
@@ -123,6 +140,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 self.endpoint = (
                     f"https://{self.s3location.bucket_name}.s3.amazonaws.com"
                 )
+            logger.debug(f"Using {self.endpoint} as storage endpoint.")
             return use_accelerate_endpoint
 
     @staticmethod
@@ -320,6 +338,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             amzdate = t.strftime("%Y%m%dT%H%M%SZ")
             short_amzdate = amzdate[:8]
             x_amz_headers["x-amz-date"] = amzdate
+            x_amz_headers["x-amz-security-token"] = self.credentials.creds.get(
+                "AWS_TOKEN", ""
+            )
 
             (
                 canonical_request,

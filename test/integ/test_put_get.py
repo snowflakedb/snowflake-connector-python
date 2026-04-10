@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import filecmp
@@ -19,6 +15,13 @@ from unittest import mock
 import pytest
 
 from snowflake.connector import OperationalError
+
+try:
+    from src.snowflake.connector.compat import IS_WINDOWS
+except ImportError:
+    import platform
+
+    IS_WINDOWS = platform.system() == "Windows"
 
 try:
     from snowflake.connector.util_text import random_string
@@ -739,22 +742,62 @@ def test_get_empty_file(tmp_path, conn_cnx):
             assert not empty_file.exists()
 
 
+@pytest.mark.parametrize("auto_compress", ["TRUE", "FALSE"])
 @pytest.mark.skipolddriver
-def test_get_file_permission(tmp_path, conn_cnx, caplog):
+@pytest.mark.skipif(IS_WINDOWS, reason="not supported on Windows")
+def test_get_file_permission(tmp_path, conn_cnx, caplog, auto_compress):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
-    stage_name = random_string(5, "test_get_empty_file_")
+    stage_name = random_string(5, "test_get_file_permission_")
+
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             cur.execute(f"create temporary stage {stage_name}")
             filename_in_put = str(test_file).replace("\\", "/")
             cur.execute(
-                f"PUT 'file://{filename_in_put}' @{stage_name}",
+                f"PUT 'file://{filename_in_put}' @{stage_name} AUTO_COMPRESS={auto_compress}",
             )
+            test_file.unlink()
 
             with caplog.at_level(logging.ERROR):
                 cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
             assert "FileNotFoundError" not in caplog.text
+            assert len(list(tmp_path.iterdir())) == 1
+            downloaded_file = next(tmp_path.iterdir())
+
+            default_mask = os.umask(0)
+            os.umask(default_mask)
+
+            assert (
+                oct(os.stat(downloaded_file).st_mode)[-3:]
+                == oct(0o600 & ~default_mask)[-3:]
+            )
+
+
+@pytest.mark.parametrize("auto_compress", ["TRUE", "FALSE"])
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(IS_WINDOWS, reason="not supported on Windows")
+def test_get_unsafe_file_permission_when_flag_set(
+    tmp_path, conn_cnx, caplog, auto_compress
+):
+    test_file = tmp_path / "data.csv"
+    test_file.write_text("1,2,3\n")
+    stage_name = random_string(5, "test_get_file_permission_")
+    with conn_cnx() as cnx:
+        cnx.unsafe_file_write = True
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary stage {stage_name}")
+            filename_in_put = str(test_file).replace("\\", "/")
+            cur.execute(
+                f"PUT 'file://{filename_in_put}' @{stage_name} AUTO_COMPRESS={auto_compress}",
+            )
+            test_file.unlink()
+
+            with caplog.at_level(logging.ERROR):
+                cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
+            assert "FileNotFoundError" not in caplog.text
+            assert len(list(tmp_path.iterdir())) == 1
+            downloaded_file = next(tmp_path.iterdir())
 
             # get the default mask, usually it is 0o022
             default_mask = os.umask(0)
@@ -762,8 +805,10 @@ def test_get_file_permission(tmp_path, conn_cnx, caplog):
             # files by default are given the permission 644 (Octal)
             # umask is for denial, we need to negate
             assert (
-                oct(os.stat(test_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
+                oct(os.stat(downloaded_file).st_mode)[-3:]
+                == oct(0o666 & ~default_mask)[-3:]
             )
+        cnx.unsafe_file_write = False
 
 
 @pytest.mark.skipolddriver
@@ -782,12 +827,86 @@ def test_get_multiple_files_with_same_name(tmp_path, conn_cnx, caplog):
                 f"PUT 'file://{filename_in_put}' @{stage_name}/data/2/",
             )
 
+            # Verify files are uploaded before attempting GET
+            import time
+
+            for _ in range(10):  # Wait up to 10 seconds for files to be available
+                file_list = cur.execute(f"LS @{stage_name}").fetchall()
+                if len(file_list) >= 2:  # Both files should be available
+                    break
+                time.sleep(1)
+            else:
+                pytest.fail(
+                    f"Files not available in stage after 10 seconds: {file_list}"
+                )
+
             with caplog.at_level(logging.WARNING):
                 try:
                     cur.execute(
                         f"GET @{stage_name} file://{tmp_path} PATTERN='.*data.csv.gz'"
                     )
                 except OperationalError:
-                    # This is expected flakiness
+                    # This can happen due to cloud storage timing issues
                     pass
-            assert "Downloading multiple files with the same name" in caplog.text
+
+            # Check for the expected warning message
+            assert (
+                "Downloading multiple files with the same name" in caplog.text
+            ), f"Expected warning not found in logs: {caplog.text}"
+
+
+@pytest.mark.skipolddriver
+def test_put_md5(tmp_path, conn_cnx):
+    """This test uploads a single and a multi part file and makes sure that md5 is populated."""
+    # Create files directly without subfolders for efficiency
+    # Small file for single-part upload test
+    small_test_file = tmp_path / "small_file.txt"
+    small_test_file.write_text("test content\n")  # Minimal content
+
+    # Big file for multi-part upload test - 200MB (well over 64MB threshold)
+    big_test_file = tmp_path / "big_file.txt"
+    chunk_size = 1024 * 1024  # 1MB chunks
+    chunk_data = "A" * chunk_size  # 1MB of 'A' characters
+    with open(big_test_file, "w") as f:
+        for _ in range(200):  # Write 200MB total
+            f.write(chunk_data)
+
+    stage_name = random_string(5, "test_put_md5_")
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary stage {stage_name}")
+
+            # Upload both files in sequence
+            small_filename_in_put = str(small_test_file).replace("\\", "/")
+            big_filename_in_put = str(big_test_file).replace("\\", "/")
+
+            cur.execute(
+                f"PUT 'file://{small_filename_in_put}' @{stage_name}/small AUTO_COMPRESS = FALSE"
+            )
+            cur.execute(
+                f"PUT 'file://{big_filename_in_put}' @{stage_name}/big AUTO_COMPRESS = FALSE"
+            )
+
+            # Verify MD5 is populated for both files
+            file_list = cur.execute(f"LS @{stage_name}").fetchall()
+            assert all(
+                file_info[2] is not None for file_info in file_list
+            ), "MD5 should be populated for all uploaded files"
+
+
+@pytest.mark.skipolddriver
+def test_iobound_limit(tmp_path, conn_cnx, caplog):
+    tmp_stage_name = random_string(5, "test_iobound_limit")
+    file0 = tmp_path / "file0"
+    file1 = tmp_path / "file1"
+    file0.touch()
+    file1.touch()
+    with conn_cnx(iobound_tpe_limit=1) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"create temp stage {tmp_stage_name}")
+            with caplog.at_level(
+                logging.DEBUG, "snowflake.connector.file_transfer_agent"
+            ):
+                cur.execute(f"put file://{tmp_path}/* @{tmp_stage_name}")
+    assert "Decided IO-bound TPE size: 2" in caplog.text
+    assert "IO-bound TPE size is limited to: 1" in caplog.text

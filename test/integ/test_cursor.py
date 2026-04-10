@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import decimal
@@ -11,6 +7,7 @@ import logging
 import os
 import pickle
 import time
+import uuid
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
@@ -130,6 +127,31 @@ b binary)
     return conn_cnx
 
 
+class LobBackendParams(NamedTuple):
+    max_lob_size_in_memory: int
+
+
+@pytest.fixture()
+def lob_params(conn_cnx) -> LobBackendParams:
+    with conn_cnx() as cnx:
+        (max_lob_size_in_memory_feat, max_lob_size_in_memory) = (
+            (cnx.cursor().execute(f"show parameters like '{lob_param}'").fetchone())
+            for lob_param in (
+                "FEATURE_INCREASED_MAX_LOB_SIZE_IN_MEMORY",
+                "MAX_LOB_SIZE_IN_MEMORY",
+            )
+        )
+        max_lob_size_in_memory_feat = (
+            max_lob_size_in_memory_feat and max_lob_size_in_memory_feat[1] == "ENABLED"
+        )
+        max_lob_size_in_memory = (
+            int(max_lob_size_in_memory[1])
+            if (max_lob_size_in_memory_feat and max_lob_size_in_memory)
+            else 2**24
+        )
+        return LobBackendParams(max_lob_size_in_memory)
+
+
 def _check_results(cursor, results):
     assert cursor.sfqid, "Snowflake query id is None"
     assert cursor.rowcount == 3, "the number of records"
@@ -154,6 +176,7 @@ def _type_from_description(named_access: bool):
 
 @pytest.mark.skipolddriver
 def test_insert_select(conn, db_parameters, caplog):
+    caplog.set_level(logging.DEBUG)
     """Inserts and selects integer data."""
     with conn() as cnx:
         c = cnx.cursor()
@@ -198,6 +221,7 @@ def test_insert_select(conn, db_parameters, caplog):
 
 @pytest.mark.skipolddriver
 def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
+    caplog.set_level(logging.DEBUG)
     """Inserts a record and select it by a separate connection."""
     with conn() as cnx:
         result = cnx.cursor().execute(
@@ -211,18 +235,7 @@ def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
         assert cnt == 1, "wrong number of records were inserted"
         assert result.rowcount == 1, "wrong number of records were inserted"
 
-    cnx2 = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-        timezone="UTC",
-    )
-    try:
+    with conn(timezone="UTC") as cnx2:
         c = cnx2.cursor()
         c.execute("select aa from {name}".format(name=db_parameters["name"]))
         results = []
@@ -232,8 +245,6 @@ def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
         assert results[0] == 1234, "the first result was wrong"
         assert result.rowcount == 1, "wrong number of records were selected"
         assert "Number of results in first chunk: 1" in caplog.text
-    finally:
-        cnx2.close()
 
 
 def _total_milliseconds_from_timedelta(td):
@@ -289,18 +300,7 @@ def test_insert_timestamp_select(conn, db_parameters):
         finally:
             c.close()
 
-    cnx2 = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-        timezone="UTC",
-    )
-    try:
+    with conn(timezone="UTC") as cnx2:
         c = cnx2.cursor()
         c.execute(
             "select aa, tsltz, tstz, tsntz, dt, tm from {name}".format(
@@ -380,8 +380,6 @@ def test_insert_timestamp_select(conn, db_parameters):
             assert (
                 constants.FIELD_ID_TO_NAME[type_code(desc[5])] == "TIME"
             ), "invalid column name"
-    finally:
-        cnx2.close()
 
 
 def test_insert_timestamp_ltz(conn, db_parameters):
@@ -494,17 +492,7 @@ def test_insert_binary_select(conn, db_parameters):
         finally:
             c.close()
 
-    cnx2 = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-    )
-    try:
+    with conn() as cnx2:
         c = cnx2.cursor()
         c.execute("select b from {name}".format(name=db_parameters["name"]))
 
@@ -527,8 +515,6 @@ def test_insert_binary_select(conn, db_parameters):
             assert (
                 constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
             ), "invalid column name"
-    finally:
-        cnx2.close()
 
 
 def test_insert_binary_select_with_bytearray(conn, db_parameters):
@@ -546,17 +532,7 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
         finally:
             c.close()
 
-    cnx2 = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-    )
-    try:
+    with conn() as cnx2:
         c = cnx2.cursor()
         c.execute("select b from {name}".format(name=db_parameters["name"]))
 
@@ -579,8 +555,6 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
             assert (
                 constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
             ), "invalid column name"
-    finally:
-        cnx2.close()
 
 
 def test_variant(conn, db_parameters):
@@ -698,6 +672,46 @@ def test_geometry(conn_cnx):
 
 
 @pytest.mark.skipolddriver
+def test_file(conn_cnx):
+    """Variant including JSON object."""
+    name_file = random_string(5, "test_file_")
+    with conn_cnx(
+        session_parameters={
+            "ENABLE_FILE_DATA_TYPE": True,
+        },
+    ) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(
+                f"create temporary table {name_file} as select "
+                f"TO_FILE(OBJECT_CONSTRUCT('RELATIVE_PATH', 'some_new_file.jpeg', 'STAGE', '@myStage', "
+                f"'STAGE_FILE_URL', 'some_new_file.jpeg', 'SIZE', 123, 'ETAG', 'xxx', 'CONTENT_TYPE', 'image/jpeg', "
+                f"'LAST_MODIFIED', '2025-01-01')) as file_col"
+            )
+
+            expected_data = [
+                {
+                    "RELATIVE_PATH": "some_new_file.jpeg",
+                    "STAGE": "@myStage",
+                    "STAGE_FILE_URL": "some_new_file.jpeg",
+                    "SIZE": 123,
+                    "ETAG": "xxx",
+                    "CONTENT_TYPE": "image/jpeg",
+                    "LAST_MODIFIED": "2025-01-01",
+                }
+            ]
+
+        with cnx.cursor() as cur:
+            # Test with FILE return type
+            result = cur.execute(f"select * from {name_file}")
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "FILE"
+            data = result.fetchall()
+            for raw_data in data:
+                row = json.loads(raw_data[0])
+                assert row in expected_data
+
+
+@pytest.mark.skipolddriver
 def test_vector(conn_cnx, is_public_test):
     if is_public_test:
         pytest.xfail(
@@ -759,6 +773,7 @@ def test_invalid_bind_data_type(conn_cnx):
             cnx.cursor().execute("select 1 from dual where 1=%s", ([1, 2, 3],))
 
 
+@pytest.mark.skipolddriver
 def test_timeout_query(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as c:
@@ -767,7 +782,32 @@ def test_timeout_query(conn_cnx):
                     "select seq8() as c1 from table(generator(timeLimit => 60))",
                     timeout=5,
                 )
-            assert err.value.errno == 604, "Invalid error code"
+            assert err.value.errno == 604, (
+                "Invalid error code"
+                and "SQL execution was cancelled by the client due to a timeout. Error message received from the server: SQL execution canceled"
+                in err.value.msg
+            )
+
+            with pytest.raises(errors.ProgrammingError) as err:
+                # we can not precisely control the timing to send cancel query request right after server
+                # executes the query but before returning the results back to client
+                # it depends on python scheduling and server processing speed, so we mock here
+                with mock.patch(
+                    "snowflake.connector.cursor._TrackedQueryCancellationTimer",
+                    autospec=True,
+                ) as mock_timebomb:
+                    mock_timebomb.return_value.executed = True
+                    c.execute(
+                        "select 123'",
+                        timeout=0.1,
+                    )
+            assert c._timebomb.executed is True and err.value.errno == 1003, (
+                "Invalid error code"
+                and "SQL compilation error:\nsyntax error line 1 at position 10 unexpected '''."
+                in err.value.msg
+                and "SQL execution was cancelled by the client due to a timeout"
+                not in err.value.msg
+            )
 
 
 def test_executemany(conn, db_parameters):
@@ -929,6 +969,7 @@ def test_fetchmany(conn, db_parameters, caplog):
             assert c.rowcount == 6, "number of records"
 
         with cnx.cursor() as c:
+            caplog.set_level(logging.DEBUG)
             c.execute(f"select aa from {table_name} order by aa desc")
             assert "Number of results in first chunk: 6" in caplog.text
 
@@ -1490,11 +1531,13 @@ def test__log_telemetry_job_data(conn_cnx, caplog):
         ("arrow", ArrowResultBatch),
     ),
 )
+@pytest.mark.parametrize("client_fetch_use_mp", [False, True])
 def test_resultbatch(
     conn_cnx,
     result_format,
     expected_chunk_type,
     capture_sf_telemetry,
+    client_fetch_use_mp,
 ):
     """This test checks the following things:
     1. After executing a query can we pickle the result batches
@@ -1507,7 +1550,8 @@ def test_resultbatch(
     with conn_cnx(
         session_parameters={
             "python_connector_query_result_format": result_format,
-        }
+        },
+        client_fetch_use_mp=client_fetch_use_mp,
     ) as con:
         with capture_sf_telemetry.patch_connection(con) as telemetry_data:
             with con.cursor() as cur:
@@ -1560,7 +1604,9 @@ def test_resultbatch(
         ("arrow", "snowflake.connector.result_batch.ArrowResultBatch.create_iter"),
     ),
 )
-def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_path):
+def test_resultbatch_lazy_fetching_and_schemas(
+    conn_cnx, result_format, patch_path, lob_params
+):
     """Tests whether pre-fetching results chunks fetches the right amount of them."""
     rowcount = 1000000  # We need at least 5 chunks for this test
     with conn_cnx(
@@ -1588,7 +1634,17 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
                     # all batches should have the same schema
                     assert schema == [
                         ResultMetadata("C1", 0, None, None, 10, 0, False),
-                        ResultMetadata("C2", 2, None, 16777216, None, None, False),
+                        ResultMetadata(
+                            "C2",
+                            2,
+                            None,
+                            schema[
+                                1
+                            ].internal_size,  # TODO: lob_params.max_lob_size_in_memory,
+                            None,
+                            None,
+                            False,
+                        ),
                     ]
                 assert patched_download.call_count == 0
                 assert len(result_batches) > 5
@@ -1609,7 +1665,7 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
 
 @pytest.mark.skipolddriver(reason="new feature in v2.5.0")
 @pytest.mark.parametrize("result_format", ["json", "arrow"])
-def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format):
+def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format, lob_params):
     with conn_cnx(
         session_parameters={"python_connector_query_result_format": result_format}
     ) as con:
@@ -1625,7 +1681,15 @@ def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format):
             schema = result_batches[0].schema
             assert schema == [
                 ResultMetadata("C1", 0, None, None, 10, 0, False),
-                ResultMetadata("C2", 2, None, 16777216, None, None, False),
+                ResultMetadata(
+                    "C2",
+                    2,
+                    None,
+                    schema[1].internal_size,  # TODO: lob_params.max_lob_size_in_memory,
+                    None,
+                    None,
+                    False,
+                ),
             ]
 
 
@@ -1665,15 +1729,37 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
             fetch_next_fn = getattr(iterate_obj, fetch_method)
             # first fetch doesn't raise error
             fetch_next_fn()
+            # Python 3.14 changed datetime.fromtimestamp() ValueError from
+            # "year 10000 is out of range" to "year must be in 1..9999, not 10000"
             with pytest.raises(
                 InterfaceError,
                 match=(
                     "date value out of range"
                     if IS_WINDOWS
-                    else "year 10000 is out of range"
+                    else "(year 10000 is out of range|year must be in 1\\.\\.9999, not 10000)"
                 ),
             ):
                 fetch_next_fn()
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("result_format", ("json", "arrow"))
+def test_out_of_range_year_followed_by_correct_year(conn_cnx, result_format):
+    """Tests whether the year 10000 is out of range exception is raised as expected."""
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: result_format
+        }
+    ) as con:
+        with con.cursor() as cur:
+            cur.execute("select TO_DATE('10000-01-01'), TO_DATE('9999-01-01')")
+            # Python 3.14 changed datetime ValueError from "out of range"
+            # to "year must be in 1..9999, not 10000"
+            with pytest.raises(
+                InterfaceError,
+                match="(out of range|year must be in 1\\.\\.9999, not 10000)",
+            ):
+                cur.fetchall()
 
 
 @pytest.mark.skipolddriver
@@ -1720,8 +1806,8 @@ def test_fetch_batches_with_sessions(conn_cnx):
             num_batches = len(cur.get_result_batches())
 
             with mock.patch(
-                "snowflake.connector.network.SnowflakeRestful._use_requests_session",
-                side_effect=con._rest._use_requests_session,
+                "snowflake.connector.session_manager.SessionManager.use_session",
+                side_effect=con._rest.session_manager.use_session,
             ) as get_session_mock:
                 result = cur.fetchall()
                 # all but one batch is downloaded using a session
@@ -1836,3 +1922,39 @@ def test_nanoarrow_usage_deprecation():
             and "snowflake.connector.cursor.NanoarrowUsage has been deprecated"
             in str(record[2].message)
         )
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "request_id",
+    [
+        "THIS IS NOT VALID",
+        uuid.uuid1(),
+        uuid.uuid3(uuid.NAMESPACE_URL, "www.snowflake.com"),
+        uuid.uuid5(uuid.NAMESPACE_URL, "www.snowflake.com"),
+    ],
+)
+def test_custom_request_id_negative(request_id, conn_cnx):
+
+    # Ensure that invalid request_ids (non uuid4) do not compromise interface.
+    with pytest.raises(ValueError, match="requestId"):
+        with conn_cnx() as con:
+            with con.cursor() as cur:
+                cur.execute(
+                    "select seq4() as foo from table(generator(rowcount=>5))",
+                    _statement_params={"requestId": request_id},
+                )
+
+
+@pytest.mark.skipolddriver
+def test_custom_request_id(conn_cnx):
+    request_id = uuid.uuid4()
+
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute(
+                "select seq4() as foo from table(generator(rowcount=>5))",
+                _statement_params={"requestId": request_id},
+            )
+
+            assert cur._sfqid is not None, "Query must execute successfully."

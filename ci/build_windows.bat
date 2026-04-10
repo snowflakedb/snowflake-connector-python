@@ -6,14 +6,14 @@
 SET SCRIPT_DIR=%~dp0
 SET CONNECTOR_DIR=%~dp0\..\
 
-set python_versions= 3.8 3.9 3.10 3.11 3.12
+set python_versions= 3.9 3.10 3.11 3.12 3.13 3.14
 
 cd %CONNECTOR_DIR%
 
 set venv_dir=%WORKSPACE%\venv-flake8
 if %errorlevel% neq 0 goto :error
 
-py -3.8 -m venv %venv_dir%
+py -3.9 -m venv %venv_dir%
 if %errorlevel% neq 0 goto :error
 
 call %venv_dir%\scripts\activate
@@ -36,11 +36,17 @@ EXIT /B %ERRORLEVEL%
 set pv=%~1
 
 echo Going to compile wheel for Python %pv%
-py -%pv% -m pip install --upgrade pip setuptools wheel build
+py -%pv% -m pip install --upgrade pip setuptools wheel build delvewheel
 if %errorlevel% neq 0 goto :error
 
-py -%pv% -m build --wheel .
+py -%pv% -m build --outdir dist\rawwheel --wheel .
 if %errorlevel% neq 0 goto :error
+
+:: patch the wheel by including its dependencies
+py -%pv% -m delvewheel repair -vv -w dist --namespace-pkg snowflake dist\rawwheel\*
+if %errorlevel% neq 0 goto :error
+
+rd /s /q dist\rawwheel
 
 EXIT /B 0
 

@@ -1,16 +1,12 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import logging
 import os
+import platform
 from typing import cast
 
-from .compat import IS_LINUX
-
+IS_LINUX = platform.system() == "Linux"
 RUNNING_ON_JENKINS = os.getenv("JENKINS_HOME") is not None
 REGRESSION_TEST_LOG_DIR = os.getenv("CLIENT_LOG_DIR_PATH_DOCKER")
 ENABLE_TELEMETRY_LOG = RUNNING_ON_JENKINS and REGRESSION_TEST_LOG_DIR and IS_LINUX

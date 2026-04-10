@@ -4,7 +4,8 @@ include LICENSE.txt
 include NOTICE
 include pyproject.toml
 include src/snowflake/connector/nanoarrow_cpp/ArrowIterator/LICENSE.txt
-recursive-include src/snowflake/connector py.typed *.py *.pyx
+include src/snowflake/connector/aio/README.md
+recursive-include src/snowflake/connector py.typed *.py *.pyx *.js
 recursive-include src/snowflake/connector/vendored LICENSE*
 
 recursive-include src/snowflake/connector/nanoarrow_cpp *.cpp *.hpp
@@ -13,12 +14,16 @@ exclude src/snowflake/connector/nanoarrow_cpp/ArrowIterator/nanoarrow_arrow_iter
 exclude src/snowflake/connector/nanoarrow_cpp/scripts/.clang-format
 exclude src/snowflake/connector/nanoarrow_cpp/scripts/format.sh
 
+include src/snowflake/connector/minicore __init__.py
+recursive-include src/snowflake/connector/minicore *.so *.dll *.dylib *.a *.h *.lib
+
 exclude .git-blame-ignore-revs
 exclude .pre-commit-config.yaml
 exclude license_header.txt
 exclude tox.ini
 exclude mypy.ini
 exclude .clang-format
+exclude .wiremock/*
 
 prune ci
 prune benchmark
@@ -27,3 +32,4 @@ prune tested_requirements
 prune src/snowflake/connector/nanoarrow_cpp/scripts
 prune __pycache__
 prune samples
+prune prober

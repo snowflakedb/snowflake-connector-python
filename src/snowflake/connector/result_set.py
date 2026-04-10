@@ -1,12 +1,8 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import inspect
 from collections import deque
-from concurrent.futures import Future
+from concurrent.futures import ALL_COMPLETED, Future, ProcessPoolExecutor, wait
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
 from typing import (
@@ -48,6 +44,7 @@ def result_set_iterator(
     unfetched_batches: Deque[ResultBatch],
     final: Callable[[], None],
     prefetch_thread_num: int,
+    use_mp: bool,
     **kw: Any,
 ) -> Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]:
     """Creates an iterator over some other iterators.
@@ -61,45 +58,92 @@ def result_set_iterator(
     Just like ``ResultBatch`` iterator, this might yield an ``Exception`` to allow users
     to continue iterating through the rest of the ``ResultBatch``.
     """
+    is_fetch_all = kw.pop("is_fetch_all", False)
 
-    with ThreadPoolExecutor(prefetch_thread_num) as pool:
-        # Fill up window
+    if use_mp:
 
-        logger.debug("beginning to schedule result batch downloads")
+        def create_pool_executor() -> ProcessPoolExecutor:
+            return ProcessPoolExecutor(prefetch_thread_num)
 
-        for _ in range(min(prefetch_thread_num, len(unfetched_batches))):
-            logger.debug(
-                f"queuing download of result batch id: {unfetched_batches[0].id}"
-            )
-            unconsumed_batches.append(
-                pool.submit(unfetched_batches.popleft().create_iter, **kw)
-            )
+        def create_fetch_task(batch: ResultBatch):
+            return batch.populate_data
 
-        yield from first_batch_iter
+        def get_fetch_result(future_result: ResultBatch):
+            return future_result.create_iter(**kw)
 
-        i = 1
-        while unconsumed_batches:
-            logger.debug(f"user requesting to consume result batch {i}")
+        kw["connection"] = None
+    else:
 
-            # Submit the next un-fetched batch to the pool
-            if unfetched_batches:
+        def create_pool_executor() -> ThreadPoolExecutor:
+            return ThreadPoolExecutor(prefetch_thread_num)
+
+        def create_fetch_task(batch: ResultBatch):
+            return batch.create_iter
+
+        def get_fetch_result(future_result: Iterator):
+            return future_result
+
+    if is_fetch_all:
+        with create_pool_executor() as pool:
+            logger.debug("beginning to schedule result batch downloads")
+            yield from first_batch_iter
+            while unfetched_batches:
                 logger.debug(
                     f"queuing download of result batch id: {unfetched_batches[0].id}"
                 )
-                future = pool.submit(unfetched_batches.popleft().create_iter, **kw)
+                future = pool.submit(
+                    create_fetch_task(unfetched_batches.popleft()), **kw
+                )
                 unconsumed_batches.append(future)
+            _, _ = wait(unconsumed_batches, return_when=ALL_COMPLETED)
+            i = 1
+            while unconsumed_batches:
+                logger.debug(f"user began consuming result batch {i}")
+                yield from get_fetch_result(unconsumed_batches.popleft().result())
+                logger.debug(f"user began consuming result batch {i}")
+                i += 1
+        final()
+    else:
+        with create_pool_executor() as pool:
+            # Fill up window
 
-            future = unconsumed_batches.popleft()
+            logger.debug("beginning to schedule result batch downloads")
 
-            # this will raise an exception if one has occurred
-            batch_iterator = future.result()
+            for _ in range(min(prefetch_thread_num, len(unfetched_batches))):
+                logger.debug(
+                    f"queuing download of result batch id: {unfetched_batches[0].id}"
+                )
+                unconsumed_batches.append(
+                    pool.submit(create_fetch_task(unfetched_batches.popleft()), **kw)
+                )
 
-            logger.debug(f"user began consuming result batch {i}")
-            yield from batch_iterator
-            logger.debug(f"user finished consuming result batch {i}")
+            yield from first_batch_iter
 
-            i += 1
-    final()
+            i = 1
+            while unconsumed_batches:
+                logger.debug(f"user requesting to consume result batch {i}")
+
+                # Submit the next un-fetched batch to the pool
+                if unfetched_batches:
+                    logger.debug(
+                        f"queuing download of result batch id: {unfetched_batches[0].id}"
+                    )
+                    future = pool.submit(
+                        create_fetch_task(unfetched_batches.popleft()), **kw
+                    )
+                    unconsumed_batches.append(future)
+
+                future = unconsumed_batches.popleft()
+
+                # this will raise an exception if one has occurred
+                batch_iterator = get_fetch_result(future.result())
+
+                logger.debug(f"user began consuming result batch {i}")
+                yield from batch_iterator
+                logger.debug(f"user finished consuming result batch {i}")
+
+                i += 1
+        final()
 
 
 class ResultSet(Iterable[list]):
@@ -121,10 +165,12 @@ class ResultSet(Iterable[list]):
         cursor: SnowflakeCursor,
         result_chunks: list[JSONResultBatch] | list[ArrowResultBatch],
         prefetch_thread_num: int,
+        use_mp: bool,
     ) -> None:
         self.batches = result_chunks
         self._cursor = cursor
         self.prefetch_thread_num = prefetch_thread_num
+        self._use_mp = use_mp
 
     def _report_metrics(self) -> None:
         """Report all metrics totalled up.
@@ -168,20 +214,41 @@ class ResultSet(Iterable[list]):
 
     def _fetch_arrow_batches(
         self,
+        force_microsecond_precision: bool = False,
     ) -> Iterator[Table]:
         """Fetches all the results as Arrow Tables, chunked by Snowflake back-end."""
         self._can_create_arrow_iter()
-        return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow")
+        return self._create_iter(
+            iter_unit=IterUnit.TABLE_UNIT,
+            structure="arrow",
+            force_microsecond_precision=force_microsecond_precision,
+        )
 
     @overload
-    def _fetch_arrow_all(self, force_return_table: Literal[False]) -> Table | None: ...
+    def _fetch_arrow_all(
+        self,
+        force_return_table: Literal[False] = ...,
+        force_microsecond_precision: bool = ...,
+    ) -> Table | None: ...
 
     @overload
-    def _fetch_arrow_all(self, force_return_table: Literal[True]) -> Table: ...
+    def _fetch_arrow_all(
+        self,
+        force_return_table: Literal[True],
+        force_microsecond_precision: bool = ...,
+    ) -> Table: ...
 
-    def _fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
+    def _fetch_arrow_all(
+        self,
+        force_return_table: bool = False,
+        force_microsecond_precision: bool = False,
+    ) -> Table | None:
         """Fetches a single Arrow Table from all of the ``ResultBatch``."""
-        tables = list(self._fetch_arrow_batches())
+        tables = list(
+            self._fetch_arrow_batches(
+                force_microsecond_precision=force_microsecond_precision
+            )
+        )
         if tables:
             return pa.concat_tables(tables)
         else:
@@ -202,7 +269,7 @@ class ResultSet(Iterable[list]):
         """Fetches a single Pandas dataframe."""
         concat_args = list(inspect.signature(pandas.concat).parameters)
         concat_kwargs = {k: kwargs.pop(k) for k in dict(kwargs) if k in concat_args}
-        dataframes = list(self._fetch_pandas_batches(**kwargs))
+        dataframes = list(self._fetch_pandas_batches(is_fetch_all=True, **kwargs))
         if dataframes:
             return pandas.concat(
                 dataframes,
@@ -238,6 +305,9 @@ class ResultSet(Iterable[list]):
         This function is a helper function to ``__iter__`` and it was introduced for the
         cases where we need to propagate some values to later ``_download`` calls.
         """
+        # pop is_fetch_all and pass it to result_set_iterator
+        is_fetch_all = kwargs.pop("is_fetch_all", False)
+
         # add connection so that result batches can use sessions
         kwargs["connection"] = self._cursor.connection
 
@@ -257,6 +327,8 @@ class ResultSet(Iterable[list]):
             unfetched_batches,
             self._finish_iterating,
             self.prefetch_thread_num,
+            is_fetch_all=is_fetch_all,
+            use_mp=self._use_mp,
             **kwargs,
         )
 

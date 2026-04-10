@@ -1,12 +1,8 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import json
-import os
+import logging
 import stat
 import sys
 from pathlib import Path
@@ -21,13 +17,16 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 import snowflake.connector
+from snowflake.connector import SnowflakeConnection, connect
 from snowflake.connector.connection import DEFAULT_CONFIGURATION
 from snowflake.connector.errors import (
     Error,
-    ForbiddenError,
+    HttpError,
     OperationalError,
     ProgrammingError,
 )
+from snowflake.connector.network import SnowflakeRestful
+from snowflake.connector.wif_util import AttestationProvider
 
 from ..randomize import random_string
 from .mock_utils import mock_request_with_action, zero_backoff
@@ -45,7 +44,11 @@ except ImportError:
 try:  # pragma: no cover
     from snowflake.connector.auth import AuthByUsrPwdMfa
     from snowflake.connector.config_manager import CONFIG_MANAGER
-    from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
+    from snowflake.connector.constants import (
+        _CONNECTIVITY_ERR_MSG,
+        ENV_VAR_PARTNER,
+        QueryStatus,
+    )
 except ImportError:
     ENV_VAR_PARTNER = "SF_PARTNER"
     QueryStatus = CONFIG_MANAGER = None
@@ -53,6 +56,14 @@ except ImportError:
     class AuthByUsrPwdMfa(AuthByDefault):
         def __init__(self, password: str, mfa_token: str) -> None:
             pass
+
+
+@pytest.fixture(autouse=True)
+def mock_detect_platforms():
+    with patch(
+        "snowflake.connector.auth._auth.detect_platforms", return_value=[]
+    ) as mock_detect:
+        yield mock_detect
 
 
 def fake_connector(**kwargs) -> snowflake.connector.SnowflakeConnection:
@@ -89,6 +100,13 @@ def mock_post_requests(monkeypatch):
     )
 
     return request_body
+
+
+def write_temp_file(file_path: Path, contents: str) -> Path:
+    """Write the given string text to the given path, chmods it to be accessible, and returns the same path."""
+    file_path.write_text(contents)
+    file_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    return file_path
 
 
 def test_connect_with_service_name(mock_post_requests):
@@ -147,6 +165,16 @@ def test_connection_ignore_exception(mockSnowflakeRestfulPostRequest):
 
 
 @pytest.mark.skipolddriver
+def test_invalid_authenticator():
+    with pytest.raises(ProgrammingError) as excinfo:
+        snowflake.connector.connect(
+            account="account",
+            authenticator="INVALID",
+        )
+    assert "Unknown authenticator: INVALID" in str(excinfo.value)
+
+
+@pytest.mark.skipolddriver
 def test_is_still_running():
     """Checks that is_still_running returns expected results."""
     statuses = [
@@ -172,11 +200,11 @@ def test_is_still_running():
 
 
 @pytest.mark.skipolddriver
-def test_partner_env_var(mock_post_requests):
+def test_partner_env_var(mock_post_requests, monkeypatch):
     PARTNER_NAME = "Amanda"
 
-    with patch.dict(os.environ, {ENV_VAR_PARTNER: PARTNER_NAME}):
-        assert fake_connector().application == PARTNER_NAME
+    monkeypatch.setenv(ENV_VAR_PARTNER, PARTNER_NAME)
+    assert fake_connector().application == PARTNER_NAME
 
     assert (
         mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == PARTNER_NAME
@@ -184,12 +212,23 @@ def test_partner_env_var(mock_post_requests):
 
 
 @pytest.mark.skipolddriver
-def test_imported_module(mock_post_requests):
-    with patch.dict(sys.modules, {"streamlit": "foo"}):
-        assert fake_connector().application == "streamlit"
+@pytest.mark.parametrize(
+    "sys_modules,application",
+    [
+        ({"streamlit": None}, "streamlit"),
+        (
+            {"ipykernel": None, "jupyter_core": None, "jupyter_client": None},
+            "jupyter_notebook",
+        ),
+        ({"snowbooks": None}, "snowflake_notebook"),
+    ],
+)
+def test_imported_module(mock_post_requests, sys_modules, application):
+    with patch.dict(sys.modules, sys_modules):
+        assert fake_connector().application == application
 
     assert (
-        mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == "streamlit"
+        mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == application
     )
 
 
@@ -344,7 +383,7 @@ def test_invalid_backoff_policy():
         # passing a non-generator function should not work
         _ = fake_connector(backoff_policy=lambda: None)
 
-    with pytest.raises(ForbiddenError):
+    with pytest.raises(HttpError):
         # passing a generator function should make it pass config and error during connection
         _ = fake_connector(backoff_policy=zero_backoff)
 
@@ -534,3 +573,452 @@ def test_disable_saml_url_check_config():
             conn._disable_saml_url_check
             == DEFAULT_CONFIGURATION.get("disable_saml_url_check")[0]
         )
+
+
+def test_request_guid():
+    assert (
+        SnowflakeRestful.add_request_guid(
+            "https://test.snowflakecomputing.com"
+        ).startswith("https://test.snowflakecomputing.com?request_guid=")
+        and SnowflakeRestful.add_request_guid(
+            "http://test.snowflakecomputing.cn?a=b"
+        ).startswith("http://test.snowflakecomputing.cn?a=b&request_guid=")
+        and SnowflakeRestful.add_request_guid(
+            "https://test.snowflakecomputing.com.cn"
+        ).startswith("https://test.snowflakecomputing.com.cn?request_guid=")
+        and SnowflakeRestful.add_request_guid("https://test.abc.cn?a=b")
+        == "https://test.abc.cn?a=b"
+    )
+
+
+@pytest.mark.skipolddriver
+def test_ssl_error_hint(caplog):
+    from snowflake.connector.vendored.requests.exceptions import SSLError
+
+    with mock.patch(
+        "snowflake.connector.vendored.requests.sessions.Session.request",
+        side_effect=SSLError("SSL error"),
+    ), caplog.at_level(logging.DEBUG):
+        with pytest.raises(OperationalError) as exc:
+            fake_connector()
+    assert _CONNECTIVITY_ERR_MSG in exc.value.msg and isinstance(
+        exc.value, OperationalError
+    )
+    assert "SSL error" in caplog.text and _CONNECTIVITY_ERR_MSG in caplog.text
+
+
+def test_otel_error_message(caplog, mock_post_requests):
+    """This test assumes that OpenTelemetry is not installed when tests are running."""
+    with mock.patch("snowflake.connector.network.SnowflakeRestful._post_request"):
+        with caplog.at_level(logging.DEBUG):
+            with fake_connector():
+                ...
+    assert caplog.records
+    important_records = [
+        record
+        for record in caplog.records
+        if "Opentelemtry otel injection failed" in record.message
+    ]
+    assert len(important_records) == 1
+    assert important_records[0].exc_text is not None
+
+
+@pytest.mark.parametrize(
+    "dependent_param,value",
+    [
+        ("workload_identity_provider", "AWS"),
+        (
+            "workload_identity_entra_resource",
+            "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
+        ),
+        ("workload_identity_impersonation_path", ["subject-b", "subject-c"]),
+    ],
+)
+def test_cannot_set_dependent_params_without_wlid_authenticator(
+    mock_post_requests, dependent_param, value
+):
+    with pytest.raises(ProgrammingError) as excinfo:
+        snowflake.connector.connect(
+            user="user",
+            account="account",
+            password="password",
+            **{dependent_param: value},
+        )
+    assert (
+        f"{dependent_param} was set but authenticator was not set to WORKLOAD_IDENTITY"
+        in str(excinfo.value)
+    )
+
+
+@pytest.mark.parametrize(
+    "provider_param",
+    [
+        None,
+        "",
+        "INVALID",
+    ],
+)
+def test_workload_identity_provider_is_required_for_wif_authenticator(
+    monkeypatch, provider_param
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        with pytest.raises(ProgrammingError) as excinfo:
+            snowflake.connector.connect(
+                account="account",
+                authenticator="WORKLOAD_IDENTITY",
+                workload_identity_provider=provider_param,
+            )
+        expected_error_msg = (
+            "workload_identity_provider must be set to one of AWS,AZURE,GCP,OIDC when authenticator is WORKLOAD_IDENTITY"
+            if provider_param is None
+            else f"Unknown workload_identity_provider: '{provider_param}'. Expected one of: AWS, AZURE, GCP, OIDC"
+        )
+        assert expected_error_msg in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "provider_param",
+    [
+        # Strongly-typed values.
+        AttestationProvider.AZURE,
+        AttestationProvider.OIDC,
+        # String values.
+        "AZURE",
+        "OIDC",
+    ],
+)
+def test_workload_identity_impersonation_path_errors_for_unsupported_providers(
+    monkeypatch, provider_param
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        with pytest.raises(ProgrammingError) as excinfo:
+            snowflake.connector.connect(
+                account="account",
+                authenticator="WORKLOAD_IDENTITY",
+                workload_identity_provider=provider_param,
+                workload_identity_impersonation_path=[
+                    "sa2@project.iam.gserviceaccount.com"
+                ],
+            )
+        assert (
+            "workload_identity_impersonation_path is currently only supported for GCP and AWS."
+            in str(excinfo.value)
+        )
+
+
+@pytest.mark.parametrize(
+    "provider_param,impersonation_path",
+    [
+        (AttestationProvider.GCP, ["sa2@project.iam.gserviceaccount.com"]),
+        (AttestationProvider.AWS, ["arn:aws:iam::1234567890:role/role2"]),
+        ("GCP", ["sa2@project.iam.gserviceaccount.com"]),
+        ("AWS", ["arn:aws:iam::1234567890:role/role2"]),
+    ],
+)
+def test_workload_identity_impersonation_path_populates_auth_class_for_supported_provider(
+    monkeypatch, provider_param, impersonation_path
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        conn = snowflake.connector.connect(
+            account="account",
+            authenticator="WORKLOAD_IDENTITY",
+            workload_identity_provider=provider_param,
+            workload_identity_impersonation_path=impersonation_path,
+        )
+        assert conn.auth_class.impersonation_path == impersonation_path
+
+
+@pytest.mark.parametrize(
+    "provider_param, parsed_provider",
+    [
+        # Strongly-typed values.
+        (AttestationProvider.AWS, AttestationProvider.AWS),
+        (AttestationProvider.AZURE, AttestationProvider.AZURE),
+        (AttestationProvider.GCP, AttestationProvider.GCP),
+        (AttestationProvider.OIDC, AttestationProvider.OIDC),
+        # String values.
+        ("AWS", AttestationProvider.AWS),
+        ("AZURE", AttestationProvider.AZURE),
+        ("GCP", AttestationProvider.GCP),
+        ("OIDC", AttestationProvider.OIDC),
+    ],
+)
+def test_connection_params_are_plumbed_into_authbyworkloadidentity(
+    monkeypatch, provider_param, parsed_provider
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        conn = snowflake.connector.connect(
+            account="my_account_1",
+            workload_identity_provider=provider_param,
+            workload_identity_entra_resource="api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
+            token="my_token",
+            authenticator="WORKLOAD_IDENTITY",
+        )
+        assert conn.auth_class.provider == parsed_provider
+        assert (
+            conn.auth_class.entra_resource
+            == "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
+        )
+        assert conn.auth_class.token == "my_token"
+
+
+def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
+    monkeypatch, tmp_path
+):
+    token_file = write_temp_file(tmp_path / "token.txt", contents="my_token")
+    # On Windows, this path includes backslashes which will result in errors while parsing the TOML.
+    # Escape the backslashes to ensure it parses correctly.
+    token_file_path_escaped = str(token_file).replace("\\", "\\\\")
+    connections_file = write_temp_file(
+        tmp_path / "connections.toml",
+        contents=dedent(
+            f"""\
+        [default]
+        account = "my_account_1"
+        authenticator = "WORKLOAD_IDENTITY"
+        workload_identity_provider = "OIDC"
+        workload_identity_entra_resource = "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
+        token_file_path = "{token_file_path_escaped}"
+        """
+        ),
+    )
+
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        conn = snowflake.connector.connect(connections_file_path=connections_file)
+        assert conn.auth_class.provider == AttestationProvider.OIDC
+        assert (
+            conn.auth_class.entra_resource
+            == "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
+        )
+        assert conn.auth_class.token == "my_token"
+
+
+@pytest.mark.parametrize("rtr_enabled", [True, False])
+def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
+    monkeypatch, rtr_enabled: bool
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        conn = snowflake.connector.connect(
+            account="my_account_1",
+            user="user",
+            oauth_client_id="client_id",
+            oauth_client_secret="client_secret",
+            authenticator="OAUTH_AUTHORIZATION_CODE",
+            oauth_enable_single_use_refresh_tokens=rtr_enabled,
+        )
+        assert conn.auth_class._enable_single_use_refresh_tokens == rtr_enabled
+
+
+# Skip for old drivers because the connection config of
+# reraise_error_in_file_transfer_work_function is newly introduced.
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("reraise_enabled", [True, False, None])
+def test_reraise_error_in_file_transfer_work_function_config(
+    reraise_enabled: bool | None,
+):
+    """Test that reraise_error_in_file_transfer_work_function config is
+    properly set on connection."""
+
+    with mock.patch(
+        "snowflake.connector.network.SnowflakeRestful._post_request",
+        return_value={
+            "data": {
+                "serverVersion": "a.b.c",
+            },
+            "code": None,
+            "message": None,
+            "success": True,
+        },
+    ):
+        if reraise_enabled is not None:
+            # Create a connection with the config set to the value of reraise_enabled.
+            conn = fake_connector(
+                **{"reraise_error_in_file_transfer_work_function": reraise_enabled}
+            )
+        else:
+            # Special test setup: when reraise_enabled is None, create a
+            # connection without setting the config.
+            conn = fake_connector()
+
+        # When reraise_enabled is None, we expect a default value of False,
+        # so taking bool() on it also makes sense.
+        expected_value = bool(reraise_enabled)
+        actual_value = conn._reraise_error_in_file_transfer_work_function
+        assert actual_value == expected_value
+
+
+@pytest.mark.skipolddriver
+def test_connect_metadata_preservation():
+    """Test that the sync connect function preserves metadata from SnowflakeConnection.__init__.
+
+    This test verifies that various inspection methods return consistent metadata,
+    ensuring IDE support, type checking, and documentation generation work correctly.
+    """
+    import inspect
+
+    # Test 1: Check __name__ is correct
+    assert (
+        connect.__name__ == "__init__"
+    ), f"connect.__name__ should be 'connect', but got '{connect.__name__}'"
+
+    # Test 2: Check __wrapped__ points to SnowflakeConnection.__init__
+    assert hasattr(connect, "__wrapped__"), "connect should have __wrapped__ attribute"
+    assert (
+        connect.__wrapped__ is SnowflakeConnection.__init__
+    ), "connect.__wrapped__ should reference SnowflakeConnection.__init__"
+
+    # Test 3: Check __module__ is preserved
+    assert hasattr(connect, "__module__"), "connect should have __module__ attribute"
+    assert connect.__module__ == SnowflakeConnection.__init__.__module__, (
+        f"connect.__module__ should match SnowflakeConnection.__init__.__module__, "
+        f"but got '{connect.__module__}' vs '{SnowflakeConnection.__init__.__module__}'"
+    )
+
+    # Test 4: Check __doc__ is preserved
+    assert hasattr(connect, "__doc__"), "connect should have __doc__ attribute"
+    assert (
+        connect.__doc__ == SnowflakeConnection.__init__.__doc__
+    ), "connect.__doc__ should match SnowflakeConnection.__init__.__doc__"
+
+    # Test 5: Check __annotations__ are preserved (or at least available)
+    assert hasattr(
+        connect, "__annotations__"
+    ), "connect should have __annotations__ attribute"
+    src_annotations = getattr(SnowflakeConnection.__init__, "__annotations__", {})
+    connect_annotations = getattr(connect, "__annotations__", {})
+    assert connect_annotations == src_annotations, (
+        f"connect.__annotations__ should match SnowflakeConnection.__init__.__annotations__, "
+        f"but got {connect_annotations} vs {src_annotations}"
+    )
+
+    # Test 6: Check inspect.signature works correctly
+    try:
+        connect_sig = inspect.signature(connect)
+        source_sig = inspect.signature(SnowflakeConnection.__init__)
+        assert str(connect_sig) == str(source_sig), (
+            f"inspect.signature(connect) should match inspect.signature(SnowflakeConnection.__init__), "
+            f"but got '{connect_sig}' vs '{source_sig}'"
+        )
+    except Exception as e:
+        pytest.fail(f"inspect.signature(connect) failed: {e}")
+
+    # Test 7: Check inspect.getdoc works correctly
+    connect_doc = inspect.getdoc(connect)
+    source_doc = inspect.getdoc(SnowflakeConnection.__init__)
+    assert (
+        connect_doc == source_doc
+    ), "inspect.getdoc(connect) should match inspect.getdoc(SnowflakeConnection.__init__)"
+
+    # Test 8: Check that connect is callable
+    assert callable(connect), "connect should be callable"
+
+    # Test 9: Check type() and __class__ values (important for user introspection)
+    assert (
+        type(connect).__name__ == "function"
+    ), f"type(connect).__name__ should be 'function', but got '{type(connect).__name__}'"
+    assert (
+        connect.__class__.__name__ == "function"
+    ), f"connect.__class__.__name__ should be 'function', but got '{connect.__class__.__name__}'"
+    assert inspect.isfunction(
+        connect
+    ), "connect should be recognized as a function by inspect.isfunction()"
+
+    # Test 10: Verify the function has proper introspection capabilities
+    # IDEs and type checkers should be able to resolve parameters
+    sig = inspect.signature(connect)
+    params = list(sig.parameters.keys())
+    assert (
+        len(params) > 0
+    ), "connect should have parameters from SnowflakeConnection.__init__"
+    # Should have parameters like account, user, password, etc.
+
+
+@mock.patch("snowflake.connector.connection.CRLCacheFactory")
+def test_connections_registry_lifecycle(crl_mock, mock_post_requests):
+    """Test the individual methods of _ConnectionsPool."""
+    from snowflake.connector.connection import _ConnectionsRegistry
+
+    # Mock the registry to avoid side effects from other tests due to _ConnectionsRegistry being a singleton
+    with mock.patch(
+        "snowflake.connector.connection._connections_registry", _ConnectionsRegistry()
+    ) as mock_registry:
+        # Create a connection
+        conn1 = fake_connector()
+        conn2 = fake_connector()
+        assert mock_registry.get_connection_count() == 2
+
+        # Don't stop the task if pool is not empty
+        conn1.close()
+        crl_mock.stop_periodic_cleanup.assert_not_called()
+        assert mock_registry.get_connection_count() == 1
+
+        # Stop the task if the pool is emptied
+        conn2.close()
+        assert mock_registry.get_connection_count() == 0
+        crl_mock.stop_periodic_cleanup.assert_called_once()
+
+
+@pytest.mark.skipolddriver
+def test_server_session_keep_alive_skips_async_check(mock_post_requests):
+    """Test that server_session_keep_alive=True skips _all_async_queries_finished check."""
+    conn = fake_connector(server_session_keep_alive=True)
+
+    # Mock the methods we want to verify are called/not called
+    conn._all_async_queries_finished = mock.MagicMock(return_value=True)
+    delete_session_mock = mock.MagicMock()
+    # rest attribute is deleted when closing the connection so accessing it in checks would fail
+    conn.rest.delete_session = delete_session_mock
+
+    # Close the connection
+    conn.close()
+
+    # Verify _all_async_queries_finished was NOT called
+    conn._all_async_queries_finished.assert_not_called()
+
+    # Verify delete_session was NOT called (due to server_session_keep_alive=True)
+    delete_session_mock.assert_not_called()
+
+
+@pytest.mark.skipolddriver
+def test_server_session_keep_alive_false_calls_async_check(mock_post_requests):
+    """Test that server_session_keep_alive=False calls _all_async_queries_finished check."""
+    conn = fake_connector(server_session_keep_alive=False)
+
+    # Mock the methods we want to verify are called
+    conn._all_async_queries_finished = mock.MagicMock(return_value=True)
+    delete_session_mock = mock.MagicMock()
+    # rest attribute is deleted when closing the connection so accessing it in checks would fail
+    conn.rest.delete_session = delete_session_mock
+
+    # Close the connection
+    conn.close()
+
+    # Verify _all_async_queries_finished WAS called
+    conn._all_async_queries_finished.assert_called_once()
+
+    # Verify delete_session WAS called (since async queries are finished and keep_alive=False)
+    delete_session_mock.assert_called_once()

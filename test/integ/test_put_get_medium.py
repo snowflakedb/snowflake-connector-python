@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import datetime
@@ -486,7 +482,6 @@ ratio number(6,2))
         with conn_cnx(
             user=db_parameters["user"],
             account=db_parameters["account"],
-            password=db_parameters["password"],
         ) as cnx:
             run(cnx, "drop table if exists {name}")
 

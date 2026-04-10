@@ -1,7 +1,3 @@
-//
-// Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-//
-
 #include "SnowflakeType.hpp"
 
 namespace sf {
@@ -17,7 +13,10 @@ std::unordered_map<std::string, SnowflakeType::Type>
         {"DOUBLE PRECISION", SnowflakeType::Type::REAL},
         {"DOUBLE", SnowflakeType::Type::REAL},
         {"FIXED", SnowflakeType::Type::FIXED},
+        {"DECFLOAT", SnowflakeType::Type::DECFLOAT},
         {"FLOAT", SnowflakeType::Type::REAL},
+        {"INTERVAL_YEAR_MONTH", SnowflakeType::Type::INTERVAL_YEAR_MONTH},
+        {"INTERVAL_DAY_TIME", SnowflakeType::Type::INTERVAL_DAY_TIME},
         {"MAP", SnowflakeType::Type::MAP},
         {"OBJECT", SnowflakeType::Type::OBJECT},
         {"REAL", SnowflakeType::Type::REAL},

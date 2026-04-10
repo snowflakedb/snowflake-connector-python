@@ -1,15 +1,13 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
+import logging
 import time
 
 import pytest
 
-from snowflake.connector import ProgrammingError
+from snowflake.connector import DatabaseError, ProgrammingError
+from snowflake.connector.cursor import DictCursor, SnowflakeCursor
 
 # Mark all tests in this file to time out after 2 minutes to prevent hanging forever
 pytestmark = [pytest.mark.timeout(120), pytest.mark.skipolddriver]
@@ -20,17 +18,22 @@ except ImportError:
     QueryStatus = None
 
 
-def test_simple_async(conn_cnx):
+@pytest.mark.parametrize(
+    "cursor_class, row_type", [(SnowflakeCursor, tuple), (DictCursor, dict)]
+)
+def test_simple_async(conn_cnx, cursor_class, row_type):
     """Simple test to that shows the most simple usage of fire and forget.
 
     This test also makes sure that wait_until_ready function's sleeping is tested and
     that some fields are copied over correctly from the original query.
     """
     with conn_cnx() as con:
-        with con.cursor() as cur:
+        with con.cursor(cursor_class) as cur:
             cur.execute_async("select count(*) from table(generator(timeLimit => 5))")
             cur.get_results_from_sfqid(cur.sfqid)
-            assert len(cur.fetchall()) == 1
+            rows = cur.fetchall()
+            assert len(rows) == 1
+            assert isinstance(rows[0], row_type)
             assert cur.rowcount
             assert cur.description
 
@@ -91,7 +94,7 @@ def test_async_exec(conn_cnx):
             assert len(cur.fetchall()) == 1
 
 
-def test_async_error(conn_cnx):
+def test_async_error(conn_cnx, caplog):
     """Tests whether simple async query error retrieval works.
 
     Runs a query that will fail to execute and then tests that if we tried to get results for the query
@@ -115,6 +118,19 @@ def test_async_error(conn_cnx):
             with pytest.raises(ProgrammingError) as e2:
                 cur.get_results_from_sfqid(q_id)
             assert e1.value.errno == e2.value.errno == sync_error.value.errno
+
+            sfqid = cur.execute_async("SELECT SYSTEM$WAIT(2)")["queryId"]
+            cur.get_results_from_sfqid(sfqid)
+            with con.cursor() as cancel_cursor:
+                # use separate cursor to cancel as execute will overwrite the previous query status
+                cancel_cursor.execute(f"SELECT SYSTEM$CANCEL_QUERY('{sfqid}')")
+            with pytest.raises(DatabaseError) as e3, caplog.at_level(logging.INFO):
+                cur.fetchall()
+            assert (
+                "SQL execution canceled" in e3.value.msg
+                and f"Status of query '{sfqid}' is {QueryStatus.FAILED_WITH_ERROR.name}"
+                in caplog.text
+            )
 
 
 def test_mix_sync_async(conn_cnx):

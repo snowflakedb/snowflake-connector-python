@@ -7,6 +7,223 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- Upcoming Release
+  - Added HTTP 307/308 redirect status codes to the retryable set as defense-in-depth, with redirect-aware logging in both sync and async paths.
+  - Consolidated keyring token cache to use a single service name with hashed account keys, reducing macOS Keychain password prompts. Legacy entries are auto-migrated on first read.
+  - Added support for AWS outbound JWT token attestation for Workload Identity Federation (WIF). This can be enabled by setting the `SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN` environment variable to `true`. Note: This environment variable will be removed in a future release.
+  - Updated SPCS token injection to gate on `SNOWFLAKE_RUNNING_INSIDE_SPCS` environment variable, trim whitespace, and remove configurable token path.
+
+- v4.4.0(March 25,2026)
+  - Bump the lower boundary of cryptography to 46.0.5 due to CVE-2026-26007.
+  - Added support for Python 3.14.
+  - Removed pyOpenSSL upper bound dependency constraint to allow installation of pyOpenSSL 26.0.0+, which includes a fix for GHSA-vp96-hxj8-p424.
+  - Fixed Azure IMDS `Metadata` header to use lowercase `"true"` instead of `"True"`, which caused 400 errors during Azure Workload Identity Federation authentication.
+  - Fixed default `crl_download_max_size` to be 20MB instead of 200MB, as the previous value was set too high and could cause out-of-memory issues.
+  - Fixed a bug where Azure GET commands would incorrectly set the file status to UPLOADED instead of preserving the DOWNLOADED status during metadata retrieval.
+  - Renamed the environment variable for skipping config file permission warnings from `SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE` to `SF_SKIP_TOKEN_FILE_PERMISSIONS_VERIFICATION`. The old variable is still supported but emits a deprecation warning.
+  - Fixed `unsafe_skip_file_permissions_check` flag not being respected when reading `connections.toml`.
+  - Fixed JSONDecodeError in result_batch._load() when fetching large result sets
+  - Fixed validation ordering for `client_session_keep_alive_heartbeat_frequency`.
+
+
+- v4.3.0(February 12,2026)
+  - Ensured proper list conversion - the converter runs to_snowflake on all list elements.
+  - Made the parameter `server_session_keep_alive` in `SnowflakeConnection` skip checking for pending async queries, providing faster connection close times especially when many async queries are executed.
+  - Fix string representation of INTERVAL YEAR and INTERVAL MONTH types.
+  - Log a warning when using http protocol for OAuth urls.
+  - Deprecated support for custom revocation error classes in OCSP response cache deserialization. By default, only `RevocationCheckError` exceptions are deserialized from OCSP cache. Custom exception classes can be temporarily enabled by setting the `SNOWFLAKE_ENABLE_CUSTOM_REVOCATION_ERRORS` environment variable to `true` or `1`, but this support will be removed in a future release.
+  - Bumped up vendored `urllib3` to `2.6.3`
+  - Added `force_microseconds_precision` to `cursor.fetch_arrow_all` and `cursor.fetch_pandas_all` to avoid PyArrow schema inconsistency between batches.
+  - Fixed a bug where tilde in path to `private_key_file` specified in the connection was not properly expanded
+  - Added `secondary_roles` connection parameter to control secondary role activation at session creation. Supports `ALL` or `NONE` or no value.
+
+
+- v4.2.0(January 07,2026)
+  - Added `SnowflakeCursor.stats` property to expose granular DML statistics (rows inserted, deleted, updated, and duplicates) for operations like CTAS where `rowcount` is insufficient.
+  - Added support for injecting SPCS service identifier token (`SPCS_TOKEN`) into login requests when present in SPCS containers.
+  - Introduced shared library([source code](https://github.com/snowflakedb/universal-driver/tree/main/sf_mini_core)) for extended telemetry to identify and prepare testing platform for native rust extensions.
+  - Added `private_key_passphrase` connection parameter for key pair authentication with encrypted private keys.
+
+- v4.1.1(December 12,2025)
+  - Relaxed pandas dependency requirements for Python below 3.12.
+  - Changed CRL cache cleanup background task to daemon to avoid blocking main thread.
+  - Fixed NO_PROXY issues with PUT operations
+
+- v4.1.0(November 18,2025)
+  - Added the `SNOWFLAKE_AUTH_FORCE_SERVER` environment variable to force the use of the local-listening server when using the `externalbrowser` auth method.
+    - This allows headless environments (like Docker or Airflow) running locally to auth via a browser URL.
+  - Fix compilation error when building from sources with libc++.
+  - Pin lower versions of dependencies to oldest version without vulnerabilities.
+  - Added no_proxy parameter for proxy configuration without using environmental variables.
+  - Added OAUTH_AUTHORIZATION_CODE and OAUTH_CLIENT_CREDENTIALS to list of authenticators that don't require user to be set
+  - Added `oauth_socket_uri` connection parameter allowing to separate server and redirect URIs for local OAuth server.
+  - Made platform_detection logs silent and improved its timeout handling. Added support for ENV_VAR_DISABLE_PLATFORM_DETECTION environment variable.
+  - Fixed FIPS environments md5 hash issues with multipart upload on Azure.
+
+- v4.0.0(October 09,2025)
+  - Added support for checking certificates revocation using revocation lists (CRLs)
+  - Added `CERT_REVOCATION_CHECK_MODE` to `CLIENT_ENVIRONMENT`
+  - Added the `workload_identity_impersonation_path` parameter to support service account impersonation for Workload Identity Federation on GCP and AWS workloads only
+  - Fixed `get_results_from_sfqid` when using `DictCursor` and executing multiple statements at once
+  - Added the `oauth_credentials_in_body` parameter supporting an option to send the oauth client credentials in the request body
+  - Fix retry behavior for `ECONNRESET` error
+  - Added an option to exclude `botocore` and `boto3` dependencies by setting `SNOWFLAKE_NO_BOTO` environment variable during installation
+  - Revert changing exception type in case of token expired scenario for `Oauth` authenticator back to `DatabaseError`
+  - Enhanced configuration file security checks with stricter permission validation.
+    - Configuration files writable by group or others now raise a `ConfigSourceError` with detailed permission information, preventing potential credential tampering.
+  - Fixed the return type of `SnowflakeConnection.cursor(cursor_class)` to match the type of `cursor_class`
+  - Constrained the types of `fetchone`, `fetchmany`, `fetchall`
+    - As part of this fix, `DictCursor` is no longer a subclass of `SnowflakeCursor`; use `SnowflakeCursorBase` as a superclass of both.
+  - Fix "No AWS region was found" error if AWS region was set in `AWS_DEFAULT_REGION` variable instead of `AWS_REGION` for `WORKLOAD_IDENTITY` authenticator
+  - Add `ocsp_root_certs_dict_lock_timeout` connection parameter to set the timeout (in seconds) for acquiring the lock on the OCSP root certs dictionary. Default value for this parameter is -1 which indicates no timeout.
+  - Fixed behaviour of trying S3 Transfer Accelerate endpoint by default for internal stages, and always getting HTTP403 due to permissions missing on purpose. Now /accelerate is not attempted.
+
+- v3.18.0(October 03,2025)
+  - Added support for pandas conversion for Day-time and Year-Month Interval types
+
+- v3.17.4(September 22,2025)
+  - Added support for intermediate certificates as roots when they are stored in the trust store
+  - Bumped up vendored `urllib3` to `2.5.0` and `requests` to `v2.32.5`
+  - Dropped support for OpenSSL versions older than 1.1.1
+
+- v3.17.3(September 02,2025)
+  - Enhanced configuration file permission warning messages.
+    - Improved warning messages for readable permission issues to include clear instructions on how to skip warnings using the `SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE` environment variable.
+  - Fixed the bug with staging pandas dataframes on AWS - the regional endpoint is used when required
+    - This addresses the issue with `create_dataframe` call on Snowpark
+
+- v3.17.2(August 23,2025)
+  - Fixed a bug where platform_detection was retrying failed requests with warnings to non-existent endpoints.
+  - Added disabling endpoint-based platform detection by setting `platform_detection_timeout_seconds` to zero.
+
+- v3.17.1(August 17,2025)
+  - Added `infer_schema` parameter to `write_pandas` to perform schema inference on the passed data.
+  - Namespace `snowlake` reverted back to non-module.
+
+- v3.17.0(August 16,2025)
+  - Added in-band HTTP exception telemetry.
+  - Added an `unsafe_skip_file_permissions_check` flag to skip file permission checks on the cache and configuration.
+  - Added `APPLICATION_PATH` within `CLIENT_ENVIRONMENT` to distinguish between multiple scripts using the Python Connector in the same environment.
+  - Added basic JSON support for Interval types.
+  - Added in-band OCSP exception telemetry.
+  - Added support for new authentication methods with Workload Identity Federation (WIF).
+    - Added the `WORKLOAD_IDENTITY` value for the authenticator type.
+    - Added the `workload_identity_provider` and `workload_identity_entra_resource` parameters.
+  - Added support for the `use_vectorized_scanner` parameter in the write_pandas function.
+  - Added support of proxy setup using connection parameters without emitting environment variables.
+  - Added populating of `type_code` in `ResultMetadata` for interval types.
+  - Introduced the `snowflake_version` property to the connection.
+  - Moved `OAUTH_TYPE` to `CLIENT_ENVIROMENT`.
+  - Relaxed the `pyarrow` version constrain; versions >= 19 can now be used.
+  - Disabled token caching for OAuth Client Credentials authentication.
+  - Fixed OAuth authenticator values.
+  - Fixed a bug where a PAT with an external session authenticator was used while `external_session_id` was not provided in `SnowflakeRestful.fetch`.
+  - Fixed the case-sensitivity of `Oauth` and `programmatic_access_token` authenticator values.
+  - Fixed unclear error messages for incorrect `authenticator` values.
+  - Fixed GCS staging by ensuring the endpoint has a scheme.
+  - Fixed a bug where time-zoned timestamps fetched as a `pandas.DataFrame` or `pyarrow.Table` would overflow due to unnecessary precision. A clear error will now be raised if an overflow cannot be prevented.
+
+- v3.16.0(July 04,2025)
+  - Bumped numpy dependency from <2.1.0 to <=2.2.4.
+  - Added Windows support for Python 3.13.
+  - Added `bulk_upload_chunks` parameter to `write_pandas` function. Setting this parameter to True changes the behaviour of write_pandas function to first write all the data chunks to the local disk and then perform the wildcard upload of the chunks folder to the stage. In default behaviour the chunks are being saved, uploaded and deleted one by one.
+  - Added support for new authentication mechanism PAT with external session ID.
+  - Added `client_fetch_use_mp` parameter that enables multiprocessed fetching of result batches.
+  - Added basic arrow support for Interval types.
+  - Fixed `write_pandas` special characters usage in the location name.
+  - Fixed usage of `use_virtual_url` when building the location for gcs storage client.
+  - Added support for Snowflake OAuth for local applications.
+
+- v3.15.0(Apr 29,2025)
+  - Bumped up min boto and botocore version to 1.24.
+  - OCSP: terminate certificates chain traversal if a trusted certificate already reached.
+  - Added new authentication methods support for programmatic access tokens (PATs), OAuth 2.0 Authorization Code Flow, OAuth 2.0 Client Credentials Flow, and OAuth Token caching.
+    - For OAuth 2.0 Authorization Code Flow:
+      - Added the `oauth_client_id`, `oauth_client_secret`, `oauth_authorization_url`, `oauth_token_request_url`, `oauth_redirect_uri`, `oauth_scope`, `oauth_disable_pkce`, `oauth_enable_refresh_tokens` and `oauth_enable_single_use_refresh_tokens` parameters.
+      - Added the `OAUTH_AUTHORIZATION_CODE` value for the parameter authenticator.
+    - For OAuth 2.0 Client Credentials Flow:
+      - Added the `oauth_client_id`, `oauth_client_secret`, `oauth_token_request_url`, and `oauth_scope` parameters.
+      - Added the `OAUTH_CLIENT_CREDENTIALS` value for the parameter authenticator.
+    - For OAuth Token caching: Passing a username to driver configuration is required, and the `client_store_temporary_credential property` is to be set to `true`.
+
+- v3.14.1(April 21, 2025)
+  - Added support for Python 3.13.
+    - NOTE: Windows 64 support is still experimental and should not yet be used for production environments.
+  - Dropped support for Python 3.8.
+  - Added basic decimal floating-point type support.
+  - Added experimental authentication methods.
+  - Added support of GCS regional endpoints.
+  - Added support of GCS virtual urls. See more: https://cloud.google.com/storage/docs/request-endpoints#xml-api
+  - Added `client_fetch_threads` experimental parameter to better utilize threads for fetching query results.
+  - Added `check_arrow_conversion_error_on_every_column` connection property that can be set to `False` to restore previous behaviour in which driver will ignore errors until it occurs in the last column. This flag's purpose is to unblock workflows that may be impacted by the bugfix and will be removed in later releases.
+  - Lowered log levels from info to debug for some of the messages to make the output easier to follow.
+  - Allowed the connector to inherit a UUID4 generated upstream, provided in statement parameters (field: `requestId`), rather than automatically generate a UUID4 to use for the HTTP Request ID.
+  - Improved logging in urllib3, boto3, botocore - assured data masking even after migration to the external owned library in the future.
+  - Improved error message for client-side query cancellations due to timeouts.
+  - Improved security and robustness for the temporary credentials cache storage.
+  - Fixed a bug that caused driver to fail silently on `TO_DATE` arrow to python conversion when invalid date was followed by the correct one.
+  - Fixed expired S3 credentials update and increment retry when expired credentials are found.
+  - Deprecated `insecure_mode` connection property and replaced it with `disable_ocsp_checks` with the same behavior as the former property.
+
+- v3.14.0(March 03, 2025)
+  - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
+  - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
+  - Optimized distribution package lookup to speed up import.
+  - Fixed a bug where privatelink OCSP Cache url could not be determined if privatelink account name was specified in uppercase.
+  - Added support for iceberg tables to `write_pandas`.
+  - Fixed base64 encoded private key tests.
+  - Fixed a bug where file permission check happened on Windows.
+  - Added support for File types.
+  - Added `unsafe_file_write` connection parameter that restores the previous behaviour of saving files downloaded with GET with 644 permissions.
+
+- v3.13.2(January 29, 2025)
+  - Changed not to use scoped temporary objects.
+
+- v3.13.1(January 29, 2025)
+  - Remedied SQL injection vulnerability in snowflake.connector.pandas_tools.write_pandas. See more https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-2vpq-fh52-j3wv
+  - Remedied vulnerability in deserialization of the OCSP response cache. See more: https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-m4f6-vcj4-w5mx
+  - Remedied vulnerability connected to cache files permissions. See more: https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-r2x6-cjg7-8r43
+
+- v3.13.0(January 23,2025)
+  - Added a feature to limit the sizes of IO-bound ThreadPoolExecutors during PUT and GET commands.
+  - Updated README.md to include instructions on how to verify package signatures using `cosign`.
+  - Updated the log level for cursor's chunk rowcount from INFO to DEBUG.
+  - Added a feature to verify if the connection is still good enough to send queries over.
+  - Added support for base64-encoded DER private key strings in the `private_key` authentication type.
+
+- v3.12.4(December 3,2024)
+  - Fixed a bug where multipart uploads to Azure would be missing their MD5 hashes.
+  - Fixed a bug where OpenTelemetry header injection would sometimes cause Exceptions to be thrown.
+  - Fixed a bug where OCSP checks would throw TypeError and make mainly GCP blob storage unreachable.
+  - Bumped pyOpenSSL dependency from >=16.2.0,<25.0.0 to >=22.0.0,<25.0.0.
+
+- v3.12.3(October 25,2024)
+  - Improved the error message for SSL-related issues to provide clearer guidance when an SSL error occurs.
+  - Improved error message for SQL execution cancellations caused by timeout.
+
+- v3.12.2(September 11,2024)
+  - Improved error handling for asynchronous queries, providing more detailed and informative error messages when an async query fails.
+  - Improved inference of top-level domains for accounts specifying a region in China, now defaulting to snowflakecomputing.cn.
+  - Improved implementation of the `snowflake.connector.util_text.random_string` to reduce the likelihood of collisions.
+  - Updated the log level for OCSP fail-open warning messages from ERROR to WARNING.
+
+- v3.12.1(August 20,2024)
+  - Fixed a bug that logged the session token when renewing a session.
+  - Fixed a bug where disabling client telemetry did not work.
+  - Fixed a bug where passing `login_timeout` as a string raised a `TypeError` during the login retry step.
+  - Use `pathlib` instead of `os` for default config file location resolution.
+  - Removed upper `cryptogaphy` version pin.
+  - Removed reference to script `snowflake-export-certs` (its backing module was already removed long ago)
+  - Enhanced retry mechanism for handling transient network failures during query result polling when no server response is received.
+
+- v3.12.0(July 24,2024)
+  - Set default connection timeout of 10 seconds and socket read timeout of 10 minutes for HTTP calls in file transfer.
+  - Optimized `to_pandas()` performance by fully parallel downloading logic.
+  - Fixed a bug that specifying client_session_keep_alive_heartbeat_frequency in snowflake-sqlalchemy could crash the connector.
+  - Fixed incorrect type hint of connection parameter `private_key`.
+  - Added support for connectivity to multiple domains.
+  - Bumped keyring dependency from >=23.1.0,<25.0.0 to >=23.1.0,<26.0.0.
+  - Disabled OOB Telemetry.
 
 - v3.11.0(June 17,2024)
   - Added support for `token_file_path` connection parameter to read an OAuth token from a file when connecting to Snowflake.

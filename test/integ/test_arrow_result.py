@@ -1,17 +1,13 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
 import itertools
 import json
 import logging
-import os
 import random
 import re
+from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta, timezone
 
 import numpy
@@ -36,6 +32,8 @@ except ImportError:
 
 try:
     import pandas
+
+    from snowflake.connector.pandas_tools import write_pandas
 
     pandas_available = True
 except ImportError:
@@ -114,7 +112,7 @@ if pandas_available:
             pandas.NaT,
             pandas.Timestamp("2024-01-01 12:00:00+0000", tz="UTC"),
         ],
-        "NUMBER": [numpy.NAN, 1.0, 2.0, 3.0],
+        "NUMBER": [numpy.nan, 1.0, 2.0, 3.0],
     }
 
     PANDAS_STRUCTURED_REPRS = {
@@ -164,16 +162,11 @@ ICEBERG_UNSUPPORTED_TYPES = {
 }
 
 
-# iceberg testing is only configured in aws at the moment
-ICEBERG_ENVIRONMENTS = {"aws"}
-STRUCTRED_TYPE_ENVIRONMENTS = {"aws"}
-CLOUD = os.getenv("cloud_provider", "dev")
-RUNNING_ON_GH = os.getenv("GITHUB_ACTIONS") == "true"
+# SNOW-1348805: Structured types have not been rolled out to all accounts yet.
+# Once rolled out this should be updated to include all accounts.
+STRUCTURED_TYPE_ENVIRONMENTS = {"SFCTEST0_AWS_US_WEST_2", "SNOWPARK_PYTHON_TEST"}
+ICEBERG_ENVIRONMENTS = {"SFCTEST0_AWS_US_WEST_2"}
 
-ICEBERG_SUPPORTED = CLOUD in ICEBERG_ENVIRONMENTS and RUNNING_ON_GH or CLOUD == "dev"
-STRUCTURED_TYPES_SUPPORTED = (
-    CLOUD in STRUCTRED_TYPE_ENVIRONMENTS and RUNNING_ON_GH or CLOUD == "dev"
-)
 
 # Generate all valid test cases. By using pytest.param with an id you can
 # run a specific test case easier like so:
@@ -194,8 +187,43 @@ DATATYPE_TEST_CONFIGURATIONS = [
     # Run all tests when not converting to pandas or using iceberg
     if iceberg is False
     # Only run iceberg tests on applicable types
-    or (ICEBERG_SUPPORTED and iceberg and datatype not in ICEBERG_UNSUPPORTED_TYPES)
+    or (iceberg and datatype not in ICEBERG_UNSUPPORTED_TYPES)
 ]
+
+
+def current_account(cursor):
+    return cursor.execute("select CURRENT_ACCOUNT_NAME()").fetchall()[0][0].upper()
+
+
+@pytest.fixture(scope="module")
+def structured_type_support(module_conn_cnx):
+    with module_conn_cnx() as conn:
+        supported = current_account(conn.cursor()) in STRUCTURED_TYPE_ENVIRONMENTS
+    return supported
+
+
+@pytest.fixture(scope="module")
+def iceberg_support(module_conn_cnx):
+    with module_conn_cnx() as conn:
+        supported = current_account(conn.cursor()) in ICEBERG_ENVIRONMENTS
+    return supported
+
+
+@contextmanager
+def structured_type_wrapped_conn(conn_cnx, structured_type_support):
+    parameters = {}
+    if structured_type_support:
+        parameters = {
+            "python_connector_query_result_format": "arrow",
+            "ENABLE_STRUCTURED_TYPES_IN_CLIENT_RESPONSE": True,
+            "ENABLE_STRUCTURED_TYPES_NATIVE_ARROW_FORMAT": True,
+            "FORCE_ENABLE_STRUCTURED_TYPES_NATIVE_ARROW_FORMAT": True,
+            "IGNORE_CLIENT_VESRION_IN_STRUCTURED_TYPES_RESPONSE": True,
+            "ENABLE_STRUCTURED_TYPES_IN_FDN_TABLES": True,
+        }
+
+    with conn_cnx(session_parameters=parameters) as conn:
+        yield conn
 
 
 def serialize(value):
@@ -211,10 +239,17 @@ def dumps(data):
 
 
 def verify_datatypes(
-    conn_cnx, query, examples, schema, iceberg=False, pandas=False, deserialize=False
+    conn_cnx,
+    query,
+    examples,
+    schema,
+    structured_type_support,
+    iceberg=False,
+    pandas=False,
+    deserialize=False,
 ):
     table_name = f"arrow_datatype_test_verifaction_table_{random_string(5)}"
-    with conn_cnx() as conn:
+    with structured_type_wrapped_conn(conn_cnx, structured_type_support) as conn:
         try:
             conn.cursor().execute("alter session set use_cached_result=false")
             iceberg_table, iceberg_config = (
@@ -265,13 +300,13 @@ def pandas_verify(cur, data, deserialize):
             ), f"Result value {value} should match input example {datum}."
 
 
-@pytest.mark.skipif(
-    not ICEBERG_SUPPORTED, reason="Iceberg not supported in this envrionment."
-)
-@pytest.mark.parametrize("datatype", ICEBERG_UNSUPPORTED_TYPES)
-def test_iceberg_negative(datatype, conn_cnx):
+@pytest.mark.parametrize("datatype", sorted(ICEBERG_UNSUPPORTED_TYPES))
+def test_iceberg_negative(datatype, conn_cnx, iceberg_support, structured_type_support):
+    if not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
+
     table_name = f"arrow_datatype_test_verifaction_table_{random_string(5)}"
-    with conn_cnx() as conn:
+    with structured_type_wrapped_conn(conn_cnx, structured_type_support) as conn:
         try:
             with pytest.raises(ProgrammingError):
                 conn.cursor().execute(
@@ -284,7 +319,18 @@ def test_iceberg_negative(datatype, conn_cnx):
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
-def test_datatypes(datatype, examples, iceberg, pandas, conn_cnx):
+def test_datatypes(
+    datatype,
+    examples,
+    iceberg,
+    pandas,
+    conn_cnx,
+    iceberg_support,
+    structured_type_support,
+):
+    if iceberg and not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
+
     json_values = re.escape(json.dumps(examples, default=serialize))
     query = f"""
     SELECT
@@ -296,16 +342,35 @@ def test_datatypes(datatype, examples, iceberg, pandas, conn_cnx):
         examples = PANDAS_REPRS.get(datatype, examples)
     if datatype == "VARIANT":
         examples = [dumps(ex) for ex in examples]
-    verify_datatypes(conn_cnx, query, examples, f"(col {datatype})", iceberg, pandas)
+    verify_datatypes(
+        conn_cnx,
+        query,
+        examples,
+        f"(col {datatype})",
+        structured_type_support,
+        iceberg,
+        pandas,
+    )
 
 
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
-def test_array(datatype, examples, iceberg, pandas, conn_cnx):
+def test_array(
+    datatype,
+    examples,
+    iceberg,
+    pandas,
+    conn_cnx,
+    iceberg_support,
+    structured_type_support,
+):
+    if iceberg and not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
+
     json_values = re.escape(json.dumps(examples, default=serialize))
 
-    if STRUCTURED_TYPES_SUPPORTED:
+    if structured_type_support:
         col_type = f"array({datatype})"
         if datatype == "VARIANT":
             examples = [dumps(ex) if ex else ex for ex in examples]
@@ -327,16 +392,16 @@ def test_array(datatype, examples, iceberg, pandas, conn_cnx):
         query,
         (examples,),
         f"(col {col_type})",
+        structured_type_support,
         iceberg,
         pandas,
-        not STRUCTURED_TYPES_SUPPORTED,
+        not structured_type_support,
     )
 
 
-@pytest.mark.skipif(
-    not STRUCTURED_TYPES_SUPPORTED, reason="Testing structured type feature."
-)
-def test_structured_type_binds(conn_cnx):
+def test_structured_type_binds(conn_cnx, iceberg_support, structured_type_support):
+    if not structured_type_support:
+        pytest.skip("Test requires structured type support.")
     original_style = snowflake.connector.paramstyle
     snowflake.connector.paramstyle = "qmark"
     data = (
@@ -349,7 +414,7 @@ def test_structured_type_binds(conn_cnx):
     json_data = [json.dumps(d) for d in data]
     schema = "(num number, arr_b array(boolean), map map(varchar, int), obj object(city varchar, population float), arr_f array(float))"
     table_name = f"arrow_structured_type_binds_test_{random_string(5)}"
-    with conn_cnx() as conn:
+    with structured_type_wrapped_conn(conn_cnx, structured_type_support) as conn:
         try:
             conn.cursor().execute("alter session set enable_bind_stage_v2=Enable")
             conn.cursor().execute(f"create table if not exists {table_name} {schema}")
@@ -369,14 +434,24 @@ def test_structured_type_binds(conn_cnx):
             conn.cursor().execute(f"drop table if exists {table_name}")
 
 
-@pytest.mark.skipif(
-    not STRUCTURED_TYPES_SUPPORTED, reason="map type not supported in this environment"
-)
 @pytest.mark.parametrize("key_type", ["varchar", "number"])
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
-def test_map(key_type, datatype, examples, iceberg, pandas, conn_cnx):
+def test_map(
+    key_type,
+    datatype,
+    examples,
+    iceberg,
+    pandas,
+    conn_cnx,
+    iceberg_support,
+    structured_type_support,
+):
+    if not structured_type_support:
+        pytest.skip("Test requires structured type support.")
+    if iceberg and not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
     if iceberg and key_type == "number":
         pytest.skip("Iceberg does not support number keys.")
     data = {str(i) if key_type == "varchar" else i: ex for i, ex in enumerate(examples)}
@@ -406,6 +481,7 @@ def test_map(key_type, datatype, examples, iceberg, pandas, conn_cnx):
                 query,
                 [data],
                 f"(col map({key_type}, {datatype}))",
+                structured_type_support,
                 iceberg,
                 pandas,
             )
@@ -415,20 +491,32 @@ def test_map(key_type, datatype, examples, iceberg, pandas, conn_cnx):
             query,
             [data],
             f"(col map({key_type}, {datatype}))",
+            structured_type_support,
             iceberg,
             pandas,
+            not structured_type_support,
         )
 
 
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
-def test_object(datatype, examples, iceberg, pandas, conn_cnx):
+def test_object(
+    datatype,
+    examples,
+    iceberg,
+    pandas,
+    conn_cnx,
+    iceberg_support,
+    structured_type_support,
+):
+    if iceberg and not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
     fields = [f"{datatype}_{i}" for i in range(len(examples))]
     data = {k: v for k, v in zip(fields, examples)}
     json_string = re.escape(json.dumps(data, default=serialize))
 
-    if STRUCTURED_TYPES_SUPPORTED:
+    if structured_type_support:
         schema = ", ".join(f"{field} {datatype}" for field in fields)
         col_type = f"object({schema})"
         if datatype == "VARIANT":
@@ -452,7 +540,13 @@ def test_object(datatype, examples, iceberg, pandas, conn_cnx):
         with pytest.raises(ValueError):
             # SNOW-1320508: Timestamp types nested in objects currently cause an exception for iceberg tables
             verify_datatypes(
-                conn_cnx, query, [expected_data], f"(col {col_type})", iceberg, pandas
+                conn_cnx,
+                query,
+                [expected_data],
+                f"(col {col_type})",
+                structured_type_support,
+                iceberg,
+                pandas,
             )
     else:
         verify_datatypes(
@@ -460,18 +554,22 @@ def test_object(datatype, examples, iceberg, pandas, conn_cnx):
             query,
             [expected_data],
             f"(col {col_type})",
+            structured_type_support,
             iceberg,
             pandas,
-            not STRUCTURED_TYPES_SUPPORTED,
+            not structured_type_support,
         )
 
 
-@pytest.mark.skipif(
-    not STRUCTURED_TYPES_SUPPORTED, reason="map type not supported in this environment"
-)
 @pytest.mark.parametrize("pandas", [True, False] if pandas_available else [False])
 @pytest.mark.parametrize("iceberg", [True, False])
-def test_nested_types(conn_cnx, iceberg, pandas):
+def test_nested_types(
+    conn_cnx, iceberg, pandas, iceberg_support, structured_type_support
+):
+    if not structured_type_support:
+        pytest.skip("Test requires structured type support.")
+    if iceberg and not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
     data = {"child": [{"key1": {"struct_field": "value"}}]}
     json_string = re.escape(json.dumps(data, default=serialize))
     query = f"""
@@ -491,9 +589,45 @@ def test_nested_types(conn_cnx, iceberg, pandas):
         query,
         [data],
         "(col object(child array(map (varchar, object(struct_field varchar)))))",
+        structured_type_support,
         iceberg,
         pandas,
     )
+
+
+@pytest.mark.skipif(not pandas_available, reason="test requires pandas")
+def test_iceberg_write_pandas(conn_cnx, iceberg_support, structured_type_support):
+    if not structured_type_support:
+        pytest.skip("Test requires structured type support.")
+    if not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
+    table_name = f"write_pandas_iceberg_test_table_{random_string(5)}"
+
+    data = (
+        1,
+        "A",
+        # Server side infer schema can only create VARIANTS for pandas structured data
+        # [1, 2, 3],
+        # {"a": 1},
+        # {"b": 1, "c": "d"},
+    )
+
+    pdf = pandas.DataFrame([data], columns=["A", "B"])
+    config = {
+        "CATALOG": "SNOWFLAKE",
+        "EXTERNAL_VOLUME": "python_connector_iceberg_exvol",
+        "BASE_LOCATION": "python_connector_merge_gate",
+    }
+
+    with conn_cnx() as conn:
+        try:
+            write_pandas(
+                conn, pdf, table_name, auto_create_table=True, iceberg_config=config
+            )
+            results = conn.cursor().execute(f'select * from "{table_name}"').fetchall()
+            assert results == [data]
+        finally:
+            conn.cursor().execute(f"drop table IF EXISTS {table_name};")
 
 
 def test_select_tinyint(conn_cnx):
@@ -865,35 +999,46 @@ def test_select_vector(conn_cnx, is_public_test):
 
 
 def test_select_time(conn_cnx):
-    for scale in range(10):
-        select_time_with_scale(conn_cnx, scale)
-
-
-def select_time_with_scale(conn_cnx, scale):
+    # Test key scales and meaningful cases in a single table operation
+    # Cover: no fractional seconds, milliseconds, microseconds, nanoseconds
+    scales = [0, 3, 6, 9]  # Key precision levels
     cases = [
-        "00:01:23",
-        "00:01:23.1",
-        "00:01:23.12",
-        "00:01:23.123",
-        "00:01:23.1234",
-        "00:01:23.12345",
-        "00:01:23.123456",
-        "00:01:23.1234567",
-        "00:01:23.12345678",
-        "00:01:23.123456789",
+        "00:01:23",  # Basic time
+        "00:01:23.123456789",  # Max precision
+        "23:59:59.999999999",  # Edge case - max time with max precision
+        "00:00:00.000000001",  # Edge case - min time with min precision
     ]
-    table = "test_arrow_time"
-    column = f"(a time({scale}))"
-    values = (
-        "(-1, NULL), ("
-        + "),(".join([f"{i}, '{c}'" for i, c in enumerate(cases)])
-        + f"), ({len(cases)}, NULL)"
-    )
-    init(conn_cnx, table, column, values)
-    sql_text = f"select a from {table} order by s"
-    row_count = len(cases) + 2
-    col_count = 1
-    iterate_over_test_chunk("time", conn_cnx, sql_text, row_count, col_count)
+
+    table = "test_arrow_time_scales"
+
+    # Create columns for selected scales only (init function will add 's number' automatically)
+    columns = ", ".join([f"a{i} time({i})" for i in scales])
+    column_def = f"({columns})"
+
+    # Create values for selected scales - each case tests all scales simultaneously
+    value_rows = []
+    for i, case in enumerate(cases):
+        # Each row has the same time value for all scale columns
+        time_values = ", ".join([f"'{case}'" for _ in scales])
+        value_rows.append(f"({i}, {time_values})")
+
+    # Add NULL rows
+    null_values = ", ".join(["NULL" for _ in scales])
+    value_rows.append(f"(-1, {null_values})")
+    value_rows.append(f"({len(cases)}, {null_values})")
+
+    values = ", ".join(value_rows)
+
+    # Single table creation and test
+    init(conn_cnx, table, column_def, values)
+
+    # Test each scale column
+    for scale in scales:
+        sql_text = f"select a{scale} from {table} order by s"
+        row_count = len(cases) + 2
+        col_count = 1
+        iterate_over_test_chunk("time", conn_cnx, sql_text, row_count, col_count)
+
     finish(conn_cnx, table)
 
 

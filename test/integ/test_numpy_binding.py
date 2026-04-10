@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import datetime
@@ -62,7 +58,7 @@ def test_numpy_datatype_binding(conn_cnx, db_parameters):
         },
     ]
     try:
-        with conn_cnx(numpy=True) as cnx:
+        with conn_cnx(numpy=True, paramstyle="pyformat") as cnx:
             cnx.cursor().execute(
                 """
 CREATE OR REPLACE TABLE {name} (

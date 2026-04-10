@@ -1,16 +1,34 @@
 #!/bin/bash -e
 #
-# Test Snowflake Connector
-# Note this is the script that test_docker.sh runs inside of the docker container
+# Test Snowflake Connector (FIPS)
+# Note this is the script that test_fips_docker.sh runs inside of the docker container
 #
+
+# Export USE_PASSWORD only on Jenkins (not on GitHub Actions)
+# Jenkins FIPS tests run against mocked Snowflake with password auth
+# GitHub Actions FIPS tests run against real Snowflake with key-pair auth
+if [[ "${JENKINS_HOME}" != "false" && -n "${JENKINS_HOME}" ]]; then
+    export USE_PASSWORD=true
+    echo "[Info] Jenkins detected: Using password authentication for FIPS tests"
+else
+    echo "[Info] GitHub Actions detected: Using key-pair authentication for FIPS tests"
+fi
+
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # shellcheck disable=SC1090
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
-CONNECTOR_WHL="$(ls $CONNECTOR_DIR/dist/*cp38*manylinux2014*.whl | sort -r | head -n 1)"
+CONNECTOR_WHL="$(ls $CONNECTOR_DIR/dist/*cp39*manylinux2014*.whl | sort -r | head -n 1)"
 
-python3.8 -m venv fips_env
+# fetch wiremock
+curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output "${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar"
+
+python3 -m venv fips_env
 source fips_env/bin/activate
 pip install -U setuptools pip
+
+# Install pytest-xdist for parallel execution
+pip install pytest-xdist
+
 pip install "${CONNECTOR_WHL}[pandas,secure-local-storage,development]"
 
 echo "!!! Environment description !!!"
@@ -21,6 +39,8 @@ python -c  "from cryptography.hazmat.backends.openssl import backend;print('Cryp
 pip freeze
 
 cd $CONNECTOR_DIR
-pytest -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test
+
+# Run tests in parallel using pytest-xdist
+pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test --ignore=test/integ/aio_it --ignore=test/unit/aio --ignore=test/wif/test_wif_async.py
 
 deactivate

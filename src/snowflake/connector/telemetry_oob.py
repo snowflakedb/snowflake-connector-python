@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import datetime
@@ -172,7 +168,7 @@ class TelemetryService:
             raise Exception("This class is a singleton!")
         else:
             TelemetryService.__instance = self
-        self._enabled = True
+        self._enabled = False
         self._queue = Queue()
         self.batch_size = DEFAULT_BATCH_SIZE
         self.num_of_retry_to_trigger_telemetry = (
@@ -192,11 +188,11 @@ class TelemetryService:
     @property
     def enabled(self) -> bool:
         """Whether the Telemetry service is enabled or not."""
-        return self._enabled
+        return False
 
     def enable(self) -> None:
         """Enable Telemetry Service."""
-        self._enabled = True
+        self._enabled = False
 
     def disable(self) -> None:
         """Disable Telemetry Service."""
@@ -486,6 +482,7 @@ class TelemetryService:
                 # This logger guarantees the payload won't be masked. Testing purpose.
                 rt_plain_logger.debug(f"OOB telemetry data being sent is {payload}")
 
+            # TODO(SNOW-2259522): Telemetry OOB is currently disabled. If Telemetry OOB is to be re-enabled, this HTTP call must be routed through the connection_argument.session_manager.use_session(use_pooling) (so the SessionManager instance attached to the connection which initialization's fail most likely triggered this telemetry log). It would allow to pick up proxy configuration & custom headers (see tickets SNOW-694457 and SNOW-2203079).
             with requests.Session() as session:
                 headers = {
                     "Content-type": "application/json",

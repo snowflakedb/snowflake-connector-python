@@ -1,10 +1,7 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
+import inspect
 import logging
 import os
 import re
@@ -12,13 +9,14 @@ import traceback
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
-from .compat import BASE_EXCEPTION_CLASS
+from .errorcode import ER_HTTP_GENERAL_ERROR
 from .secret_detector import SecretDetector
 from .telemetry import TelemetryData, TelemetryField
-from .telemetry_oob import TelemetryService
 from .time_util import get_time_millis
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .aio._connection import SnowflakeConnection as AsyncSnowflakeConnection
+    from .aio._cursor import SnowflakeCursor as AsyncSnowflakeCursor
     from .connection import SnowflakeConnection
     from .cursor import SnowflakeCursor
 
@@ -29,7 +27,7 @@ connector_base_path = os.path.join("snowflake", "connector")
 RE_FORMATTED_ERROR = re.compile(r"^(\d{6,})(?: \((\S+)\))?:")
 
 
-class Error(BASE_EXCEPTION_CLASS):
+class Error(Exception):
     """Base Snowflake exception class."""
 
     def __init__(
@@ -40,8 +38,10 @@ class Error(BASE_EXCEPTION_CLASS):
         sfqid: str | None = None,
         query: str | None = None,
         done_format_msg: bool | None = None,
-        connection: SnowflakeConnection | None = None,
-        cursor: SnowflakeCursor | None = None,
+        connection: SnowflakeConnection | AsyncSnowflakeConnection | None = None,
+        cursor: SnowflakeCursor | AsyncSnowflakeCursor | None = None,
+        errtype: TelemetryField = TelemetryField.SQL_EXCEPTION,
+        send_telemetry: bool = True,
     ) -> None:
         super().__init__(msg)
         self.msg = msg
@@ -50,6 +50,8 @@ class Error(BASE_EXCEPTION_CLASS):
         self.sqlstate = sqlstate or "n/a"
         self.sfqid = sfqid
         self.query = query
+        self.errtype = errtype
+        self.send_telemetry = send_telemetry
 
         if self.msg:
             # TODO: If there's a message then check to see if errno (and maybe sqlstate)
@@ -80,7 +82,9 @@ class Error(BASE_EXCEPTION_CLASS):
 
         # We want to skip the last frame/line in the traceback since it is the current frame
         self.telemetry_traceback = self.generate_telemetry_stacktrace()
-        self.exception_telemetry(msg, cursor, connection)
+
+        if self.send_telemetry:
+            self.exception_telemetry(msg, cursor, connection)
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -137,47 +141,51 @@ class Error(BASE_EXCEPTION_CLASS):
             telemetry_data_dict[TelemetryField.KEY_REASON.value] = telemetry_msg
         if self.errno:
             telemetry_data_dict[TelemetryField.KEY_ERROR_NUMBER.value] = str(self.errno)
+        if self.msg:
+            telemetry_data_dict[TelemetryField.KEY_ERROR_MESSAGE.value] = self.msg
 
         return telemetry_data_dict
 
     def send_exception_telemetry(
         self,
-        connection: SnowflakeConnection | None,
+        connection: SnowflakeConnection | AsyncSnowflakeConnection | None,
         telemetry_data: dict[str, Any],
     ) -> None:
         """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
-
         if (
             connection is not None
             and connection.telemetry_enabled
             and not connection._telemetry.is_closed
         ):
             # Send with in-band telemetry
-            telemetry_data[TelemetryField.KEY_TYPE.value] = (
-                TelemetryField.SQL_EXCEPTION.value
-            )
+            telemetry_data[TelemetryField.KEY_TYPE.value] = self.errtype.value
             telemetry_data[TelemetryField.KEY_SOURCE.value] = connection.application
             telemetry_data[TelemetryField.KEY_EXCEPTION.value] = self.__class__.__name__
             ts = get_time_millis()
             try:
-                connection._log_telemetry(
+                result = connection._log_telemetry(
                     TelemetryData.from_telemetry_data_dict(
                         from_dict=telemetry_data, timestamp=ts, connection=connection
                     )
                 )
+                if inspect.isawaitable(result):
+                    try:
+                        import asyncio
+
+                        asyncio.get_running_loop().run_until_complete(result)
+                    except Exception:
+                        logger.debug(
+                            "Failed to schedule async telemetry logging.",
+                            exc_info=True,
+                        )
             except AttributeError:
                 logger.debug("Cursor failed to log to telemetry.", exc_info=True)
-        elif connection is None:
-            # Send with out-of-band telemetry
-
-            telemetry_oob = TelemetryService.get_instance()
-            telemetry_oob.log_general_exception(self.__class__.__name__, telemetry_data)
 
     def exception_telemetry(
         self,
         msg: str,
-        cursor: SnowflakeCursor | None,
-        connection: SnowflakeConnection | None,
+        cursor: SnowflakeCursor | AsyncSnowflakeCursor | None,
+        connection: SnowflakeConnection | AsyncSnowflakeConnection | None,
     ) -> None:
         """Main method to generate and send telemetry data for exceptions."""
         try:
@@ -342,10 +350,18 @@ class Error(BASE_EXCEPTION_CLASS):
             connection.messages.append((error_class, error_value))
         if cursor is not None:
             cursor.messages.append((error_class, error_value))
-            cursor.errorhandler(connection, cursor, error_class, error_value)
+            try:
+                cursor.errorhandler(connection, cursor, error_class, error_value)
+            except NotImplementedError:
+                # for async compatibility, check SNOW-1763096 and SNOW-1763103
+                cursor._errorhandler(connection, cursor, error_class, error_value)
             return True
         elif connection is not None:
-            connection.errorhandler(connection, cursor, error_class, error_value)
+            try:
+                connection.errorhandler(connection, cursor, error_class, error_value)
+            except NotImplementedError:
+                # for async compatibility, check SNOW-1763096 and SNOW-1763103
+                connection._errorhandler(connection, cursor, error_class, error_value)
             return True
         return False
 
@@ -367,7 +383,7 @@ class Error(BASE_EXCEPTION_CLASS):
         return error_class(error_value)
 
 
-class _Warning(BASE_EXCEPTION_CLASS):
+class _Warning(Exception):
     """Exception for important warnings."""
 
     pass
@@ -377,6 +393,15 @@ class InterfaceError(Error):
     """Exception for errors related to the interface."""
 
     pass
+
+
+class HttpError(Error):
+    def __init__(self, **kwargs) -> None:
+        Error.__init__(
+            self,
+            errtype=TelemetryField.HTTP_EXCEPTION,
+            **kwargs,
+        )
 
 
 class DatabaseError(Error):
@@ -426,9 +451,14 @@ class NotSupportedError(DatabaseError):
 class RevocationCheckError(OperationalError):
     """Exception for errors during certificate revocation check."""
 
-    # We already send OCSP exception events
-    def exception_telemetry(self, msg, cursor, connection) -> None:
-        pass
+    def __init__(self, **kwargs) -> None:
+        send_telemetry = kwargs.pop("send_telemetry", False)
+        Error.__init__(
+            self,
+            errtype=TelemetryField.OCSP_EXCEPTION,
+            send_telemetry=send_telemetry,
+            **kwargs,
+        )
 
 
 # internal errors
@@ -439,7 +469,8 @@ class InternalServerError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 500: Internal Server Error",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -452,7 +483,8 @@ class ServiceUnavailableError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 503: Service Unavailable",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -465,7 +497,8 @@ class GatewayTimeoutError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 504: Gateway Timeout",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -478,7 +511,8 @@ class ForbiddenError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 403: Forbidden",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -491,7 +525,8 @@ class RequestTimeoutError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 408: Request Timeout",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -504,7 +539,8 @@ class BadRequest(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 400: Bad Request",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -517,7 +553,8 @@ class BadGatewayError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 502: Bad Gateway",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -530,7 +567,8 @@ class MethodNotAllowed(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 405: Method not allowed",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -543,7 +581,8 @@ class TooManyRequests(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 429: Too Many Requests",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -568,7 +607,8 @@ class OtherHTTPRetryableError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or f"HTTP {code}",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )

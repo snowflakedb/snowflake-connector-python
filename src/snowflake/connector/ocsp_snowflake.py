@@ -1,11 +1,8 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import codecs
+import importlib
 import json
 import os
 import platform
@@ -13,7 +10,7 @@ import re
 import sys
 import tempfile
 import time
-import traceback
+import warnings
 from base64 import b64decode, b64encode
 from datetime import datetime, timezone
 from logging import getLogger
@@ -26,13 +23,16 @@ from typing import Any, NamedTuple
 # We use regular requests and urlib3 when we reach out to do OCSP checks, basically in this very narrow
 # part of the code where we want to call out to check for revoked certificates,
 # we don't want to use our hardened version of requests.
-import requests as generic_requests
 from asn1crypto.ocsp import CertId, OCSPRequest, SingleResponse
 from asn1crypto.x509 import Certificate
 from OpenSSL.SSL import Connection
 
+from snowflake.connector import SNOWFLAKE_CONNECTOR_VERSION
 from snowflake.connector.compat import OK, urlsplit, urlunparse
-from snowflake.connector.constants import HTTP_HEADER_USER_AGENT
+from snowflake.connector.constants import (
+    ENV_VAR_ENABLE_CUSTOM_REVOCATION_ERRORS,
+    HTTP_HEADER_USER_AGENT,
+)
 from snowflake.connector.errorcode import (
     ER_INVALID_OCSP_RESPONSE_SSD,
     ER_INVALID_SSD,
@@ -56,13 +56,17 @@ from snowflake.connector.errorcode import (
 )
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.network import PYTHON_CONNECTOR_USER_AGENT
-from snowflake.connector.telemetry_oob import TelemetryService
+from snowflake.connector.session_manager import SessionManager
+from snowflake.connector.ssl_wrap_socket import get_current_session_manager
 
 from . import constants
 from .backoff_policies import exponential_backoff
-from .cache import SFDictCache, SFDictFileCache
+from .cache import CacheEntry, SFDictCache, SFDictFileCache
+from .constants import OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
+from .session_manager import SessionManagerFactory
 from .telemetry import TelemetryField, generate_telemetry_data_dict
-from .url_util import url_encode_str
+from .url_util import extract_top_level_domain_from_hostname, url_encode_str
+from .util_text import _base64_bytes_to_str
 
 
 class OCSPResponseValidationResult(NamedTuple):
@@ -74,19 +78,193 @@ class OCSPResponseValidationResult(NamedTuple):
     ts: int | None = None
     validated: bool = False
 
+    def _serialize(self):
+        def serialize_exception(exc):
+            # serialization exception is not supported for all exceptions
+            # in the ocsp_snowflake.py, most exceptions are RevocationCheckError which is easy to serialize.
+            # however, it would require non-trivial effort to serialize other exceptions especially 3rd part errors
+            # as there can be un-serializable members and nondeterministic constructor arguments.
+            # here we do a general best efforts serialization for other exceptions recording only the error message.
+            if not exc:
+                return None
+
+            exc_type = type(exc)
+            ret = {"class": exc_type.__name__, "module": exc_type.__module__}
+            if isinstance(exc, RevocationCheckError):
+                ret.update({"errno": exc.errno, "msg": exc.raw_msg})
+            else:
+                ret.update({"msg": str(exc)})
+            return ret
+
+        return json.dumps(
+            {
+                "exception": serialize_exception(self.exception),
+                "issuer": (
+                    _base64_bytes_to_str(self.issuer.dump()) if self.issuer else None
+                ),
+                "subject": (
+                    _base64_bytes_to_str(self.subject.dump()) if self.subject else None
+                ),
+                "cert_id": (
+                    _base64_bytes_to_str(self.cert_id.dump()) if self.cert_id else None
+                ),
+                "ocsp_response": _base64_bytes_to_str(self.ocsp_response),
+                "ts": self.ts,
+                "validated": self.validated,
+            }
+        )
+
+    @classmethod
+    def _deserialize(cls, json_str: str) -> OCSPResponseValidationResult:
+        json_obj = json.loads(json_str)
+
+        def deserialize_exception(exception_dict: dict | None) -> Exception | None:
+            # as pointed out in the serialization method, here we do the best effort deserialization
+            # for non-RevocationCheckError exceptions. If we can not deserialize the exception, we will
+            # return a RevocationCheckError with a message indicating the failure.
+            if not exception_dict:
+                return
+            exc_class = exception_dict.get("class")
+            exc_module = exception_dict.get("module")
+
+            # For RevocationCheckError, deserialize directly
+            if (
+                exc_class == "RevocationCheckError"
+                and exc_module == "snowflake.connector.errors"
+            ):
+                return RevocationCheckError(
+                    msg=exception_dict["msg"],
+                    errno=exception_dict.get("errno", ER_OCSP_RESPONSE_LOAD_FAILURE),
+                )
+
+            # For non-RevocationCheckError, always try to deserialize to detect failures
+            try:
+                module = importlib.import_module(exc_module)
+                exc_cls = getattr(module, exc_class)
+                custom_exc = exc_cls(exception_dict["msg"])
+
+                # If env var is set, return the custom exception with deprecation warning
+                if os.getenv(ENV_VAR_ENABLE_CUSTOM_REVOCATION_ERRORS, "").lower() in (
+                    "true",
+                    "1",
+                ):
+                    warnings.warn(
+                        "Support for custom revocation error classes will be removed in a future release.",
+                        DeprecationWarning,
+                        stacklevel=3,
+                    )
+                    return custom_exc
+
+                # Otherwise, convert to RevocationCheckError
+                return RevocationCheckError(
+                    msg=exception_dict["msg"],
+                    errno=exception_dict.get("errno", ER_OCSP_RESPONSE_LOAD_FAILURE),
+                )
+            except Exception as deserialize_exc:
+                logger.debug(
+                    f"hitting error {str(deserialize_exc)} while deserializing exception,"
+                    f" the original error error class and message are {exc_class} and {exception_dict['msg']}"
+                )
+                return RevocationCheckError(
+                    msg=f"Got error {str(deserialize_exc)} while deserializing ocsp cache, please try "
+                    f"cleaning up the "
+                    f"OCSP cache under directory {OCSP_RESPONSE_VALIDATION_CACHE.file_path}",
+                    errno=ER_OCSP_RESPONSE_LOAD_FAILURE,
+                )
+
+        return OCSPResponseValidationResult(
+            exception=deserialize_exception(json_obj.get("exception")),
+            issuer=(
+                Certificate.load(b64decode(json_obj.get("issuer")))
+                if json_obj.get("issuer")
+                else None
+            ),
+            subject=(
+                Certificate.load(b64decode(json_obj.get("subject")))
+                if json_obj.get("subject")
+                else None
+            ),
+            cert_id=(
+                CertId.load(b64decode(json_obj.get("cert_id")))
+                if json_obj.get("cert_id")
+                else None
+            ),
+            ocsp_response=(
+                b64decode(json_obj.get("ocsp_response"))
+                if json_obj.get("ocsp_response")
+                else None
+            ),
+            ts=json_obj.get("ts"),
+            validated=json_obj.get("validated"),
+        )
+
+
+class _OCSPResponseValidationResultCache(SFDictFileCache):
+    def _serialize(self) -> bytes:
+        entries = {
+            (
+                _base64_bytes_to_str(k[0]),
+                _base64_bytes_to_str(k[1]),
+                _base64_bytes_to_str(k[2]),
+            ): (v.expiry.isoformat(), v.entry._serialize())
+            for k, v in self._cache.items()
+        }
+
+        return json.dumps(
+            {
+                "cache_keys": list(entries.keys()),
+                "cache_items": list(entries.values()),
+                "entry_lifetime": self._entry_lifetime.total_seconds(),
+                "file_path": str(self.file_path),
+                "file_timeout": self.file_timeout,
+                "last_loaded": (
+                    self.last_loaded.isoformat() if self.last_loaded else None
+                ),
+                "telemetry": self.telemetry,
+                "connector_version": SNOWFLAKE_CONNECTOR_VERSION,  # reserved for schema version control
+            }
+        ).encode()
+
+    @classmethod
+    def _deserialize(cls, opened_fd) -> _OCSPResponseValidationResultCache:
+        data = json.loads(opened_fd.read().decode())
+        cache_instance = cls(
+            file_path=data["file_path"],
+            entry_lifetime=int(data["entry_lifetime"]),
+            file_timeout=data["file_timeout"],
+            load_if_file_exists=False,
+        )
+        cache_instance.file_path = os.path.expanduser(data["file_path"])
+        cache_instance.telemetry = data["telemetry"]
+        cache_instance.last_loaded = (
+            datetime.fromisoformat(data["last_loaded"]) if data["last_loaded"] else None
+        )
+        for k, v in zip(data["cache_keys"], data["cache_items"]):
+            cache_instance._cache[
+                (b64decode(k[0]), b64decode(k[1]), b64decode(k[2]))
+            ] = CacheEntry(
+                datetime.fromisoformat(v[0]),
+                OCSPResponseValidationResult._deserialize(v[1]),
+            )
+        return cache_instance
+
 
 try:
     OCSP_RESPONSE_VALIDATION_CACHE: SFDictFileCache[
         tuple[bytes, bytes, bytes],
         OCSPResponseValidationResult,
-    ] = SFDictFileCache(
+    ] = _OCSPResponseValidationResultCache(
         entry_lifetime=constants.DAY_IN_SECONDS,
         file_path={
             "linux": os.path.join(
-                "~", ".cache", "snowflake", "ocsp_response_validation_cache"
+                "~", ".cache", "snowflake", "ocsp_response_validation_cache.json"
             ),
             "darwin": os.path.join(
-                "~", "Library", "Caches", "Snowflake", "ocsp_response_validation_cache"
+                "~",
+                "Library",
+                "Caches",
+                "Snowflake",
+                "ocsp_response_validation_cache.json",
             ),
             "windows": os.path.join(
                 "~",
@@ -94,7 +272,7 @@ try:
                 "Local",
                 "Snowflake",
                 "Caches",
-                "ocsp_response_validation_cache",
+                "ocsp_response_validation_cache.json",
             ),
         },
     )
@@ -177,7 +355,7 @@ class OCSPTelemetryData:
         self.cache_enabled = False
         self.cache_hit = False
         self.fail_open = False
-        self.insecure_mode = False
+        self.disable_ocsp_checks = False
 
     def set_event_sub_type(self, event_sub_type: str) -> None:
         """
@@ -226,8 +404,12 @@ class OCSPTelemetryData:
     def set_fail_open(self, fail_open) -> None:
         self.fail_open = fail_open
 
+    # Deprecated
     def set_insecure_mode(self, insecure_mode) -> None:
-        self.insecure_mode = insecure_mode
+        self.disable_ocsp_checks = insecure_mode
+
+    def set_disable_ocsp_checks(self, disable_ocsp_checks) -> None:
+        self.disable_ocsp_checks = disable_ocsp_checks
 
     def generate_telemetry_data(
         self, event_type: str, urgent: bool = False
@@ -242,21 +424,12 @@ class OCSPTelemetryData:
                 TelemetryField.KEY_OOB_OCSP_REQUEST_BASE64.value: self.ocsp_req,
                 TelemetryField.KEY_OOB_OCSP_RESPONDER_URL.value: self.ocsp_url,
                 TelemetryField.KEY_OOB_ERROR_MESSAGE.value: self.error_msg,
-                TelemetryField.KEY_OOB_INSECURE_MODE.value: self.insecure_mode,
+                TelemetryField.KEY_OOB_INSECURE_MODE.value: self.disable_ocsp_checks,
                 TelemetryField.KEY_OOB_FAIL_OPEN.value: self.fail_open,
                 TelemetryField.KEY_OOB_CACHE_ENABLED.value: self.cache_enabled,
                 TelemetryField.KEY_OOB_CACHE_HIT.value: self.cache_hit,
             },
             is_oob_telemetry=True,
-        )
-
-        telemetry_client = TelemetryService.get_instance()
-        telemetry_client.log_ocsp_exception(
-            event_type,
-            telemetry_data,
-            exception=str(exception),
-            stack_trace=traceback.format_exc(),
-            urgent=urgent,
         )
 
         return telemetry_data
@@ -268,15 +441,20 @@ class OCSPTelemetryData:
 class OCSPServer:
     MAX_RETRY = int(os.getenv("OCSP_MAX_RETRY", "3"))
 
-    def __init__(self) -> None:
-        self.DEFAULT_CACHE_SERVER_URL = "http://ocsp.snowflakecomputing.com"
+    def __init__(self, **kwargs) -> None:
+        top_level_domain = kwargs.pop(
+            "top_level_domain", constants._DEFAULT_HOSTNAME_TLD
+        )
+        self.DEFAULT_CACHE_SERVER_URL = (
+            f"http://ocsp.snowflakecomputing.{top_level_domain}"
+        )
         """
         The following will change to something like
         http://ocspssd.snowflakecomputing.com/ocsp/
         once the endpoint is up in the backend
         """
         self.NEW_DEFAULT_CACHE_SERVER_BASE_URL = (
-            "https://ocspssd.snowflakecomputing.com/ocsp/"
+            f"https://ocspssd.snowflakecomputing.{top_level_domain}/ocsp/"
         )
         if not OCSPServer.is_enabled_new_ocsp_endpoint():
             self.CACHE_SERVER_URL = os.getenv(
@@ -307,12 +485,13 @@ class OCSPServer:
         on the hostname the customer is trying to connect to. The deployment or in case of client failover, the
         replication ID is copied from the hostname.
         """
-        if hname.endswith("privatelink.snowflakecomputing.com"):
+        top_level_domain = extract_top_level_domain_from_hostname(hname)
+        if "privatelink.snowflakecomputing." in hname:
             temp_ocsp_endpoint = "".join(["https://ocspssd.", hname, "/ocsp/"])
-        elif hname.endswith("global.snowflakecomputing.com"):
+        elif "global.snowflakecomputing." in hname:
             rep_id_begin = hname[hname.find("-") :]
             temp_ocsp_endpoint = "".join(["https://ocspssd", rep_id_begin, "/ocsp/"])
-        elif not hname.endswith("snowflakecomputing.com"):
+        elif not hname.endswith(f"snowflakecomputing.{top_level_domain}"):
             temp_ocsp_endpoint = self.NEW_DEFAULT_CACHE_SERVER_BASE_URL
         else:
             hname_wo_acc = hname[hname.find(".") :]
@@ -395,7 +574,11 @@ class OCSPServer:
                 if sf_cache_server_url is not None:
                     url = sf_cache_server_url
 
-            with generic_requests.Session() as session:
+            # Obtain SessionManager from ssl_wrap_socket context var if available
+            session_manager = get_current_session_manager(
+                use_pooling=False
+            ) or SessionManagerFactory.get_manager(use_pooling=False)
+            with session_manager.use_session(url) as session:
                 max_retry = SnowflakeOCSP.OCSP_CACHE_SERVER_MAX_RETRY if do_retry else 1
                 sleep_time = 1
                 backoff = exponential_backoff()()
@@ -421,7 +604,7 @@ class OCSPServer:
                             response.status_code,
                             sleep_time,
                         )
-                    time.sleep(sleep_time)
+                        time.sleep(sleep_time)
                 else:
                     logger.error(
                         "Failed to get OCSP response after %s attempt.", max_retry
@@ -832,8 +1015,8 @@ class SnowflakeOCSP:
 
     OCSP_WHITELIST = re.compile(
         r"^"
-        r"(.*\.snowflakecomputing\.com$"
-        r"|(?:|.*\.)s3.*\.amazonaws\.com$"  # start with s3 or .s3 in the middle
+        r"(.*\.snowflakecomputing(\.[a-zA-Z]{1,63}){1,2}$"
+        r"|(?:|.*\.)s3.*\.amazonaws(\.[a-zA-Z]{1,63}){1,2}$"  # start with s3 or .s3 in the middle
         r"|.*\.okta\.com$"
         r"|(?:|.*\.)storage\.googleapis\.com$"
         r"|.*\.blob\.core\.windows\.net$"
@@ -881,6 +1064,8 @@ class SnowflakeOCSP:
         use_ocsp_cache_server=None,
         use_post_method: bool = True,
         use_fail_open: bool = True,
+        root_certs_dict_lock_timeout: int = OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,
+        **kwargs,
     ) -> None:
         self.test_mode = os.getenv("SF_OCSP_TEST_MODE", None)
 
@@ -888,7 +1073,12 @@ class SnowflakeOCSP:
             logger.debug("WARNING - DRIVER CONFIGURED IN TEST MODE")
 
         self._use_post_method = use_post_method
-        self.OCSP_CACHE_SERVER = OCSPServer()
+        self._root_certs_dict_lock_timeout = root_certs_dict_lock_timeout
+        self.OCSP_CACHE_SERVER = OCSPServer(
+            top_level_domain=extract_top_level_domain_from_hostname(
+                kwargs.pop("hostname", None)
+            )
+        )
 
         self.debug_ocsp_failure_url = None
 
@@ -935,7 +1125,7 @@ class SnowflakeOCSP:
         cert_map = {}
         telemetry_data = OCSPTelemetryData()
         telemetry_data.set_cache_enabled(self.OCSP_CACHE_SERVER.CACHE_SERVER_ENABLED)
-        telemetry_data.set_insecure_mode(False)
+        telemetry_data.set_disable_ocsp_checks(False)
         telemetry_data.set_sfc_peer_host(cert_filename)
         telemetry_data.set_fail_open(self.is_enabled_fail_open())
         try:
@@ -981,7 +1171,7 @@ class SnowflakeOCSP:
 
         telemetry_data = OCSPTelemetryData()
         telemetry_data.set_cache_enabled(self.OCSP_CACHE_SERVER.CACHE_SERVER_ENABLED)
-        telemetry_data.set_insecure_mode(False)
+        telemetry_data.set_disable_ocsp_checks(False)
         telemetry_data.set_sfc_peer_host(hostname)
         telemetry_data.set_fail_open(self.is_enabled_fail_open())
 
@@ -1068,15 +1258,10 @@ class SnowflakeOCSP:
         return self.FAIL_OPEN
 
     @staticmethod
-    def print_fail_open_warning(ocsp_log) -> None:
-        static_warning = (
-            "WARNING!!! Using fail-open to connect. Driver is connecting to an "
-            "HTTPS endpoint without OCSP based Certificate Revocation checking "
-            "as it could not obtain a valid OCSP Response to use from the CA OCSP "
-            "responder. Details:"
-        )
-        ocsp_warning = f"{static_warning} \n {ocsp_log}"
-        logger.error(ocsp_warning)
+    def print_fail_open_debug(ocsp_log) -> None:
+        static_debug = "OCSP responder didn't respond correctly. Assuming certificate is not revoked. Details: "
+        ocsp_debug = f"{static_debug} \n {ocsp_log}"
+        logger.debug(ocsp_debug)
 
     def validate_by_direct_connection(
         self,
@@ -1164,7 +1349,7 @@ class SnowflakeOCSP:
                 )
                 return ex_obj
             else:
-                SnowflakeOCSP.print_fail_open_warning(
+                SnowflakeOCSP.print_fail_open_debug(
                     telemetry_data.generate_telemetry_data("RevocationCheckFailure")
                 )
                 return None
@@ -1259,67 +1444,79 @@ class SnowflakeOCSP:
 
     def _lazy_read_ca_bundle(self) -> None:
         """Reads the local cabundle file and cache it in memory."""
-        with SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK:
-            if SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
-                # return if already loaded
-                return
-
+        lock_acquired = SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK.acquire(
+            timeout=self._root_certs_dict_lock_timeout
+        )
+        if lock_acquired:
             try:
-                ca_bundle = environ.get("REQUESTS_CA_BUNDLE") or environ.get(
-                    "CURL_CA_BUNDLE"
-                )
-                if ca_bundle and path.exists(ca_bundle):
-                    # if the user/application specifies cabundle.
-                    self.read_cert_bundle(ca_bundle)
-                else:
-                    import sys
+                if SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
+                    # return if already loaded
+                    return
 
-                    # This import that depends on these libraries is to import certificates from them,
-                    # we would like to have these as up to date as possible.
-                    from requests import certs
-
-                    if (
-                        hasattr(certs, "__file__")
-                        and path.exists(certs.__file__)
-                        and path.exists(
-                            path.join(path.dirname(certs.__file__), "cacert.pem")
-                        )
-                    ):
-                        # if cacert.pem exists next to certs.py in request
-                        # package.
-                        ca_bundle = path.join(
-                            path.dirname(certs.__file__), "cacert.pem"
-                        )
+                try:
+                    ca_bundle = environ.get("REQUESTS_CA_BUNDLE") or environ.get(
+                        "CURL_CA_BUNDLE"
+                    )
+                    if ca_bundle and path.exists(ca_bundle):
+                        # if the user/application specifies cabundle.
                         self.read_cert_bundle(ca_bundle)
-                    elif hasattr(sys, "_MEIPASS"):
-                        # if pyinstaller includes cacert.pem
-                        cabundle_candidates = [
-                            ["botocore", "vendored", "requests", "cacert.pem"],
-                            ["requests", "cacert.pem"],
-                            ["cacert.pem"],
-                        ]
-                        for filename in cabundle_candidates:
-                            ca_bundle = path.join(sys._MEIPASS, *filename)
-                            if path.exists(ca_bundle):
-                                self.read_cert_bundle(ca_bundle)
-                                break
-                        else:
-                            logger.error("No cabundle file is found in _MEIPASS")
-                    try:
-                        import certifi
+                    else:
+                        import sys
 
-                        self.read_cert_bundle(certifi.where())
-                    except Exception:
-                        logger.debug("no certifi is installed. ignored.")
+                        # This import that depends on these libraries is to import certificates from them,
+                        # we would like to have these as up to date as possible.
+                        from requests import certs
 
-            except Exception as e:
-                logger.error("Failed to read ca_bundle: %s", e)
+                        if (
+                            hasattr(certs, "__file__")
+                            and path.exists(certs.__file__)
+                            and path.exists(
+                                path.join(path.dirname(certs.__file__), "cacert.pem")
+                            )
+                        ):
+                            # if cacert.pem exists next to certs.py in request
+                            # package.
+                            ca_bundle = path.join(
+                                path.dirname(certs.__file__), "cacert.pem"
+                            )
+                            self.read_cert_bundle(ca_bundle)
+                        elif hasattr(sys, "_MEIPASS"):
+                            # if pyinstaller includes cacert.pem
+                            cabundle_candidates = [
+                                ["botocore", "vendored", "requests", "cacert.pem"],
+                                ["requests", "cacert.pem"],
+                                ["cacert.pem"],
+                            ]
+                            for filename in cabundle_candidates:
+                                ca_bundle = path.join(sys._MEIPASS, *filename)
+                                if path.exists(ca_bundle):
+                                    self.read_cert_bundle(ca_bundle)
+                                    break
+                            else:
+                                logger.error("No cabundle file is found in _MEIPASS")
+                        try:
+                            import certifi
 
-            if not SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
-                logger.error(
-                    "No CA bundle file is found in the system. "
-                    "Set REQUESTS_CA_BUNDLE to the file."
-                )
+                            self.read_cert_bundle(certifi.where())
+                        except Exception:
+                            logger.debug("no certifi is installed. ignored.")
+
+                except Exception as e:
+                    logger.error("Failed to read ca_bundle: %s", e)
+
+                if not SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
+                    logger.error(
+                        "No CA bundle file is found in the system. "
+                        "Set REQUESTS_CA_BUNDLE to the file."
+                    )
+            finally:
+                SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK.release()
+        else:
+            logger.info(
+                "Failed to acquire lock for ROOT_CERTIFICATES_DICT_LOCK. "
+                "Skipping reading CA bundle."
+            )
+            return
 
     @staticmethod
     def _calculate_tolerable_validity(this_update: float, next_update: float) -> int:
@@ -1467,7 +1664,17 @@ class SnowflakeOCSP:
         if not self.is_enabled_fail_open():
             sf_max_retry = SnowflakeOCSP.CA_OCSP_RESPONDER_MAX_RETRY_FC
 
-        with generic_requests.Session() as session:
+        # Obtain SessionManager from ssl_wrap_socket context var if available;
+        # if none is set (e.g. standalone OCSP unit tests), fall back to a fresh
+        # instance. Clone first to inherit adapter/proxy config without sharing
+        # pools.
+        context_session_manager = get_current_session_manager(use_pooling=False)
+        session_manager: SessionManager = (
+            context_session_manager
+            if context_session_manager is not None
+            else SessionManagerFactory.get_manager(use_pooling=False)
+        )
+        with session_manager.use_session(target_url) as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
             backoff = exponential_backoff()()
@@ -1494,7 +1701,7 @@ class SnowflakeOCSP:
                             response.status_code,
                             sleep_time,
                         )
-                    time.sleep(sleep_time)
+                        time.sleep(sleep_time)
                 except Exception as ex:
                     if max_retry > 1:
                         sleep_time = next(backoff)

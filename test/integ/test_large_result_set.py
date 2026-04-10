@@ -1,14 +1,14 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
+import logging
+import threading
 from unittest.mock import Mock
+from urllib.parse import urlparse
 
 import pytest
 
+from snowflake.connector.secret_detector import SecretDetector
 from snowflake.connector.telemetry import TelemetryField
 
 NUMBER_OF_ROWS = 50000
@@ -21,7 +21,6 @@ def ingest_data(request, conn_cnx, db_parameters):
     with conn_cnx(
         user=db_parameters["user"],
         account=db_parameters["account"],
-        password=db_parameters["password"],
     ) as cnx:
         cnx.cursor().execute(
             """
@@ -81,7 +80,6 @@ def ingest_data(request, conn_cnx, db_parameters):
         with conn_cnx(
             user=db_parameters["user"],
             account=db_parameters["account"],
-            password=db_parameters["password"],
         ) as cnx:
             cnx.cursor().execute(
                 "drop table if exists {name}".format(name=db_parameters["name"])
@@ -100,7 +98,6 @@ def test_query_large_result_set_n_threads(
     with conn_cnx(
         user=db_parameters["user"],
         account=db_parameters["account"],
-        password=db_parameters["password"],
         client_prefetch_threads=num_threads,
     ) as cnx:
         assert cnx.client_prefetch_threads == num_threads
@@ -115,8 +112,9 @@ def test_query_large_result_set_n_threads(
 
 @pytest.mark.aws
 @pytest.mark.skipolddriver
-def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
+def test_query_large_result_set(conn_cnx, db_parameters, ingest_data, caplog):
     """[s3] Gets Large Result set."""
+    caplog.set_level(logging.DEBUG)
     sql = "select * from {name} order by 1".format(name=db_parameters["name"])
     with conn_cnx() as cnx:
         telemetry_data = []
@@ -165,3 +163,141 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
                 "Expected three telemetry logs (one per query) "
                 "for log type {}".format(field.value)
             )
+
+        aws_request_present = False
+        expected_token_prefix = "X-Amz-Signature="
+        for line in caplog.text.splitlines():
+            if expected_token_prefix in line:
+                aws_request_present = True
+                # getattr is used to stay compatible with old driver - before SECRET_STARRED_MASK_STR was added
+                assert (
+                    expected_token_prefix
+                    + getattr(SecretDetector, "SECRET_STARRED_MASK_STR", "****")
+                    in line
+                ), "connectionpool logger is leaking sensitive information"
+
+        assert (
+            aws_request_present
+        ), "AWS URL was not found in logs, so it can't be assumed that no leaks happened in it"
+
+
+@pytest.mark.aws
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("disable_request_pooling", [True, False])
+def test_cursor_download_uses_original_http_config(
+    monkeypatch, conn_cnx, ingest_data, db_parameters, disable_request_pooling
+):
+    """Cursor iterating after connection context ends must reuse original HTTP config."""
+    from snowflake.connector.result_batch import ResultBatch
+
+    download_cfgs = []
+    original_download = ResultBatch._download
+
+    def spy_download(self, connection=None, **kwargs):  # type: ignore[no-self-use]
+        # Path A – batch carries its own cloned SessionManager
+        if getattr(self, "_session_manager", None) is not None:
+            download_cfgs.append(self._session_manager.config)
+        # Path B – connection still open, _download reuses connection.rest.session_manager
+        elif (
+            connection is not None
+            and getattr(connection, "rest", None) is not None
+            and connection.rest.session_manager is not None
+        ):
+            download_cfgs.append(connection.rest.session_manager.config)
+        return original_download(self, connection, **kwargs)
+
+    monkeypatch.setattr(ResultBatch, "_download", spy_download, raising=True)
+
+    table_name = db_parameters["name"]
+    query_sql = f"select * from {table_name} order by 1"
+
+    with conn_cnx(disable_request_pooling=disable_request_pooling) as conn:
+        cur = conn.cursor()
+        cur.execute(query_sql)
+        original_cfg = conn.rest.session_manager.config
+
+    # Connection is now closed; iterating cursor should download remaining chunks
+    # It is important to make sure that all ResultBatch._download had access to either active connection's config or the one stored in self._session_manager
+    list(cur)
+
+    # Every ResultBatch download reused the same HTTP configuration values
+    for cfg in download_cfgs:
+        assert cfg == original_cfg
+
+
+# ---------------------------------------------------------------------------
+# Multichunk JSON gzip decompression regression test
+#
+# Verifies that the _ensure_decompressed safety net in _download() correctly
+# handles the case where the HTTP transport does not decompress gzip chunk
+# responses (missing Content-Encoding: gzip header from cloud storage).
+#
+# The standard Snowflake download path *does* decompress correctly because
+# the server sets Content-Encoding: gzip and urllib3 honours it.  The client
+# failure occurs under environmental conditions we cannot reproduce in CI
+# (e.g. a corporate proxy or CDN stripping Content-Encoding).
+#
+# To prove the safety net works we instrument _download to strip the
+# Content-Encoding header from the *real* server response before urllib3
+# consumes it, forcing urllib3 to skip decompression.
+# ---------------------------------------------------------------------------
+
+
+def _strip_content_encoding(response):
+    """Remove Content-Encoding from a urllib3 raw response so decompression is skipped.
+
+    Must be called *before* response.content is accessed (i.e. before the
+    requests library iterates the body), because once the body is consumed
+    the encoding has already been (or not been) applied.
+    """
+    if hasattr(response, "raw") and response.raw is not None:
+        response.raw.headers.pop("Content-Encoding", None)
+        response.raw.headers.pop("content-encoding", None)
+        response.raw._decoder = None
+        response.raw.decode_content = False
+
+
+@pytest.mark.aws
+@pytest.mark.skipolddriver
+def test_multichunk_json_gzip_decompression_with_fix(
+    conn_cnx, db_parameters, ingest_data
+):
+    """With _ensure_decompressed active, multichunk JSON downloads succeed
+    even when the HTTP layer skips gzip decompression."""
+    from snowflake.connector.vendored.requests.adapters import HTTPAdapter
+
+    original_send = HTTPAdapter.send
+    chunks_intercepted = 0
+    chunks_intercepted_lock = threading.Lock()
+
+    def send_strip_encoding(self, request, *args, **kwargs):
+        """Intercept the adapter to strip Content-Encoding after the real
+        HTTP round-trip but before requests reads the body."""
+        nonlocal chunks_intercepted
+        response = original_send(self, request, *args, **kwargs)
+        hostname = urlparse(request.url).hostname or ""
+        if response.status_code == 200 and "snowflakecomputing." not in hostname:
+            _strip_content_encoding(response)
+            with chunks_intercepted_lock:
+                chunks_intercepted += 1
+        return response
+
+    table_name = db_parameters["name"]
+    with conn_cnx(
+        session_parameters={"python_connector_query_result_format": "JSON"},
+    ) as cnx:
+        original_adapter_send = HTTPAdapter.send
+        HTTPAdapter.send = send_strip_encoding
+        try:
+            cur = cnx.cursor()
+            cur.execute(f"select * from {table_name} order by 1")
+            rows = cur.fetchall()
+        finally:
+            HTTPAdapter.send = original_adapter_send
+
+    assert (
+        len(rows) == NUMBER_OF_ROWS
+    ), f"Expected {NUMBER_OF_ROWS} rows, got {len(rows)}"
+    assert (
+        chunks_intercepted > 0
+    ), "No HTTP responses were intercepted -- test didn't exercise the fix"

@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import itertools
@@ -31,6 +27,23 @@ _T = TypeVar("_T")
 
 LOGGER = logging.getLogger(__name__)
 READABLE_BY_OTHERS = stat.S_IRGRP | stat.S_IROTH
+WRITABLE_BY_OTHERS = stat.S_IWGRP | stat.S_IWOTH
+
+DEPRECATED_SKIP_WARNING_ENV_VAR = "SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE"
+SKIP_WARNING_ENV_VAR = "SF_SKIP_TOKEN_FILE_PERMISSIONS_VERIFICATION"
+
+
+def _should_skip_warning_for_read_permissions_on_config_file() -> bool:
+    """Check if the warning should be skipped based on environment variable."""
+    if SKIP_WARNING_ENV_VAR in os.environ:
+        return os.getenv(SKIP_WARNING_ENV_VAR, "false").lower() == "true"
+    # Else fallback to old value
+    if DEPRECATED_SKIP_WARNING_ENV_VAR in os.environ:
+        warn(
+            f"{DEPRECATED_SKIP_WARNING_ENV_VAR} is deprecated. Please use {SKIP_WARNING_ENV_VAR} instead."
+        )
+        return os.getenv(DEPRECATED_SKIP_WARNING_ENV_VAR, "false").lower() == "true"
+    return False
 
 
 class ConfigSliceOptions(NamedTuple):
@@ -299,6 +312,7 @@ class ConfigManager:
 
     def read_config(
         self,
+        skip_file_permissions_check: bool = False,
     ) -> None:
         """Read and cache config file contents.
 
@@ -314,23 +328,62 @@ class ConfigManager:
         read_config_file = tomlkit.TOMLDocument()
 
         # Read in all of the config slices
+        config_slice_options = ConfigSliceOptions(
+            check_permissions=not skip_file_permissions_check
+        )
         for filep, sliceoptions, section in itertools.chain(
-            ((self.file_path, ConfigSliceOptions(), None),),
-            self._slices,
+            ((self.file_path, config_slice_options, None),),
+            (
+                (
+                    s.path,
+                    (
+                        s.options._replace(
+                            check_permissions=not skip_file_permissions_check
+                        )
+                        if skip_file_permissions_check
+                        else s.options
+                    ),
+                    s.section,
+                )
+                for s in self._slices
+            ),
         ):
             if sliceoptions.only_in_slice:
                 del read_config_file[section]
             try:
                 if not filep.exists():
+                    # Python 3.14+ (cpython#118243): Path.exists() suppresses
+                    # PermissionError and returns False instead of raising, so
+                    # we explicitly check parent directory access.
+                    if not os.access(filep.parent, os.R_OK | os.X_OK):
+                        LOGGER.debug(
+                            f"Fail to read configuration file from {str(filep)} due to no permission on its parent directory"
+                        )
                     continue
             except PermissionError:
+                # Python < 3.14: Path.exists() raises PermissionError when
+                # the parent directory is not accessible.
                 LOGGER.debug(
                     f"Fail to read configuration file from {str(filep)} due to no permission on its parent directory"
                 )
                 continue
 
+            # Check for writable by others - this should raise an error
             if (
-                sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
+                not IS_WINDOWS  # Skip checking on Windows
+                and sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
+                and filep.stat().st_mode & WRITABLE_BY_OTHERS != 0
+            ):
+                file_stat = filep.stat()
+                file_permissions = oct(file_stat.st_mode)[-3:]
+                raise ConfigSourceError(
+                    f"file '{str(filep)}' is writable by group or others — this poses a security risk because it allows unauthorized users to modify sensitive settings. Your Permission: {file_permissions}"
+                )
+
+            # Check for readable by others or wrong ownership - this should warn
+            if (
+                not IS_WINDOWS  # Skip checking on Windows
+                and sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
                 # Same check as openssh does for permissions
                 # https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
                 and filep.stat().st_mode & READABLE_BY_OTHERS != 0
@@ -341,14 +394,10 @@ class ConfigManager:
                     and filep.stat().st_uid != os.getuid()
                 )
             ):
-                # for non-Windows, suggest change to 0600 permissions.
-                chmod_message = (
-                    f'.\n * To change owner, run `chown $USER "{str(filep)}"`.\n * To restrict permissions, run `chmod 0600 "{str(filep)}"`.\n'
-                    if not IS_WINDOWS
-                    else ""
-                )
+                chmod_message = f'.\n * To change owner, run `chown $USER "{str(filep)}"`.\n * To restrict permissions, run `chmod 0600 "{str(filep)}"`.\n * To skip this warning, set environment variable {SKIP_WARNING_ENV_VAR}=true.\n'
 
-                warn(f"Bad owner or permissions on {str(filep)}{chmod_message}")
+                if not _should_skip_warning_for_read_permissions_on_config_file():
+                    warn(f"Bad owner or permissions on {str(filep)}{chmod_message}")
             LOGGER.debug(f"reading configuration file from {str(filep)}")
             try:
                 read_config_piece = tomlkit.parse(filep.read_text())

@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import collections.abc
@@ -74,6 +70,8 @@ METHOD_NOT_ALLOWED = http.client.METHOD_NOT_ALLOWED
 BAD_GATEWAY = http.client.BAD_GATEWAY
 BAD_REQUEST = http.client.BAD_REQUEST
 REQUEST_TIMEOUT = http.client.REQUEST_TIMEOUT
+TEMPORARY_REDIRECT = http.client.TEMPORARY_REDIRECT  # 307
+PERMANENT_REDIRECT = http.client.PERMANENT_REDIRECT  # type: ignore[attr-defined]  # 308 — stubs lag runtime
 TOO_MANY_REQUESTS = http.client.TOO_MANY_REQUESTS
 SERVICE_UNAVAILABLE = http.client.SERVICE_UNAVAILABLE
 GATEWAY_TIMEOUT = http.client.GATEWAY_TIMEOUT

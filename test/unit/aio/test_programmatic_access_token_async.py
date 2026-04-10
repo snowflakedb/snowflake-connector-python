@@ -1,0 +1,81 @@
+#
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
+#
+
+from __future__ import annotations
+
+import pathlib
+
+import pytest
+
+try:
+    from snowflake.connector.aio import SnowflakeConnection
+    from snowflake.connector.network import PROGRAMMATIC_ACCESS_TOKEN
+except ImportError:
+    pass
+
+import snowflake.connector.errors
+
+from ...test_utils.wiremock.wiremock_utils import WiremockClient
+
+
+@pytest.mark.skipolddriver
+async def test_valid_pat_async(wiremock_client: WiremockClient) -> None:
+    wiremock_data_dir = (
+        pathlib.Path(__file__).parent.parent.parent
+        / "data"
+        / "wiremock"
+        / "mappings"
+        / "auth"
+        / "pat"
+    )
+
+    wiremock_generic_data_dir = (
+        pathlib.Path(__file__).parent.parent.parent
+        / "data"
+        / "wiremock"
+        / "mappings"
+        / "generic"
+    )
+
+    wiremock_client.import_mapping(wiremock_data_dir / "successful_flow.json")
+    wiremock_client.add_mapping(
+        wiremock_generic_data_dir / "snowflake_disconnect_successful.json"
+    )
+
+    connection = SnowflakeConnection(
+        authenticator=PROGRAMMATIC_ACCESS_TOKEN,
+        token="some PAT",
+        account="testAccount",
+        protocol="http",
+        host=wiremock_client.wiremock_host,
+        port=wiremock_client.wiremock_http_port,
+    )
+    await connection.connect()
+    await connection.close()
+
+
+@pytest.mark.skipolddriver
+async def test_invalid_pat_async(wiremock_client: WiremockClient) -> None:
+    wiremock_data_dir = (
+        pathlib.Path(__file__).parent.parent.parent
+        / "data"
+        / "wiremock"
+        / "mappings"
+        / "auth"
+        / "pat"
+    )
+    wiremock_client.import_mapping(wiremock_data_dir / "invalid_token.json")
+
+    with pytest.raises(snowflake.connector.errors.DatabaseError) as execinfo:
+        connection = SnowflakeConnection(
+            authenticator=PROGRAMMATIC_ACCESS_TOKEN,
+            token="some PAT",
+            account="testAccount",
+            protocol="http",
+            host=wiremock_client.wiremock_host,
+            port=wiremock_client.wiremock_http_port,
+        )
+        await connection.connect()
+
+    assert str(execinfo.value).endswith("Programmatic access token is invalid.")

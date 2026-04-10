@@ -1,7 +1,3 @@
-//
-// Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-//
-
 #include "CArrowTableIterator.hpp"
 
 #include <cstring>
@@ -72,6 +68,7 @@ void CArrowTableIterator::convertIfNeeded(ArrowSchema* columnSchema,
     case SnowflakeType::Type::DATE:
     case SnowflakeType::Type::REAL:
     case SnowflakeType::Type::TEXT:
+    case SnowflakeType::Type::INTERVAL_YEAR_MONTH:
     case SnowflakeType::Type::VARIANT:
     case SnowflakeType::Type::VECTOR: {
       // Do not need to convert
@@ -175,6 +172,24 @@ void CArrowTableIterator::convertIfNeeded(ArrowSchema* columnSchema,
           break;
         }
       }
+      break;
+    }
+
+    case SnowflakeType::Type::INTERVAL_DAY_TIME: {
+      int scale = 9;
+      if (metadata != nullptr) {
+        struct ArrowStringView scaleString = ArrowCharView(nullptr);
+        returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"),
+                                           &scaleString);
+        SF_CHECK_ARROW_RC(returnCode,
+                          "[Snowflake Exception] error getting 'scale' "
+                          "from Arrow metadata, error code: %d",
+                          returnCode);
+        scale =
+            std::stoi(std::string(scaleString.data, scaleString.size_bytes));
+      }
+      convertIntervalDayTimeColumn_nanoarrow(&columnSchemaView, columnArray,
+                                             scale);
       break;
     }
 
@@ -320,10 +335,12 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow() {
 
 CArrowTableIterator::CArrowTableIterator(PyObject* context, char* arrow_bytes,
                                          int64_t arrow_bytes_size,
-                                         const bool number_to_decimal)
+                                         const bool number_to_decimal,
+                                         const bool force_microsecond_precision)
     : CArrowIterator(arrow_bytes, arrow_bytes_size),
       m_context(context),
-      m_convert_number_to_decimal(number_to_decimal) {
+      m_convert_number_to_decimal(number_to_decimal),
+      m_force_microsecond_precision(force_microsecond_precision) {
   if (py::checkPyError()) {
     return;
   }
@@ -507,6 +524,76 @@ void CArrowTableIterator::
   ArrowArrayMove(newArray, columnArray->array);
 }
 
+void CArrowTableIterator::convertIntervalDayTimeColumn_nanoarrow(
+    ArrowSchemaView* field, ArrowArrayView* columnArray, const int scale) {
+  int returnCode = 0;
+  nanoarrow::UniqueSchema newUniqueField;
+  nanoarrow::UniqueArray newUniqueArray;
+  ArrowSchema* newSchema = newUniqueField.get();
+  ArrowArray* newArray = newUniqueArray.get();
+  ArrowError error;
+
+  // create new schema
+  ArrowSchemaInit(newSchema);
+  newSchema->flags &=
+      (field->schema->flags & ARROW_FLAG_NULLABLE);  // map to nullable()
+
+  returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_DURATION,
+                                          NANOARROW_TIME_UNIT_NANO, NULL);
+  SF_CHECK_ARROW_RC(returnCode,
+                    "[Snowflake Exception] error setting arrow schema type "
+                    "DateTime, error code: %d",
+                    returnCode);
+
+  returnCode = ArrowSchemaSetName(newSchema, field->schema->name);
+  SF_CHECK_ARROW_RC(
+      returnCode,
+      "[Snowflake Exception] error setting schema name, error code: %d",
+      returnCode);
+
+  returnCode = ArrowArrayInitFromSchema(newArray, newSchema, &error);
+  SF_CHECK_ARROW_RC(returnCode,
+                    "[Snowflake Exception] error initializing ArrowArrayView "
+                    "from schema : %s, error code: %d",
+                    ArrowErrorMessage(&error), returnCode);
+
+  returnCode = ArrowArrayStartAppending(newArray);
+  SF_CHECK_ARROW_RC(
+      returnCode,
+      "[Snowflake Exception] error appending arrow array, error code: %d",
+      returnCode);
+
+  for (int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++) {
+    if (ArrowArrayViewIsNull(columnArray, rowIdx)) {
+      returnCode = ArrowArrayAppendNull(newArray, 1);
+      SF_CHECK_ARROW_RC(returnCode,
+                        "[Snowflake Exception] error appending null to arrow "
+                        "array, error code: %d",
+                        returnCode);
+    } else {
+      ArrowDecimal arrowDecimal;
+      ArrowDecimalInit(&arrowDecimal, 128, 38, 0);
+      ArrowArrayViewGetDecimalUnsafe(columnArray, rowIdx, &arrowDecimal);
+      auto originalVal = ArrowDecimalGetIntUnsafe(&arrowDecimal);
+      returnCode = ArrowArrayAppendInt(newArray, originalVal);
+      SF_CHECK_ARROW_RC(returnCode,
+                        "[Snowflake Exception] error appending int to arrow "
+                        "array, error code: %d",
+                        returnCode);
+    }
+  }
+
+  returnCode = ArrowArrayFinishBuildingDefault(newArray, &error);
+  SF_CHECK_ARROW_RC(returnCode,
+                    "[Snowflake Exception] error finishing building arrow "
+                    "array: %s, error code: %d",
+                    ArrowErrorMessage(&error), returnCode);
+  field->schema->release(field->schema);
+  ArrowSchemaMove(newSchema, field->schema);
+  columnArray->array->release(columnArray->array);
+  ArrowArrayMove(newArray, columnArray->array);
+}
+
 void CArrowTableIterator::convertTimeColumn_nanoarrow(
     ArrowSchemaView* field, ArrowArrayView* columnArray, const int scale) {
   int returnCode = 0;
@@ -604,6 +691,45 @@ void CArrowTableIterator::convertTimeColumn_nanoarrow(
   ArrowArrayMove(newArray, columnArray->array);
 }
 
+/**
+ * Helper function to detect nanosecond timestamp overflow and determine if
+ * downscaling to microseconds is needed.
+ * @param columnArray The Arrow array containing the timestamp data
+ * @param epochArray The Arrow array containing epoch values
+ * @param fractionArray The Arrow array containing fraction values
+ * @return true if overflow was detected and downscaling to microseconds is
+ * safe, false otherwise
+ * @throws std::overflow_error if overflow is detected but downscaling would
+ * lose precision
+ */
+static bool _checkNanosecondTimestampOverflowAndDownscale(
+    ArrowArrayView* columnArray, ArrowArrayView* epochArray,
+    ArrowArrayView* fractionArray) {
+  int powTenSB4 = sf::internal::powTenSB4[9];
+  for (int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++) {
+    if (!ArrowArrayViewIsNull(columnArray, rowIdx)) {
+      int64_t epoch = ArrowArrayViewGetIntUnsafe(epochArray, rowIdx);
+      int64_t fraction = ArrowArrayViewGetIntUnsafe(fractionArray, rowIdx);
+      if (epoch > (INT64_MAX / powTenSB4) || epoch < (INT64_MIN / powTenSB4)) {
+        if (fraction % 1000 != 0) {
+          std::string errorInfo = Logger::formatString(
+              "The total number of nanoseconds %d%d overflows int64 range. "
+              "If you use a timestamp with "
+              "the nanosecond part over 6-digits in the Snowflake database, "
+              "the timestamp must be "
+              "between '1677-09-21 00:12:43.145224192' and '2262-04-11 "
+              "23:47:16.854775807' to not overflow.",
+              epoch, fraction);
+          throw std::overflow_error(errorInfo.c_str());
+        } else {
+          return true;  // Safe to downscale
+        }
+      }
+    }
+  }
+  return false;
+}
+
 void CArrowTableIterator::convertTimestampColumn_nanoarrow(
     ArrowSchemaView* field, ArrowArrayView* columnArray, const int scale,
     const std::string timezone) {
@@ -618,11 +744,14 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
   newSchema->flags &=
       (field->schema->flags & ARROW_FLAG_NULLABLE);  // map to nullable()
 
-  // calculate has_overflow_to_downscale
-  bool has_overflow_to_downscale = false;
-  if (scale > 6 && field->type == NANOARROW_TYPE_STRUCT) {
-    ArrowArrayView* epochArray;
-    ArrowArrayView* fractionArray;
+  // Find epoch and fraction arrays for overflow detection
+  ArrowArrayView* epochArray = nullptr;
+  ArrowArrayView* fractionArray = nullptr;
+  // When m_force_microsecond_precision is true, always use microsecond
+  // precision to ensure consistent schema across all batches
+  bool has_overflow_to_downscale = m_force_microsecond_precision;
+  if (!m_force_microsecond_precision && scale > 6 &&
+      field->type == NANOARROW_TYPE_STRUCT) {
     for (int64_t i = 0; i < field->schema->n_children; i++) {
       ArrowSchema* c_schema = field->schema->children[i];
       if (std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) ==
@@ -635,30 +764,8 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
         // do nothing
       }
     }
-
-    int powTenSB4 = sf::internal::powTenSB4[9];
-    for (int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++) {
-      if (!ArrowArrayViewIsNull(columnArray, rowIdx)) {
-        int64_t epoch = ArrowArrayViewGetIntUnsafe(epochArray, rowIdx);
-        int64_t fraction = ArrowArrayViewGetIntUnsafe(fractionArray, rowIdx);
-        if (epoch > (INT64_MAX / powTenSB4) ||
-            epoch < (INT64_MIN / powTenSB4)) {
-          if (fraction % 1000 != 0) {
-            std::string errorInfo = Logger::formatString(
-                "The total number of nanoseconds %d%d overflows int64 range. "
-                "If you use a timestamp with "
-                "the nanosecond part over 6-digits in the Snowflake database, "
-                "the timestamp must be "
-                "between '1677-09-21 00:12:43.145224192' and '2262-04-11 "
-                "23:47:16.854775807' to not overflow.",
-                epoch, fraction);
-            throw std::overflow_error(errorInfo.c_str());
-          } else {
-            has_overflow_to_downscale = true;
-          }
-        }
-      }
-    }
+    has_overflow_to_downscale = _checkNanosecondTimestampOverflowAndDownscale(
+        columnArray, epochArray, fractionArray);
   }
 
   if (scale <= 6) {
@@ -859,6 +966,30 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
   ArrowSchemaInit(newSchema);
   newSchema->flags &=
       (field->schema->flags & ARROW_FLAG_NULLABLE);  // map to nullable()
+
+  // Find epoch and fraction arrays
+  ArrowArrayView* epochArray = nullptr;
+  ArrowArrayView* fractionArray = nullptr;
+  for (int64_t i = 0; i < field->schema->n_children; i++) {
+    ArrowSchema* c_schema = field->schema->children[i];
+    if (std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
+      epochArray = columnArray->children[i];
+    } else if (std::strcmp(c_schema->name,
+                           internal::FIELD_NAME_FRACTION.c_str()) == 0) {
+      fractionArray = columnArray->children[i];
+    } else {
+      // do nothing
+    }
+  }
+
+  // When m_force_microsecond_precision is true, always use microsecond
+  // precision to ensure consistent schema across all batches
+  bool has_overflow_to_downscale = m_force_microsecond_precision;
+  if (!m_force_microsecond_precision && scale > 6 && byteLength == 16) {
+    has_overflow_to_downscale = _checkNanosecondTimestampOverflowAndDownscale(
+        columnArray, epochArray, fractionArray);
+  }
+
   auto timeunit = NANOARROW_TIME_UNIT_SECOND;
   if (scale == 0) {
     timeunit = NANOARROW_TIME_UNIT_SECOND;
@@ -867,7 +998,9 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
   } else if (scale <= 6) {
     timeunit = NANOARROW_TIME_UNIT_MICRO;
   } else {
-    timeunit = NANOARROW_TIME_UNIT_NANO;
+    // Use microsecond precision if we detected overflow, otherwise nanosecond
+    timeunit = has_overflow_to_downscale ? NANOARROW_TIME_UNIT_MICRO
+                                         : NANOARROW_TIME_UNIT_NANO;
   }
 
   if (!timezone.empty()) {
@@ -897,20 +1030,6 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
                     "from schema : %s, error code: %d",
                     ArrowErrorMessage(&error), returnCode);
 
-  ArrowArrayView* epochArray;
-  ArrowArrayView* fractionArray;
-  for (int64_t i = 0; i < field->schema->n_children; i++) {
-    ArrowSchema* c_schema = field->schema->children[i];
-    if (std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
-      epochArray = columnArray->children[i];
-    } else if (std::strcmp(c_schema->name,
-                           internal::FIELD_NAME_FRACTION.c_str()) == 0) {
-      fractionArray = columnArray->children[i];
-    } else {
-      // do nothing
-    }
-  }
-
   for (int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++) {
     if (!ArrowArrayViewIsNull(columnArray, rowIdx)) {
       if (byteLength == 8) {
@@ -924,8 +1043,14 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
           returnCode = ArrowArrayAppendInt(
               newArray, epoch * sf::internal::powTenSB4[6 - scale]);
         } else {
-          returnCode = ArrowArrayAppendInt(
-              newArray, epoch * sf::internal::powTenSB4[9 - scale]);
+          // Handle overflow by falling back to microsecond precision
+          if (has_overflow_to_downscale) {
+            returnCode = ArrowArrayAppendInt(
+                newArray, epoch * sf::internal::powTenSB4[6]);
+          } else {
+            returnCode = ArrowArrayAppendInt(
+                newArray, epoch * sf::internal::powTenSB4[9 - scale]);
+          }
         }
         SF_CHECK_ARROW_RC(returnCode,
                           "[Snowflake Exception] error appending int to "
@@ -945,8 +1070,14 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
               newArray, epoch * sf::internal::powTenSB4[6] +
                             fraction / sf::internal::powTenSB4[3]);
         } else {
-          returnCode = ArrowArrayAppendInt(
-              newArray, epoch * sf::internal::powTenSB4[9] + fraction);
+          // Handle overflow by falling back to microsecond precision
+          if (has_overflow_to_downscale) {
+            returnCode = ArrowArrayAppendInt(
+                newArray, epoch * sf::internal::powTenSB4[6] + fraction / 1000);
+          } else {
+            returnCode = ArrowArrayAppendInt(
+                newArray, epoch * sf::internal::powTenSB4[9] + fraction);
+          }
         }
         SF_CHECK_ARROW_RC(returnCode,
                           "[Snowflake Exception] error appending int to "

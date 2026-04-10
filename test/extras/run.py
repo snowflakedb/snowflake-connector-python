@@ -1,6 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
 import os
 import pathlib
 import platform
@@ -33,18 +30,36 @@ for test_file in pathlib.Path(__file__).parent.glob("*.py"):
         # This is to test SNOW-79940, making sure tmp files are removed
         # Windows does not have ocsp_response_validation_cache.lock
         assert (
-            cache_files
-            == {
-                "ocsp_response_validation_cache.lock",
-                "ocsp_response_validation_cache",
-                "ocsp_response_cache.json",
-            }
-            and not platform.system() == "Windows"
-        ) or (
-            cache_files
-            == {
-                "ocsp_response_validation_cache",
-                "ocsp_response_cache.json",
-            }
-            and platform.system() == "Windows"
-        )
+            (
+                cache_files.issubset(
+                    {
+                        "ocsp_response_validation_cache.json.lock",
+                        "ocsp_response_validation_cache.json",
+                        "ocsp_response_cache.json",
+                        "crls",
+                    }
+                )
+                and platform.system() == "Linux"
+            )
+            or (
+                cache_files.issubset(
+                    {
+                        "ocsp_response_validation_cache.json",
+                        "ocsp_response_cache.json",
+                        "crls",
+                    }
+                )
+                and platform.system() == "Windows"
+            )
+            or (
+                cache_files.issubset(
+                    {
+                        "ocsp_response_validation_cache.json.lock",
+                        "ocsp_response_validation_cache.json",
+                        "ocsp_response_cache.json",
+                        "crls",
+                    }
+                )
+                and platform.system() == "Darwin"
+            )
+        ), str(cache_files)

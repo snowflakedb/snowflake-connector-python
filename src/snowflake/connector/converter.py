@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import binascii
@@ -24,11 +20,12 @@ from pytz import UTC
 from .compat import IS_BINARY, IS_NUMERIC
 from .errorcode import ER_NOT_SUPPORT_DATA_TYPE
 from .errors import ProgrammingError
+from .interval_util import interval_year_month_to_string
 from .sfbinaryformat import binary_to_python, binary_to_snowflake
 from .sfdatetime import sfdatetime_total_seconds_from_timedelta
 
 if TYPE_CHECKING:
-    from numpy import int64
+    from numpy import bool_, int64
 
 try:
     import numpy
@@ -203,6 +200,12 @@ class SnowflakeConverter:
 
             return conv
 
+    def _DECFLOAT_numpy_to_python(self, ctx: dict[str, Any]) -> Callable:
+        return numpy.float64
+
+    def _DECFLOAT_to_python(self, ctx: dict[str, Any]) -> Callable:
+        return decimal.Decimal
+
     def _REAL_to_python(self, _: dict[str, str | None] | dict[str, str]) -> Callable:
         return float
 
@@ -353,6 +356,29 @@ class SnowflakeConverter:
     ) -> Callable:
         return lambda value: value in ("1", "TRUE")
 
+    def _INTERVAL_YEAR_MONTH_to_python(self, ctx: dict[str, Any]) -> Callable:
+        scale = ctx["scale"]
+        return lambda v: interval_year_month_to_string(int(v), scale)
+
+    def _INTERVAL_YEAR_MONTH_numpy_to_python(self, ctx: dict[str, Any]) -> Callable:
+        return lambda v: numpy.timedelta64(int(v), "M")
+
+    def _INTERVAL_DAY_TIME_to_python(self, ctx: dict[str, Any]) -> Callable:
+        # Python timedelta only supports microsecond precision. We receive value in
+        # nanoseconds.
+        return lambda v: timedelta(microseconds=int(v) // 1000)
+
+    def _INTERVAL_DAY_TIME_numpy_to_python(self, ctx: dict[str, Any]) -> Callable:
+        # Last 4 bits of the precision are used to store the leading field precision of
+        # the interval.
+        lfp = ctx["precision"] & 0x0F
+        # Numpy timedelta only supports up to 64-bit integers. If the leading field
+        # precision is higher than 5 we receive 16 byte integer from server. So we need
+        # to change the unit to milliseconds to fit in 64-bit integer.
+        if lfp > 5:
+            return lambda v: numpy.timedelta64(int(v) // 1_000_000, "ms")
+        return lambda v: numpy.timedelta64(int(v), "ns")
+
     def snowflake_type(self, value: Any) -> str | None:
         """Returns Snowflake data type for the value. This is used for qmark parameter style."""
         type_name = value.__class__.__name__.lower()
@@ -499,8 +525,8 @@ class SnowflakeConverter:
 
     _bytearray_to_snowflake = _bytes_to_snowflake
 
-    def _bool_to_snowflake(self, value: bool) -> bool:
-        return value
+    def _bool_to_snowflake(self, value: bool | bool_) -> bool:
+        return bool(value)
 
     def _bool__to_snowflake(self, value) -> bool:
         return bool(value)
@@ -622,13 +648,16 @@ class SnowflakeConverter:
     def _list_to_snowflake(self, value: list) -> list:
         return [
             SnowflakeConverter.quote(v0)
-            for v0 in [SnowflakeConverter.escape(v) for v in value]
+            for v0 in [SnowflakeConverter.escape(self.to_snowflake(v)) for v in value]
         ]
 
     _tuple_to_snowflake = _list_to_snowflake
 
     def __numpy_to_snowflake(self, value):
         return value
+
+    def _float16_to_snowflake(self, value):
+        return float(value)
 
     _int8_to_snowflake = __numpy_to_snowflake
     _int16_to_snowflake = __numpy_to_snowflake
@@ -638,9 +667,8 @@ class SnowflakeConverter:
     _uint16_to_snowflake = __numpy_to_snowflake
     _uint32_to_snowflake = __numpy_to_snowflake
     _uint64_to_snowflake = __numpy_to_snowflake
-    _float16_to_snowflake = __numpy_to_snowflake
-    _float32_to_snowflake = __numpy_to_snowflake
-    _float64_to_snowflake = __numpy_to_snowflake
+    _float32_to_snowflake = _float16_to_snowflake
+    _float64_to_snowflake = _float16_to_snowflake
 
     def _datetime64_to_snowflake(self, value) -> str:
         return str(value) + "+00:00"

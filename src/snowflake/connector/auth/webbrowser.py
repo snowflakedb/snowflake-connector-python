@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
@@ -116,6 +112,7 @@ class AuthByWebBrowser(AuthByPlugin):
         """Web Browser based Authentication."""
         logger.debug("authenticating by Web Browser")
 
+        # TODO: switch to the new AuthHttpServer class instead of doing this manually
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
 
         if os.getenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "False").lower() == "true":
@@ -127,18 +124,19 @@ class AuthByWebBrowser(AuthByPlugin):
                 socket_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
         try:
+            hostname = os.getenv("SF_AUTH_SOCKET_ADDR", "localhost")
             try:
                 socket_connection.bind(
                     (
-                        os.getenv("SF_AUTH_SOCKET_ADDR", "localhost"),
+                        hostname,
                         int(os.getenv("SF_AUTH_SOCKET_PORT", 0)),
                     )
                 )
             except socket.gaierror as ex:
                 if ex.args[0] == socket.EAI_NONAME:
                     raise OperationalError(
-                        msg="localhost is not found. Ensure /etc/hosts has "
-                        "localhost entry.",
+                        msg=f"{hostname} is not found. Ensure /etc/hosts has "
+                        f"{hostname} entry.",
                         errno=ER_NO_HOSTNAME_FOUND,
                     )
                 else:
@@ -167,15 +165,26 @@ class AuthByWebBrowser(AuthByPlugin):
                 return
 
             print(
-                "Initiating login request with your identity provider. A "
-                "browser window should have opened for you to complete the "
-                "login. If you can't see it, check existing browser windows, "
-                "or your OS settings. Press CTRL+C to abort and try again..."
+                "Initiating login request with your identity provider. Press CTRL+C to abort and try again..."
             )
 
             logger.debug("step 2: open a browser")
             print(f"Going to open: {sso_url} to authenticate...")
-            if not self._webbrowser.open_new(sso_url):
+            browser_opened = self._webbrowser.open_new(sso_url)
+            if browser_opened:
+                print(
+                    "A browser window should have opened for you to complete the "
+                    "login. If you can't see it, check existing browser windows, "
+                    "or your OS settings."
+                )
+
+            if (
+                browser_opened
+                or os.getenv("SNOWFLAKE_AUTH_FORCE_SERVER", "False").lower() == "true"
+            ):
+                logger.debug("step 3: accept SAML token")
+                self._receive_saml_token(conn, socket_connection)
+            else:
                 print(
                     "We were unable to open a browser window for you, "
                     "please open the url above manually then paste the "
@@ -197,9 +206,6 @@ class AuthByWebBrowser(AuthByPlugin):
                         },
                     )
                     return
-            else:
-                logger.debug("step 3: accept SAML token")
-                self._receive_saml_token(conn, socket_connection)
         finally:
             socket_connection.close()
 
@@ -458,12 +464,16 @@ You can close this window now and go back where you started from.
         body = Auth.base_auth_data(
             user,
             account,
-            conn._rest._connection.application,
-            conn._rest._connection._internal_application_name,
-            conn._rest._connection._internal_application_version,
-            conn._rest._connection._ocsp_mode(),
-            conn._rest._connection._login_timeout,
-            conn._rest._connection._network_timeout,
+            conn.application,
+            conn._internal_application_name,
+            conn._internal_application_version,
+            conn._ocsp_mode(),
+            conn.cert_revocation_check_mode,
+            conn.login_timeout,
+            conn.network_timeout,
+            conn.socket_timeout,
+            conn.platform_detection_timeout_seconds,
+            session_manager=conn.rest.session_manager.clone(use_pooling=False),
         )
 
         body["data"]["AUTHENTICATOR"] = authenticator

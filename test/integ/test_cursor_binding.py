@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import pytest
@@ -46,21 +42,38 @@ def test_binding_security(conn_cnx, db_parameters):
 
             # SQL injection safe test
             # Good Example
-            with pytest.raises(ProgrammingError):
-                cnx.cursor().execute(
-                    "SELECT * FROM {name} WHERE aa=%s".format(
-                        name=db_parameters["name"]
-                    ),
-                    ("1 or aa>0",),
+            # server behavior change: this no longer raises an error, but returns an empty result set
+            try:
+                res = (
+                    cnx.cursor()
+                    .execute(
+                        "SELECT * FROM {name} WHERE aa=%s".format(
+                            name=db_parameters["name"]
+                        ),
+                        ("1 or aa>0",),
+                    )
+                    .fetchall()
                 )
+                assert res == []
+            except ProgrammingError:
+                # old server behavior: OK
+                pass
 
-            with pytest.raises(ProgrammingError):
-                cnx.cursor().execute(
-                    "SELECT * FROM {name} WHERE aa=%(aa)s".format(
-                        name=db_parameters["name"]
-                    ),
-                    {"aa": "1 or aa>0"},
+            try:
+                res = (
+                    cnx.cursor()
+                    .execute(
+                        "SELECT * FROM {name} WHERE aa=%(aa)s".format(
+                            name=db_parameters["name"]
+                        ),
+                        {"aa": "1 or aa>0"},
+                    )
+                    .fetchall()
                 )
+                assert res == []
+            except ProgrammingError:
+                # old server behavior: OK
+                pass
 
             # Bad Example in application. DON'T DO THIS
             c = cnx.cursor()

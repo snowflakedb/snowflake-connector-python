@@ -1,7 +1,3 @@
-//
-// Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-//
-
 #ifndef PC_SNOWFLAKETYPE_HPP
 #define PC_SNOWFLAKETYPE_HPP
 
@@ -33,6 +29,9 @@ class SnowflakeType {
     VARIANT = 15,
     VECTOR = 16,
     MAP = 17,
+    DECFLOAT = 18,
+    INTERVAL_YEAR_MONTH = 19,
+    INTERVAL_DAY_TIME = 20,
   };
 
   static SnowflakeType::Type snowflakeTypeFromString(std::string str) {

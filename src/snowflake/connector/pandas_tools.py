@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import collections.abc
@@ -24,8 +20,13 @@ from typing import (
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
 from snowflake.connector.telemetry import TelemetryData, TelemetryField
-from snowflake.connector.util_text import random_string
 
+from ._utils import (
+    TempObjectType,
+    get_temp_type_for_object,
+    random_name_for_temp_object,
+)
+from .constants import _PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS
 from .cursor import SnowflakeCursor
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -56,19 +57,24 @@ def build_location_helper(
     database: str | None, schema: str | None, name: str, quote_identifiers: bool
 ) -> str:
     """Helper to format table/stage/file format's location."""
-    if quote_identifiers:
-        location = (
-            (('"' + database + '".') if database else "")
-            + (('"' + schema + '".') if schema else "")
-            + ('"' + name + '"')
-        )
-    else:
-        location = (
-            (database + "." if database else "")
-            + (schema + "." if schema else "")
-            + name
-        )
+    location = (
+        (_escape_part_location(database, quote_identifiers) + "." if database else "")
+        + (_escape_part_location(schema, quote_identifiers) + "." if schema else "")
+        + _escape_part_location(name, quote_identifiers)
+    )
     return location
+
+
+def _escape_part_location(part: str, should_quote: bool) -> str:
+    if "'" in part:
+        should_quote = True
+    if should_quote:
+        if not part.startswith('"'):
+            part = '"' + part
+        if not part.endswith('"'):
+            part = part + '"'
+
+    return part
 
 
 def _do_create_temp_stage(
@@ -77,10 +83,18 @@ def _do_create_temp_stage(
     compression: str,
     auto_create_table: bool,
     overwrite: bool,
+    use_scoped_temp_object: bool,
 ) -> None:
-    create_stage_sql = f"CREATE TEMP STAGE /* Python:snowflake.connector.pandas_tools.write_pandas() */ {stage_location} FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''})"
-    logger.debug(f"creating stage with '{create_stage_sql}'")
-    cursor.execute(create_stage_sql, _is_internal=True).fetchall()
+    create_stage_sql = f"CREATE {get_temp_type_for_object(use_scoped_temp_object)} STAGE /* Python:snowflake.connector.pandas_tools.write_pandas() */ identifier(?) FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''})"
+    params = (stage_location,)
+    logger.debug(f"creating stage with '{create_stage_sql}'. params: %s", params)
+    cursor.execute(
+        create_stage_sql,
+        _is_internal=True,
+        _force_qmark_paramstyle=True,
+        params=params,
+        num_statements=1,
+    )
 
 
 def _create_temp_stage(
@@ -91,8 +105,9 @@ def _create_temp_stage(
     compression: str,
     auto_create_table: bool,
     overwrite: bool,
+    use_scoped_temp_object: bool = False,
 ) -> str:
-    stage_name = random_string()
+    stage_name = random_name_for_temp_object(TempObjectType.STAGE)
     stage_location = build_location_helper(
         database=database,
         schema=schema,
@@ -101,7 +116,12 @@ def _create_temp_stage(
     )
     try:
         _do_create_temp_stage(
-            cursor, stage_location, compression, auto_create_table, overwrite
+            cursor,
+            stage_location,
+            compression,
+            auto_create_table,
+            overwrite,
+            use_scoped_temp_object,
         )
     except ProgrammingError as e:
         # User may not have the privilege to create stage on the target schema, so fall back to use current schema as
@@ -111,7 +131,12 @@ def _create_temp_stage(
         )
         stage_location = stage_name
         _do_create_temp_stage(
-            cursor, stage_location, compression, auto_create_table, overwrite
+            cursor,
+            stage_location,
+            compression,
+            auto_create_table,
+            overwrite,
+            use_scoped_temp_object,
         )
 
     return stage_location
@@ -122,14 +147,22 @@ def _do_create_temp_file_format(
     file_format_location: str,
     compression: str,
     sql_use_logical_type: str,
+    use_scoped_temp_object: bool,
 ) -> None:
     file_format_sql = (
-        f"CREATE TEMP FILE FORMAT {file_format_location} "
+        f"CREATE {get_temp_type_for_object(use_scoped_temp_object)} FILE FORMAT identifier(?) "
         f"/* Python:snowflake.connector.pandas_tools.write_pandas() */ "
         f"TYPE=PARQUET COMPRESSION={compression}{sql_use_logical_type}"
     )
-    logger.debug(f"creating file format with '{file_format_sql}'")
-    cursor.execute(file_format_sql, _is_internal=True)
+    params = (file_format_location,)
+    logger.debug(f"creating file format with '{file_format_sql}'. params: %s", params)
+    cursor.execute(
+        file_format_sql,
+        _is_internal=True,
+        _force_qmark_paramstyle=True,
+        params=params,
+        num_statements=1,
+    )
 
 
 def _create_temp_file_format(
@@ -139,8 +172,9 @@ def _create_temp_file_format(
     quote_identifiers: bool,
     compression: str,
     sql_use_logical_type: str,
+    use_scoped_temp_object: bool = False,
 ) -> str:
-    file_format_name = random_string()
+    file_format_name = random_name_for_temp_object(TempObjectType.FILE_FORMAT)
     file_format_location = build_location_helper(
         database=database,
         schema=schema,
@@ -149,7 +183,11 @@ def _create_temp_file_format(
     )
     try:
         _do_create_temp_file_format(
-            cursor, file_format_location, compression, sql_use_logical_type
+            cursor,
+            file_format_location,
+            compression,
+            sql_use_logical_type,
+            use_scoped_temp_object,
         )
     except ProgrammingError as e:
         # User may not have the privilege to create file format on the target schema, so fall back to use current schema
@@ -159,10 +197,50 @@ def _create_temp_file_format(
         )
         file_format_location = file_format_name
         _do_create_temp_file_format(
-            cursor, file_format_location, compression, sql_use_logical_type
+            cursor,
+            file_format_location,
+            compression,
+            sql_use_logical_type,
+            use_scoped_temp_object,
         )
 
     return file_format_location
+
+
+def _convert_value_to_sql_option(value: Union[str, bool, int, float]) -> str:
+    if isinstance(value, str):
+        if len(value) > 1 and value.startswith("'") and value.endswith("'"):
+            return value
+        else:
+            value = value.replace(
+                "'", "''"
+            )  # escape single quotes before adding a pair of quotes
+            return f"'{value}'"
+    else:
+        return str(value)
+
+
+def _iceberg_config_statement_helper(iceberg_config: dict[str, str]) -> str:
+    ALLOWED_CONFIGS = {
+        "EXTERNAL_VOLUME",
+        "CATALOG",
+        "BASE_LOCATION",
+        "CATALOG_SYNC",
+        "STORAGE_SERIALIZATION_POLICY",
+    }
+
+    normalized = {
+        k.upper(): _convert_value_to_sql_option(v)
+        for k, v in iceberg_config.items()
+        if v is not None
+    }
+
+    if invalid_configs := set(normalized.keys()) - ALLOWED_CONFIGS:
+        raise ProgrammingError(
+            f"Invalid iceberg configurations option(s) provided {', '.join(sorted(invalid_configs))}"
+        )
+
+    return " ".join(f"{k}={v}" for k, v in normalized.items())
 
 
 def write_pandas(
@@ -176,11 +254,15 @@ def write_pandas(
     on_error: str = "abort_statement",
     parallel: int = 4,
     quote_identifiers: bool = True,
+    infer_schema: bool = False,
     auto_create_table: bool = False,
     create_temp_table: bool = False,
     overwrite: bool = False,
     table_type: Literal["", "temp", "temporary", "transient"] = "",
     use_logical_type: bool | None = None,
+    iceberg_config: dict[str, str] | None = None,
+    bulk_upload_chunks: bool = False,
+    use_vectorized_scanner: bool = False,
     **kwargs: Any,
 ) -> tuple[
     bool,
@@ -228,11 +310,15 @@ def write_pandas(
         on_error: Action to take when COPY INTO statements fail, default follows documentation at:
             https://docs.snowflake.com/en/sql-reference/sql/copy-into-table.html#copy-options-copyoptions
             (Default value = 'abort_statement').
+        use_vectorized_scanner: Boolean that specifies whether to use a vectorized scanner for loading Parquet files. See details at
+            `copy options <https://docs.snowflake.com/en/sql-reference/sql/copy-into-table.html#copy-options-copyoptions>`_.
         parallel: Number of threads to be used when uploading chunks, default follows documentation at:
             https://docs.snowflake.com/en/sql-reference/sql/put.html#optional-parameters (Default value = 4).
         quote_identifiers: By default, identifiers, specifically database, schema, table and column names
             (from df.columns) will be quoted. If set to False, identifiers are passed on to Snowflake without quoting.
             I.e. identifiers will be coerced to uppercase by Snowflake.  (Default value = True)
+        infer_schema: Perform explicit schema inference on the data in the DataFrame and use the inferred data types
+            when selecting columns from the DataFrame. (Default value = False)
         auto_create_table: When true, will automatically create a table with corresponding columns for each column in
             the passed in DataFrame. The table will not be created if it already exists
         create_temp_table: (Deprecated) Will make the auto-created table as a temporary table
@@ -245,6 +331,16 @@ def write_pandas(
             Snowflake can interpret Parquet logical types during data loading. To enable Parquet logical types,
             set use_logical_type as True. Set to None to use Snowflakes default. For more information, see:
             https://docs.snowflake.com/en/sql-reference/sql/create-file-format
+        iceberg_config: A dictionary that can contain the following iceberg configuration values:
+                * external_volume: specifies the identifier for the external volume where
+                    the Iceberg table stores its metadata files and data in Parquet format
+                * catalog: specifies either Snowflake or a catalog integration to use for this table
+                * base_location: the base directory that snowflake can write iceberg metadata and files to
+                * catalog_sync: optionally sets the catalog integration configured for Polaris Catalog
+                * storage_serialization_policy: specifies the storage serialization policy for the table
+        bulk_upload_chunks: If set to True, the upload will use the wildcard upload method.
+            This is a faster method of uploading but instead of uploading and cleaning up each chunk separately it will upload all chunks at once and then clean up locally stored chunks.
+
 
 
     Returns:
@@ -263,6 +359,13 @@ def write_pandas(
             f"Invalid compression '{compression}', only acceptable values are: {compression_map.keys()}"
         )
 
+    # TODO(SNOW-1505026): Get rid of this when the BCR to always create scoped temp for intermediate results is done.
+    _use_scoped_temp_object = (
+        conn._session_parameters.get(_PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS, False)
+        if conn._session_parameters
+        else False
+    )
+
     if create_temp_table:
         warnings.warn(
             "create_temp_table is deprecated, we still respect this parameter when it is True but "
@@ -277,6 +380,10 @@ def write_pandas(
         raise ValueError(
             "Unsupported table type. Expected table types: temp/temporary, transient"
         )
+
+    if table_type.lower() in ["temp", "temporary"]:
+        # Add scoped keyword when applicable.
+        table_type = get_temp_type_for_object(_use_scoped_temp_object).lower()
 
     if chunk_size is None:
         chunk_size = len(df)
@@ -301,7 +408,7 @@ def write_pandas(
     ):
         warnings.warn(
             "Dataframe contains a datetime with timezone column, but "
-            f"'{use_logical_type=}'. This can result in dateimes "
+            f"'{use_logical_type=}'. This can result in datetimes "
             "being incorrectly written to Snowflake. Consider setting "
             "'use_logical_type = True'",
             UserWarning,
@@ -324,6 +431,7 @@ def write_pandas(
         compression,
         auto_create_table,
         overwrite,
+        _use_scoped_temp_object,
     )
 
     with TemporaryDirectory() as tmp_folder:
@@ -331,19 +439,26 @@ def write_pandas(
             chunk_path = os.path.join(tmp_folder, f"file{i}.txt")
             # Dump chunk into parquet file
             chunk.to_parquet(chunk_path, compression=compression, **kwargs)
-            # Upload parquet file
-            upload_sql = (
-                "PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-                "'file://{path}' @{stage_location} PARALLEL={parallel}"
-            ).format(
-                path=chunk_path.replace("\\", "\\\\").replace("'", "\\'"),
-                stage_location=stage_location,
-                parallel=parallel,
+            if not bulk_upload_chunks:
+                # Upload parquet file chunk right away
+                path = chunk_path.replace("\\", "\\\\").replace("'", "\\'")
+                cursor._upload(
+                    local_file_name=f"'file://{path}'",
+                    stage_location="@" + stage_location,
+                    options={"parallel": parallel, "source_compression": "auto_detect"},
+                )
+
+                # Remove chunk file
+                os.remove(chunk_path)
+
+        if bulk_upload_chunks:
+            # Upload tmp directory with parquet chunks
+            path = tmp_folder.replace("\\", "\\\\").replace("'", "\\'")
+            cursor._upload(
+                local_file_name=f"'file://{path}/*'",
+                stage_location="@" + stage_location,
+                options={"parallel": parallel, "source_compression": "auto_detect"},
             )
-            logger.debug(f"uploading files with '{upload_sql}'")
-            cursor.execute(upload_sql, _is_internal=True)
-            # Remove chunk file
-            os.remove(chunk_path)
 
     # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
     # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
@@ -358,11 +473,19 @@ def write_pandas(
     columns = quote + f"{quote},{quote}".join(snowflake_column_names) + quote
 
     def drop_object(name: str, object_type: str) -> None:
-        drop_sql = f"DROP {object_type.upper()} IF EXISTS {name} /* Python:snowflake.connector.pandas_tools.write_pandas() */"
-        logger.debug(f"dropping {object_type} with '{drop_sql}'")
-        cursor.execute(drop_sql, _is_internal=True)
+        drop_sql = f"DROP {object_type.upper()} IF EXISTS identifier(?) /* Python:snowflake.connector.pandas_tools.write_pandas() */"
+        params = (name,)
+        logger.debug(f"dropping {object_type} with '{drop_sql}'. params: %s", params)
 
-    if auto_create_table or overwrite:
+        cursor.execute(
+            drop_sql,
+            _is_internal=True,
+            _force_qmark_paramstyle=True,
+            params=params,
+            num_statements=1,
+        )
+
+    if auto_create_table or overwrite or infer_schema:
         file_format_location = _create_temp_file_format(
             cursor,
             database,
@@ -370,11 +493,19 @@ def write_pandas(
             quote_identifiers,
             compression_map[compression],
             sql_use_logical_type,
+            _use_scoped_temp_object,
         )
-        infer_schema_sql = f"SELECT COLUMN_NAME, TYPE FROM table(infer_schema(location=>'@{stage_location}', file_format=>'{file_format_location}'))"
-        logger.debug(f"inferring schema with '{infer_schema_sql}'")
+        infer_schema_sql = "SELECT COLUMN_NAME, TYPE FROM table(infer_schema(location=>?, file_format=>?))"
+        params = (f"@{stage_location}", file_format_location)
+        logger.debug(f"inferring schema with '{infer_schema_sql}'. params: %s", params)
         column_type_mapping = dict(
-            cursor.execute(infer_schema_sql, _is_internal=True).fetchall()
+            cursor.execute(
+                infer_schema_sql,
+                _is_internal=True,
+                _force_qmark_paramstyle=True,
+                params=params,
+                num_statements=1,
+            ).fetchall()
         )
         # Infer schema can return the columns out of order depending on the chunking we do when uploading
         # so we have to iterate through the dataframe columns to make sure we create the table with its
@@ -389,17 +520,37 @@ def write_pandas(
         target_table_location = build_location_helper(
             database,
             schema,
-            random_string() if (overwrite and auto_create_table) else table_name,
+            (
+                random_name_for_temp_object(TempObjectType.TABLE)
+                if (overwrite and auto_create_table)
+                else table_name
+            ),
             quote_identifiers,
         )
 
-        create_table_sql = (
-            f"CREATE {table_type.upper()} TABLE IF NOT EXISTS {target_table_location} "
-            f"({create_table_columns})"
-            f" /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-        )
-        logger.debug(f"auto creating table with '{create_table_sql}'")
-        cursor.execute(create_table_sql, _is_internal=True)
+        if auto_create_table or overwrite:
+            iceberg = "ICEBERG " if iceberg_config else ""
+            iceberg_config_statement = _iceberg_config_statement_helper(
+                iceberg_config or {}
+            )
+
+            create_table_sql = (
+                f"CREATE {table_type.upper()} {iceberg}TABLE IF NOT EXISTS identifier(?) "
+                f"({create_table_columns}) {iceberg_config_statement}"
+                f" /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+            )
+            params = (target_table_location,)
+            logger.debug(
+                f"auto creating table with '{create_table_sql}'. params: %s", params
+            )
+            cursor.execute(
+                create_table_sql,
+                _is_internal=True,
+                _force_qmark_paramstyle=True,
+                params=params,
+                num_statements=1,
+            )
+
         # need explicit casting when the underlying table schema is inferred
         parquet_columns = "$1:" + ",$1:".join(
             f"{quote}{snowflake_col}{quote}::{column_type_mapping[col]}"
@@ -418,24 +569,43 @@ def write_pandas(
 
     try:
         if overwrite and (not auto_create_table):
-            truncate_sql = f"TRUNCATE TABLE {target_table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */"
-            logger.debug(f"truncating table with '{truncate_sql}'")
-            cursor.execute(truncate_sql, _is_internal=True)
+            truncate_sql = "TRUNCATE TABLE identifier(?) /* Python:snowflake.connector.pandas_tools.write_pandas() */"
+            params = (target_table_location,)
+            logger.debug(f"truncating table with '{truncate_sql}'. params: %s", params)
+            cursor.execute(
+                truncate_sql,
+                _is_internal=True,
+                _force_qmark_paramstyle=True,
+                params=params,
+                num_statements=1,
+            )
 
+        copy_stage_location = "@" + stage_location.replace("'", "\\'")
         copy_into_sql = (
-            f"COPY INTO {target_table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+            f"COPY INTO identifier(?) /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
             f"({columns}) "
-            f"FROM (SELECT {parquet_columns} FROM @{stage_location}) "
+            f"FROM (SELECT {parquet_columns} FROM '{copy_stage_location}') "
             f"FILE_FORMAT=("
             f"TYPE=PARQUET "
+            f"USE_VECTORIZED_SCANNER={use_vectorized_scanner} "
             f"COMPRESSION={compression_map[compression]}"
-            f"{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''}"
+            f"{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite or infer_schema else ''}"
             f"{sql_use_logical_type}"
             f") "
-            f"PURGE=TRUE ON_ERROR={on_error}"
+            f"PURGE=TRUE ON_ERROR=?"
         )
-        logger.debug(f"copying into with '{copy_into_sql}'")
-        copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()
+        params = (
+            target_table_location,
+            on_error,
+        )
+        logger.debug(f"copying into with '{copy_into_sql}'. params: %s", params)
+        copy_results = cursor.execute(
+            copy_into_sql,
+            _is_internal=True,
+            _force_qmark_paramstyle=True,
+            params=params,
+            num_statements=1,
+        ).fetchall()
 
         if overwrite and auto_create_table:
             original_table_location = build_location_helper(
@@ -445,9 +615,16 @@ def write_pandas(
                 quote_identifiers=quote_identifiers,
             )
             drop_object(original_table_location, "table")
-            rename_table_sql = f"ALTER TABLE {target_table_location} RENAME TO {original_table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */"
-            logger.debug(f"rename table with '{rename_table_sql}'")
-            cursor.execute(rename_table_sql, _is_internal=True)
+            rename_table_sql = "ALTER TABLE identifier(?) RENAME TO identifier(?) /* Python:snowflake.connector.pandas_tools.write_pandas() */"
+            params = (target_table_location, original_table_location)
+            logger.debug(f"rename table with '{rename_table_sql}'. params: %s", params)
+            cursor.execute(
+                rename_table_sql,
+                _is_internal=True,
+                _force_qmark_paramstyle=True,
+                params=params,
+                num_statements=1,
+            )
     except ProgrammingError:
         if overwrite and auto_create_table:
             # drop table only if we created a new one with a random name

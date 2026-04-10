@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import logging
@@ -29,6 +25,8 @@ class TelemetryField(Enum):
     TIME_DOWNLOADING_CHUNKS = "client_time_downloading_chunks"
     TIME_PARSING_CHUNKS = "client_time_parsing_chunks"
     SQL_EXCEPTION = "client_sql_exception"
+    OCSP_EXCEPTION = "client_ocsp_exception"
+    HTTP_EXCEPTION = "client_http_exception"
     GET_PARTITIONS_USED = "client_get_partitions_used"
     EMPTY_SEQ_INTERPOLATION = "client_pyformat_empty_seq_interpolation"
     # fetch_pandas_* usage
@@ -41,6 +39,9 @@ class TelemetryField(Enum):
     PANDAS_WRITE = "client_write_pandas"
     # imported packages along with client
     IMPORTED_PACKAGES = "client_imported_packages"
+    # Core import
+    CORE_IMPORT = "mini_core_import"
+    NANOARROW_IMPORT = "nanoarrow_import"
     # multi-statement usage
     MULTI_STATEMENT = "client_multi_statement_query"
     # Keys for telemetry data sent through either in-band or out-of-band telemetry
@@ -157,7 +158,7 @@ class TelemetryClient:
         except Exception:
             logger.warning("Failed to add log to telemetry.", exc_info=True)
 
-    def send_batch(self) -> None:
+    def send_batch(self, retry: bool = False) -> None:
         if self.is_closed:
             raise Exception("Attempted to send batch when TelemetryClient is closed")
         elif not self._enabled:
@@ -188,6 +189,7 @@ class TelemetryClient:
                 method="post",
                 client=None,
                 timeout=5,
+                _no_retry=not retry,
             )
             if not ret["success"]:
                 logger.info(
@@ -206,11 +208,10 @@ class TelemetryClient:
     def is_closed(self) -> bool:
         return self._rest is None
 
-    def close(self, send_on_close: bool = True) -> None:
+    def close(self, retry: bool = False) -> None:
         if not self.is_closed:
             logger.debug("Closing telemetry client.")
-            if send_on_close:
-                self.send_batch()
+            self.send_batch(retry=retry)
             self._rest = None
 
     def disable(self) -> None:

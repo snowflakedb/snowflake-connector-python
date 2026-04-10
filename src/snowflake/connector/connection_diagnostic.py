@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
@@ -23,6 +19,8 @@ import OpenSSL
 
 from .compat import IS_WINDOWS, urlparse
 from .cursor import SnowflakeCursor
+from .session_manager import SessionManager, SessionManagerFactory
+from .url_util import extract_top_level_domain_from_hostname
 from .vendored import urllib3
 
 logger = getLogger(__name__)
@@ -44,7 +42,7 @@ def _decode_dict(d: dict[str, dict[str, Any]]):
     return result
 
 
-def _is_list_of_json_objects(allowlist: List[Dict[str, Any]]):
+def _is_list_of_json_objects(allowlist: list[dict[str, Any]]):
     if isinstance(allowlist, list) and all(
         isinstance(item, dict) for item in allowlist
     ):
@@ -72,6 +70,7 @@ class ConnectionDiagnostic:
         proxy_port: str | None = None,
         proxy_user: str | None = None,
         proxy_password: str | None = None,
+        session_manager: SessionManager | None = None,
     ) -> None:
         self.account = account
         self.host = host
@@ -89,15 +88,21 @@ class ConnectionDiagnostic:
         self.__append_message(
             host_type, f"Host based on specified account: {self.host}"
         )
-        if ".com.snowflakecomputing.com" in self.host:
-            self.host = host.split(".com.snow", 1)[0] + ".com"
+
+        top_level_domain = extract_top_level_domain_from_hostname(host)
+        if (
+            f".{top_level_domain}.snowflakecomputing.{top_level_domain}" in self.host
+        ):  # repeated domain name pattern
+            self.host = (
+                host.split(f".{top_level_domain}.snow", 1)[0] + f".{top_level_domain}"
+            )
             logger.warning(
-                f"Account should not have snowflakecomputing.com in it. You provided {host}.  "
+                f"Account should not have snowflakecomputing.{top_level_domain} in it. You provided {host}.  "
                 f"Continuing with fixed host."
             )
             self.__append_message(
                 host_type,
-                f"We removed extra .snowflakecomputing.com and will continue with host: "
+                f"We removed extra .snowflakecomputing.{top_level_domain} and will continue with host: "
                 f"{self.host}",
             )
         else:
@@ -183,10 +188,17 @@ class ConnectionDiagnostic:
             self.ocsp_urls.append(f"ocsp.{self.host}")
             self.allowlist_sql = "select system$allowlist_privatelink();"
         else:
-            self.ocsp_urls.append("ocsp.snowflakecomputing.com")
+            self.ocsp_urls.append(f"ocsp.snowflakecomputing.{top_level_domain}")
 
         self.allowlist_retrieval_success: bool = False
         self.cursor: SnowflakeCursor | None = None
+
+        # Use a non-pooled SessionManager—clone the given one or create a fresh instance if not supplied (should only happen in tests).
+        self._session_manager = (
+            session_manager.clone(use_pooling=False)
+            if session_manager
+            else SessionManagerFactory.get_manager(use_pooling=False)
+        )
 
     def __parse_proxy(self, proxy_url: str) -> tuple[str, str, str, str]:
         parsed = urlparse(proxy_url)
@@ -228,6 +240,10 @@ class ConnectionDiagnostic:
 
                 context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                 context.load_verify_locations(certifi.where())
+                # Best-effort: enable partial-chain when supported
+                _partial_flag = getattr(ssl, "VERIFY_X509_PARTIAL_CHAIN", 0)
+                if _partial_flag and hasattr(context, "verify_flags"):
+                    context.verify_flags |= _partial_flag
                 sock = context.wrap_socket(conn, server_hostname=host)
                 certificate = ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
                 http_request = f"""GET / {host}:{port} HTTP/1.1\r\n
@@ -561,28 +577,33 @@ class ConnectionDiagnostic:
 
         try:
             # Using a URL that does not exist is a check for a transparent proxy
-            cert_reqs = "CERT_NONE"
             urllib3.disable_warnings()
-            if self.proxy_host is None:
-                http = urllib3.PoolManager(cert_reqs=cert_reqs)
-            else:
-                default_headers = urllib3.util.make_headers(
-                    proxy_basic_auth=f"{self.proxy_user}:{self.proxy_password}"
-                )
-                http = urllib3.ProxyManager(
-                    os.environ["HTTPS_PROXY"],
-                    proxy_headers=default_headers,
-                    timeout=10.0,
-                    cert_reqs=cert_reqs,
-                )
-            resp = http.request(
-                "GET", "https://ireallyshouldnotexistatallanywhere.com", timeout=10.0
+
+            request_kwargs = {
+                "timeout": 10,
+                "verify": False,  # skip cert validation – same as cert_reqs=CERT_NONE
+            }
+
+            # If an explicit proxy was specified via constructor params, pass it
+            # explicitly so that the request goes through the same path as the
+            # legacy ProxyManager code (inc. basic-auth header).
+            if self.proxy_host is not None:
+                if self.proxy_user is not None:
+                    proxy_url = f"http://{self.proxy_user}:{self.proxy_password}@{self.proxy_host}:{self.proxy_port}"
+                else:
+                    proxy_url = f"http://{self.proxy_host}:{self.proxy_port}"
+
+                request_kwargs["proxies"] = {"http": proxy_url, "https": proxy_url}
+
+            resp = self._session_manager.get(
+                "https://nonexistentdomain.invalid", use_pooling=False, **request_kwargs
             )
 
-            # squid does not throw exception.  Check HTML
-            if "does not exist" in str(resp.data.decode("utf-8")):
+            # squid does not throw exception. Check response body
+            if "does not exist" in resp.text:
                 self.__append_message(
-                    host_type, "It is likely there is a proxy based on HTTP response."
+                    host_type,
+                    "It is likely there is a proxy based on HTTP response.",
                 )
         except Exception as e:
             if "NewConnectionError" in str(e):
@@ -729,11 +750,10 @@ class ConnectionDiagnostic:
                                     f"wpad: {wpad}",
                                 )
                                 # Let's see if we can get the wpad proxy info
-                                http = urllib3.PoolManager(timeout=10.0)
                                 url = f"http://{wpad}/wpad.dat"
                                 try:
-                                    resp = http.request("GET", url)
-                                    proxy_info = resp.data.decode("utf-8")
+                                    resp = self._session_manager.get(url, timeout=10)
+                                    proxy_info = resp.text
                                     self.__append_message(
                                         host_type,
                                         f"Wpad request returned possible proxy: {proxy_info}",

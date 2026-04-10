@@ -1,20 +1,11 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
-import codecs
 import copy
 import json
 import logging
-import tempfile
-import time
 import uuid
 from datetime import datetime, timezone
-from os import getenv, makedirs, mkdir, path, remove, removedirs, rmdir
-from os.path import expanduser
-from threading import Lock, Thread
+from threading import Thread
 from typing import TYPE_CHECKING, Any, Callable
 
 from cryptography.hazmat.backends import default_backend
@@ -26,7 +17,12 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
 )
 
-from ..compat import IS_LINUX, IS_MACOS, IS_WINDOWS, urlencode
+from .._utils import (
+    build_minicore_usage_for_session,
+    get_application_path,
+    get_spcs_token,
+)
+from ..compat import urlencode
 from ..constants import (
     DAY_IN_SECONDS,
     HTTP_HEADER_ACCEPT,
@@ -56,53 +52,26 @@ from ..network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
+    OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
-from ..options import installed_keyring, keyring
+from ..os_details import get_os_details
+from ..platform_detection import detect_platforms
+from ..session_manager import BaseHttpConfig, HttpConfig
+from ..session_manager import SessionManager as SyncSessionManager
+from ..session_manager import SessionManagerFactory
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+from ..token_cache import TokenCache, TokenKey, TokenType
+from ..util_text import expand_tilde
 from ..version import VERSION
+from .no_auth import AuthNoAuth
+from .oauth import AuthByOAuth
 
 if TYPE_CHECKING:
     from . import AuthByPlugin
 
 logger = logging.getLogger(__name__)
-
-
-# Cache directory
-CACHE_ROOT_DIR = (
-    getenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR")
-    or expanduser("~")
-    or tempfile.gettempdir()
-)
-if IS_WINDOWS:
-    CACHE_DIR = path.join(CACHE_ROOT_DIR, "AppData", "Local", "Snowflake", "Caches")
-elif IS_MACOS:
-    CACHE_DIR = path.join(CACHE_ROOT_DIR, "Library", "Caches", "Snowflake")
-else:
-    CACHE_DIR = path.join(CACHE_ROOT_DIR, ".cache", "snowflake")
-
-if not path.exists(CACHE_DIR):
-    try:
-        makedirs(CACHE_DIR, mode=0o700)
-    except Exception as ex:
-        logger.debug("cannot create a cache directory: [%s], err=[%s]", CACHE_DIR, ex)
-        CACHE_DIR = None
-logger.debug("cache directory: %s", CACHE_DIR)
-
-# temporary credential cache
-TEMPORARY_CREDENTIAL: dict[str, dict[str, str | None]] = {}
-
-TEMPORARY_CREDENTIAL_LOCK = Lock()
-
-# temporary credential cache file name
-TEMPORARY_CREDENTIAL_FILE = "temporary_credential.json"
-TEMPORARY_CREDENTIAL_FILE = (
-    path.join(CACHE_DIR, TEMPORARY_CREDENTIAL_FILE) if CACHE_DIR else ""
-)
-
-# temporary credential cache lock directory name
-TEMPORARY_CREDENTIAL_FILE_LOCK = TEMPORARY_CREDENTIAL_FILE + ".lck"
 
 # keyring
 KEYRING_SERVICE_NAME = "net.snowflake.temporary_token"
@@ -112,12 +81,37 @@ KEYRING_DRIVER_NAME = "SNOWFLAKE-PYTHON-DRIVER"
 ID_TOKEN = "ID_TOKEN"
 MFA_TOKEN = "MFATOKEN"
 
+AUTHENTICATION_REQUEST_KEY_WHITELIST = {
+    "ACCOUNT_NAME",
+    "AUTHENTICATOR",
+    "CLIENT_APP_ID",
+    "CLIENT_APP_VERSION",
+    "CLIENT_ENVIRONMENT",
+    "EXT_AUTHN_DUO_METHOD",
+    "LOGIN_NAME",
+    "SECONDARY_ROLES",
+    "SESSION_PARAMETERS",
+    "SVN_REVISION",
+}
+
 
 class Auth:
     """Snowflake Authenticator."""
 
     def __init__(self, rest) -> None:
         self._rest = rest
+        self._token_cache: TokenCache | None = None
+
+    def _add_spcs_token_to_body(self, body: dict[Any, Any]) -> None:
+        """Inject SPCS_TOKEN into the login request body when available.
+
+        The token is read from /snowflake/session/spcs_token when
+        SNOWFLAKE_RUNNING_INSIDE_SPCS is set.
+        """
+        spcs_token = get_spcs_token()
+        if spcs_token is not None:
+            # Ensure the \"data\" envelope exists and add the token.
+            body.setdefault("data", {})["SPCS_TOKEN"] = spcs_token
 
     @staticmethod
     def base_auth_data(
@@ -127,10 +121,22 @@ class Auth:
         internal_application_name,
         internal_application_version,
         ocsp_mode,
+        cert_revocation_check_mode,
         login_timeout: int | None = None,
         network_timeout: int | None = None,
         socket_timeout: int | None = None,
+        platform_detection_timeout_seconds: float | None = None,
+        session_manager: SyncSessionManager | None = None,
+        http_config: BaseHttpConfig | None = None,
     ):
+        # Create sync SessionManager for platform detection if config is provided
+        # Platform detection runs in threads and uses sync SessionManager
+        if http_config is not None and session_manager is None:
+            # Extract base fields (automatically excludes subclass-specific fields)
+            # Note: It won't be possible to pass adapter_factory from outer async-code to this part of code
+            sync_config = HttpConfig(**http_config.to_base_dict())
+            session_manager = SessionManagerFactory.get_manager(config=sync_config)
+
         return {
             "data": {
                 "CLIENT_APP_ID": internal_application_name,
@@ -140,16 +146,24 @@ class Auth:
                 "LOGIN_NAME": user,
                 "CLIENT_ENVIRONMENT": {
                     "APPLICATION": application,
+                    "APPLICATION_PATH": get_application_path(),
                     "OS": OPERATING_SYSTEM,
                     "OS_VERSION": PLATFORM,
                     "PYTHON_VERSION": PYTHON_VERSION,
                     "PYTHON_RUNTIME": IMPLEMENTATION,
                     "PYTHON_COMPILER": COMPILER,
                     "OCSP_MODE": ocsp_mode.name,
+                    "CERT_REVOCATION_CHECK_MODE": cert_revocation_check_mode,
                     "TRACING": logger.getEffectiveLevel(),
                     "LOGIN_TIMEOUT": login_timeout,
                     "NETWORK_TIMEOUT": network_timeout,
                     "SOCKET_TIMEOUT": socket_timeout,
+                    "PLATFORM": detect_platforms(
+                        platform_detection_timeout_seconds=platform_detection_timeout_seconds,
+                        session_manager=session_manager.clone(max_retries=0),
+                    ),
+                    "OS_DETAILS": get_os_details(),
+                    **build_minicore_usage_for_session(),
                 },
             },
         }
@@ -172,6 +186,10 @@ class Auth:
         timeout: int | None = None,
     ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
+
+        # For no-auth connection, authentication is no-op, and we can return early here.
+        if isinstance(auth_instance, AuthNoAuth):
+            return {}
 
         if timeout is None:
             timeout = auth_instance.timeout
@@ -198,14 +216,18 @@ class Auth:
             self._rest._connection._internal_application_name,
             self._rest._connection._internal_application_version,
             self._rest._connection._ocsp_mode(),
-            self._rest._connection._login_timeout,
+            self._rest._connection.cert_revocation_check_mode,
+            self._rest._connection.login_timeout,
             self._rest._connection._network_timeout,
             self._rest._connection._socket_timeout,
+            self._rest._connection.platform_detection_timeout_seconds,
+            session_manager=self._rest.session_manager.clone(use_pooling=False),
         )
 
         body = copy.deepcopy(body_template)
+        # Add SPCS token if present, independent of authenticator type.
+        self._add_spcs_token_to_body(body)
         # updating request body
-        logger.debug("assertion content: %s", auth_instance.assertion_content)
         auth_instance.update_body(body)
 
         logger.debug(
@@ -241,9 +263,17 @@ class Auth:
         if session_parameters:
             body["data"]["SESSION_PARAMETERS"] = session_parameters
 
+        # Add secondary_roles connection parameter if specified
+        secondary_roles = getattr(self._rest._connection, "_secondary_roles", None)
+        if secondary_roles and isinstance(secondary_roles, str):
+            body["data"]["SECONDARY_ROLES"] = secondary_roles.upper()
+
         logger.debug(
             "body['data']: %s",
-            {k: v for (k, v) in body["data"].items() if k != "PASSWORD"},
+            {
+                k: v if k in AUTHENTICATION_REQUEST_KEY_WHITELIST else "******"
+                for (k, v) in body["data"].items()
+            },
         )
 
         try:
@@ -320,6 +350,8 @@ class Auth:
             ):
                 body = copy.deepcopy(body_template)
                 body["inFlightCtx"] = ret["data"].get("inFlightCtx")
+                # Add SPCS token to the follow-up login request as well.
+                self._add_spcs_token_to_body(body)
                 # final request to get tokens
                 ret = self._rest._post_request(
                     url,
@@ -360,6 +392,8 @@ class Auth:
                     else None
                 )
                 body["data"]["CHOSEN_NEW_PASSWORD"] = password_callback()
+                # Add SPCS token to the password change login request as well.
+                self._add_spcs_token_to_body(body)
                 # New Password input
                 ret = self._rest._post_request(
                     url,
@@ -375,7 +409,21 @@ class Auth:
                 # clear stored id_token if failed to connect because of id_token
                 # raise an exception for reauth without id_token
                 self._rest.id_token = None
-                delete_temporary_credential(self._rest._host, user, ID_TOKEN)
+                self._delete_temporary_credential(
+                    self._rest._host, user, TokenType.ID_TOKEN
+                )
+                raise ReauthenticationRequest(
+                    ProgrammingError(
+                        msg=ret["message"],
+                        errno=int(errno),
+                        sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                    )
+                )
+            elif (errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE) and (
+                # SNOW-2329031: OAuth v1.0 does not support token renewal,
+                # for backward compatibility, we do not raise an exception here
+                not isinstance(auth_instance, AuthByOAuth)
+            ):
                 raise ReauthenticationRequest(
                     ProgrammingError(
                         msg=ret["message"],
@@ -397,7 +445,9 @@ class Auth:
             from . import AuthByUsrPwdMfa
 
             if isinstance(auth_instance, AuthByUsrPwdMfa):
-                delete_temporary_credential(self._rest._host, user, MFA_TOKEN)
+                self._delete_temporary_credential(
+                    self._rest._host, user, TokenType.MFA_TOKEN
+                )
             Error.errorhandler_wrapper(
                 self._rest._connection,
                 None,
@@ -485,36 +535,9 @@ class Auth:
         self,
         host: str,
         user: str,
-        cred_type: str,
+        cred_type: TokenType,
     ) -> str | None:
-        cred = None
-        if IS_MACOS or IS_WINDOWS:
-            if not installed_keyring:
-                logger.debug(
-                    "Dependency 'keyring' is not installed, cannot cache id token. You might experience "
-                    "multiple authentication pop ups while using ExternalBrowser Authenticator. To avoid "
-                    "this please install keyring module using the following command : pip install "
-                    "snowflake-connector-python[secure-local-storage]"
-                )
-                return None
-            try:
-                cred = keyring.get_password(
-                    build_temporary_credential_name(host, user, cred_type), user.upper()
-                )
-            except keyring.errors.KeyringError as ke:
-                logger.error(
-                    "Could not retrieve {} from secure storage : {}".format(
-                        cred_type, str(ke)
-                    )
-                )
-        elif IS_LINUX:
-            read_temporary_credential_file()
-            cred = TEMPORARY_CREDENTIAL.get(host.upper(), {}).get(
-                build_temporary_credential_name(host, user, cred_type)
-            )
-        else:
-            logger.debug("OS not supported for Local Secure Storage")
-        return cred
+        return self.get_token_cache().retrieve(TokenKey(host, user, cred_type))
 
     def read_temporary_credentials(
         self,
@@ -522,25 +545,35 @@ class Auth:
         user: str,
         session_parameters: dict[str, Any],
     ) -> None:
+        """Attempt to load cached credentials to skip interactive authentication.
+
+        SSO (ID_TOKEN): If present, avoids opening browser for external authentication.
+            Controlled by client_store_temporary_credential parameter.
+
+        MFA (MFA_TOKEN): If present, skips MFA prompt on next connection.
+            Controlled by client_request_mfa_token parameter.
+
+        If cached tokens are expired/invalid, they're deleted and normal auth proceeds.
+        """
         if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
             self._rest.id_token = self._read_temporary_credential(
                 host,
                 user,
-                ID_TOKEN,
+                TokenType.ID_TOKEN,
             )
 
         if session_parameters.get(PARAMETER_CLIENT_REQUEST_MFA_TOKEN, False):
             self._rest.mfa_token = self._read_temporary_credential(
                 host,
                 user,
-                MFA_TOKEN,
+                TokenType.MFA_TOKEN,
             )
 
     def _write_temporary_credential(
         self,
         host: str,
         user: str,
-        cred_type: str,
+        cred_type: TokenType,
         cred: str | None,
     ) -> None:
         if not cred:
@@ -548,29 +581,7 @@ class Auth:
                 "no credential is given when try to store temporary credential"
             )
             return
-        if IS_MACOS or IS_WINDOWS:
-            if not installed_keyring:
-                logger.debug(
-                    "Dependency 'keyring' is not installed, cannot cache id token. You might experience "
-                    "multiple authentication pop ups while using ExternalBrowser Authenticator. To avoid "
-                    "this please install keyring module using the following command : pip install "
-                    "snowflake-connector-python[secure-local-storage]"
-                )
-                return
-            try:
-                keyring.set_password(
-                    build_temporary_credential_name(host, user, cred_type),
-                    user.upper(),
-                    cred,
-                )
-            except keyring.errors.KeyringError as ke:
-                logger.error("Could not store id_token to keyring, %s", str(ke))
-        elif IS_LINUX:
-            write_temporary_credential_file(
-                host, build_temporary_credential_name(host, user, cred_type), cred
-            )
-        else:
-            logger.debug("OS not supported for Local Secure Storage")
+        self.get_token_cache().store(TokenKey(host, user, cred_type), cred)
 
     def write_temporary_credentials(
         self,
@@ -579,6 +590,13 @@ class Auth:
         session_parameters: dict[str, Any],
         response: dict[str, Any],
     ) -> None:
+        """Cache credentials received from successful authentication for future use.
+
+        Tokens are only cached if:
+        1. Server returned the token in response (server-side caching must be enabled)
+        2. Client has caching enabled via session parameters
+        3. User consented to caching (consent_cache_id_token for ID tokens)
+        """
         if (
             self._rest._connection.auth_class.consent_cache_id_token
             and session_parameters.get(
@@ -586,170 +604,25 @@ class Auth:
             )
         ):
             self._write_temporary_credential(
-                host, user, ID_TOKEN, response["data"].get("idToken")
+                host, user, TokenType.ID_TOKEN, response["data"].get("idToken")
             )
 
         if session_parameters.get(PARAMETER_CLIENT_REQUEST_MFA_TOKEN, False):
             self._write_temporary_credential(
-                host, user, MFA_TOKEN, response["data"].get("mfaToken")
+                host, user, TokenType.MFA_TOKEN, response["data"].get("mfaToken")
             )
 
+    def _delete_temporary_credential(
+        self, host: str, user: str, cred_type: TokenType
+    ) -> None:
+        self.get_token_cache().remove(TokenKey(host, user, cred_type))
 
-def flush_temporary_credentials() -> None:
-    """Flush temporary credentials in memory into disk. Need to hold TEMPORARY_CREDENTIAL_LOCK."""
-    global TEMPORARY_CREDENTIAL
-    global TEMPORARY_CREDENTIAL_FILE
-    for _ in range(10):
-        if lock_temporary_credential_file():
-            break
-        time.sleep(1)
-    else:
-        logger.debug(
-            "The lock file still persists after the maximum wait time."
-            "Will ignore it and write temporary credential file: %s",
-            TEMPORARY_CREDENTIAL_FILE,
-        )
-    try:
-        with open(
-            TEMPORARY_CREDENTIAL_FILE, "w", encoding="utf-8", errors="ignore"
-        ) as f:
-            json.dump(TEMPORARY_CREDENTIAL, f)
-    except Exception as ex:
-        logger.debug(
-            "Failed to write a credential file: " "file=[%s], err=[%s]",
-            TEMPORARY_CREDENTIAL_FILE,
-            ex,
-        )
-    finally:
-        unlock_temporary_credential_file()
-
-
-def write_temporary_credential_file(host: str, cred_name: str, cred) -> None:
-    """Writes temporary credential file when OS is Linux."""
-    if not CACHE_DIR:
-        # no cache is enabled
-        return
-    global TEMPORARY_CREDENTIAL
-    global TEMPORARY_CREDENTIAL_LOCK
-    with TEMPORARY_CREDENTIAL_LOCK:
-        # update the cache
-        host_data = TEMPORARY_CREDENTIAL.get(host.upper(), {})
-        host_data[cred_name.upper()] = cred
-        TEMPORARY_CREDENTIAL[host.upper()] = host_data
-        flush_temporary_credentials()
-
-
-def read_temporary_credential_file():
-    """Reads temporary credential file when OS is Linux."""
-    if not CACHE_DIR:
-        # no cache is enabled
-        return
-
-    global TEMPORARY_CREDENTIAL
-    global TEMPORARY_CREDENTIAL_LOCK
-    global TEMPORARY_CREDENTIAL_FILE
-    with TEMPORARY_CREDENTIAL_LOCK:
-        for _ in range(10):
-            if lock_temporary_credential_file():
-                break
-            time.sleep(1)
-        else:
-            logger.debug(
-                "The lock file still persists. Will ignore and "
-                "write the temporary credential file: %s",
-                TEMPORARY_CREDENTIAL_FILE,
+    def get_token_cache(self) -> TokenCache:
+        if self._token_cache is None:
+            self._token_cache = TokenCache.make(
+                skip_file_permissions_check=self._rest._connection._unsafe_skip_file_permissions_check
             )
-        try:
-            with codecs.open(
-                TEMPORARY_CREDENTIAL_FILE, "r", encoding="utf-8", errors="ignore"
-            ) as f:
-                TEMPORARY_CREDENTIAL = json.load(f)
-            return TEMPORARY_CREDENTIAL
-        except Exception as ex:
-            logger.debug(
-                "Failed to read a credential file. The file may not"
-                "exists: file=[%s], err=[%s]",
-                TEMPORARY_CREDENTIAL_FILE,
-                ex,
-            )
-        finally:
-            unlock_temporary_credential_file()
-
-
-def lock_temporary_credential_file() -> bool:
-    global TEMPORARY_CREDENTIAL_FILE_LOCK
-    try:
-        mkdir(TEMPORARY_CREDENTIAL_FILE_LOCK)
-        return True
-    except OSError:
-        logger.debug(
-            "Temporary cache file lock already exists. Other "
-            "process may be updating the temporary "
-        )
-        return False
-
-
-def unlock_temporary_credential_file() -> bool:
-    global TEMPORARY_CREDENTIAL_FILE_LOCK
-    try:
-        rmdir(TEMPORARY_CREDENTIAL_FILE_LOCK)
-        return True
-    except OSError:
-        logger.debug("Temporary cache file lock no longer exists.")
-        return False
-
-
-def delete_temporary_credential(host, user, cred_type) -> None:
-    if (IS_MACOS or IS_WINDOWS) and installed_keyring:
-        try:
-            keyring.delete_password(
-                build_temporary_credential_name(host, user, cred_type), user.upper()
-            )
-        except Exception as ex:
-            logger.error("Failed to delete credential in the keyring: err=[%s]", ex)
-    elif IS_LINUX:
-        temporary_credential_file_delete_password(host, user, cred_type)
-
-
-def temporary_credential_file_delete_password(host, user, cred_type) -> None:
-    """Remove credential from temporary credential file when OS is Linux."""
-    if not CACHE_DIR:
-        # no cache is enabled
-        return
-    global TEMPORARY_CREDENTIAL
-    global TEMPORARY_CREDENTIAL_LOCK
-    with TEMPORARY_CREDENTIAL_LOCK:
-        # update the cache
-        host_data = TEMPORARY_CREDENTIAL.get(host.upper(), {})
-        host_data.pop(build_temporary_credential_name(host, user, cred_type), None)
-        if not host_data:
-            TEMPORARY_CREDENTIAL.pop(host.upper(), None)
-        else:
-            TEMPORARY_CREDENTIAL[host.upper()] = host_data
-        flush_temporary_credentials()
-
-
-def delete_temporary_credential_file() -> None:
-    """Deletes temporary credential file and its lock file."""
-    global TEMPORARY_CREDENTIAL_FILE
-    try:
-        remove(TEMPORARY_CREDENTIAL_FILE)
-    except Exception as ex:
-        logger.debug(
-            "Failed to delete a credential file: " "file=[%s], err=[%s]",
-            TEMPORARY_CREDENTIAL_FILE,
-            ex,
-        )
-    try:
-        removedirs(TEMPORARY_CREDENTIAL_FILE_LOCK)
-    except Exception as ex:
-        logger.debug("Failed to delete credential lock file: err=[%s]", ex)
-
-
-def build_temporary_credential_name(host, user, cred_type) -> str:
-    return "{host}:{user}:{driver}:{cred}".format(
-        host=host.upper(), user=user.upper(), driver=KEYRING_DRIVER_NAME, cred=cred_type
-    )
+        return self._token_cache
 
 
 def get_token_from_private_key(
@@ -769,14 +642,16 @@ def get_token_from_private_key(
     from . import AuthByKeyPair
 
     auth_instance = AuthByKeyPair(
-        private_key,
-        DAY_IN_SECONDS,
+        private_key=private_key,
+        lifetime_in_seconds=DAY_IN_SECONDS,
     )  # token valid for 24 hours
     return auth_instance.prepare(account=account, user=user)
 
 
 def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
     """Helper function to generate the public key fingerprint from the private key file"""
+    private_key_file = expand_tilde(private_key_file)
+
     with open(private_key_file, "rb") as key:
         p_key = load_pem_private_key(
             key.read(), password=password.encode(), backend=default_backend()

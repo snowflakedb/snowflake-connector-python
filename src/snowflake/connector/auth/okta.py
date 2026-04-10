@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import json
@@ -170,8 +166,12 @@ class AuthByOkta(AuthByPlugin):
             conn._internal_application_name,
             conn._internal_application_version,
             conn._ocsp_mode(),
-            conn._login_timeout,
-            conn._network_timeout,
+            conn.cert_revocation_check_mode,
+            conn.login_timeout,
+            conn.network_timeout,
+            conn.socket_timeout,
+            conn.platform_detection_timeout_seconds,
+            session_manager=conn._session_manager.clone(use_pooling=False),
         )
 
         body["data"]["AUTHENTICATOR"] = authenticator
@@ -239,7 +239,7 @@ class AuthByOkta(AuthByPlugin):
             "username": user,
             "password": password,
         }
-        ret = conn._rest.fetch(
+        ret = conn.rest.fetch(
             "post",
             token_url,
             headers,
@@ -289,7 +289,7 @@ class AuthByOkta(AuthByPlugin):
                     HTTP_HEADER_ACCEPT: "*/*",
                 }
                 remaining_timeout = timeout_time - time.time() if timeout_time else None
-                response_html = conn._rest.fetch(
+                response_html = conn.rest.fetch(
                     "get",
                     sso_url,
                     headers,

@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import os
@@ -39,7 +35,6 @@ def s3_test_data(request, conn_cnx, db_parameters):
         return conn_cnx(
             user=db_parameters["user"],
             account=db_parameters["account"],
-            password=db_parameters["password"],
         )
 
     return create_test_data(request, db_parameters, connection)
