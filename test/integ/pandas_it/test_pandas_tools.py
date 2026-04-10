@@ -972,7 +972,12 @@ def test_all_pandas_types(
     with conn_cnx() as cnx:
         try:
             success, nchunks, nrows, _ = write_pandas(
-                cnx, df, table_name, quote_identifiers=True, auto_create_table=True
+                cnx,
+                df,
+                table_name,
+                quote_identifiers=True,
+                auto_create_table=True,
+                use_logical_type=True,
             )
 
             # Check write_pandas output
@@ -980,7 +985,8 @@ def test_all_pandas_types(
             assert nrows == len(df_data)
             assert nchunks == 1
             # Check table's contents
-            result = cnx.cursor(DictCursor).execute(select_sql).fetchall()
+            cur = cnx.cursor(DictCursor).execute(select_sql)
+            result = cur.fetchall()
             for row, data in zip(result, df_data):
                 for c in columns:
                     # TODO: check values of timestamp data after SNOW-667350 is fixed

@@ -9,6 +9,9 @@ MODULES_TO_MASK_LOGS_NAMES = [
     "snowflake.connector.vendored.urllib3",
     "botocore",
     "boto3",
+    "aiohttp",  # this should not break even if [aio] extra is not installed - in such case logger will remain unused
+    "aiobotocore",
+    "aioboto3",
 ]
 # TODO: after migration to the external urllib3 from the vendored one (SNOW-2041970),
 #  we should change filters here immediately to the below module's logger:

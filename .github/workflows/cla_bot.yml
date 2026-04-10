@@ -25,5 +25,5 @@ jobs:
           path-to-document: 'https://github.com/snowflakedb/CLA/blob/main/README.md'
           branch: 'main'
           allowlist: 'dependabot[bot],github-actions,Jenkins User,sfc-gh-snyk-sca-sa'
-          remote-organization-name: 'snowflakedb'
+          remote-organization-name: 'snowflake-eng'
           remote-repository-name: 'cla-db'

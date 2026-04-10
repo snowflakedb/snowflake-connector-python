@@ -25,7 +25,7 @@ from .constants import OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT, OCS
 from .crl import CertRevocationCheckMode, CRLConfig, CRLValidator
 from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
-from .session_manager import SessionManager
+from .session_manager import SessionManager, SessionManagerFactory
 from .vendored.urllib3 import connection as connection_
 from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext, WrappedSocket
 from .vendored.urllib3.util import ssl_ as ssl_
@@ -115,11 +115,15 @@ def get_current_session_manager(
     """
     sm_weak_ref = _CURRENT_SESSION_MANAGER.get()
     if sm_weak_ref is None:
-        return SessionManager() if create_default_if_missing else None
+        return (
+            SessionManagerFactory.get_manager() if create_default_if_missing else None
+        )
     context_session_manager = sm_weak_ref()
 
     if context_session_manager is None:
-        return SessionManager() if create_default_if_missing else None
+        return (
+            SessionManagerFactory.get_manager() if create_default_if_missing else None
+        )
 
     return context_session_manager.clone(**clone_kwargs)
 

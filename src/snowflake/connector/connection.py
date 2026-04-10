@@ -42,6 +42,8 @@ from ._query_context_cache import QueryContextCache
 from ._utils import (
     _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+    build_minicore_usage_for_telemetry,
+    build_nanoarrow_usage_for_telemetry,
 )
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
@@ -88,6 +90,7 @@ from .constants import (
 )
 from .converter import SnowflakeConverter
 from .crl import CRLConfig
+from .crl_cache import CRLCacheFactory
 from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor, SnowflakeCursorBase
 from .description import (
     CLIENT_NAME,
@@ -129,12 +132,17 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
-from .session_manager import HttpConfig, ProxySupportAdapterFactory, SessionManager
+from .session_manager import (
+    HttpConfig,
+    ProxySupportAdapterFactory,
+    SessionManager,
+    SessionManagerFactory,
+)
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
-from .util_text import construct_hostname, parse_account, split_statements
+from .util_text import construct_hostname, expand_tilde, parse_account, split_statements
 from .wif_util import AttestationProvider
 
 if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
@@ -165,6 +173,9 @@ def _get_private_bytes_from_file(
 ) -> bytes:
     if private_key_file_pwd is not None and isinstance(private_key_file_pwd, str):
         private_key_file_pwd = private_key_file_pwd.encode("utf-8")
+
+    private_key_file = expand_tilde(private_key_file)
+
     with open(private_key_file, "rb") as key:
         private_key = serialization.load_pem_private_key(
             key.read(),
@@ -199,6 +210,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "proxy_port": (None, (type(None), str)),  # snowflake
     "proxy_user": (None, (type(None), str)),  # snowflake
     "proxy_password": (None, (type(None), str)),  # snowflake
+    "no_proxy": (
+        None,
+        (type(None), str, Iterable),
+    ),  # hosts/ips to bypass proxy (str or iterable)
     "protocol": ("https", str),  # snowflake
     "warehouse": (None, (type(None), str)),  # snowflake
     "region": (None, (type(None), str)),  # snowflake
@@ -221,6 +236,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), bytes, str, RSAPrivateKey)),
+    "private_key_passphrase": (None, (type(None), bytes)),
     "private_key_file": (None, (type(None), str)),
     "private_key_file_pwd": (None, (type(None), str, bytes)),
     "token": (None, (type(None), str)),  # OAuth/JWT/PAT/OIDC Token
@@ -271,8 +287,13 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "support_negative_year": (True, bool),  # snowflake
     "log_max_query_length": (LOG_MAX_QUERY_LENGTH, int),  # snowflake
     "disable_request_pooling": (False, bool),  # snowflake
-    # enable temporary credential file for Linux, default false. Mac/Win will overlook this
+    # Cache SSO ID tokens to avoid repeated browser popups. Must be enabled on the server-side.
+    # Storage: keyring (macOS/Windows), file (Linux). Auto-enabled on macOS/Windows.
+    # Sets session PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL as well
     "client_store_temporary_credential": (False, bool),
+    # Cache MFA tokens to skip MFA prompts on reconnect. Must be enabled on the server-side.
+    # Storage: keyring (macOS/Windows), file (Linux). Auto-enabled on macOS/Windows.
+    # In driver, we extract this from session using PARAMETER_CLIENT_REQUEST_MFA_TOKEN.
     "client_request_mfa_token": (False, bool),
     "use_openssl_only": (
         True,
@@ -375,6 +396,11 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         # SNOW-1825621: OAUTH implementation
     ),
     "oauth_redirect_uri": ("http://127.0.0.1", str),
+    "oauth_socket_uri": (
+        "http://127.0.0.1",
+        str,
+        # SNOW-2194055: Separate server and redirect URIs in AuthHttpServer
+    ),
     "oauth_scope": (
         "",
         str,
@@ -456,6 +482,14 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), bool),
     ),  # Run CRL cache cleanup in the background
+    "crl_download_max_size": (
+        None,
+        (type(None), int),
+    ),  # Maximum CRL file size in bytes
+    "secondary_roles": (
+        None,
+        (type(None), str),
+    ),  # Secondary roles mode: ALL or NONE or no value
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -657,6 +691,8 @@ class SnowflakeConnection:
 
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
+        self._log_nanoarrow_import()
+        self._log_minicore_import()
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
@@ -767,6 +803,20 @@ class SnowflakeConnection:
         return self._crl_config.crl_cache_start_cleanup
 
     @property
+    def crl_download_max_size(self) -> int | None:
+        """Maximum CRL file size in bytes."""
+        if not self._crl_config:
+            return self._crl_download_max_size
+        return self._crl_config.crl_download_max_size
+
+    @property
+    def skip_file_permissions_check(self) -> bool | None:
+        """Whether to skip file permission checks for CRL cache files."""
+        if not self._crl_config:
+            return self._skip_file_permissions_check
+        return self._crl_config.skip_file_permissions_check
+
+    @property
     def session_id(self) -> int:
         return self._session_id
 
@@ -807,6 +857,10 @@ class SnowflakeConnection:
     @property
     def proxy_password(self) -> str | None:
         return self._proxy_password
+
+    @property
+    def no_proxy(self) -> str | Iterable | None:
+        return self._no_proxy
 
     @property
     def account(self) -> str:
@@ -1069,6 +1123,15 @@ class SnowflakeConnection:
 
         self._crl_config: CRLConfig = CRLConfig.from_connection(self)
 
+        no_proxy_csv_str = (
+            ",".join(str(x) for x in self.no_proxy)
+            if (
+                self.no_proxy is not None
+                and isinstance(self.no_proxy, Iterable)
+                and not isinstance(self.no_proxy, (str, bytes))
+            )
+            else self.no_proxy
+        )
         self._http_config = HttpConfig(
             adapter_factory=ProxySupportAdapterFactory(),
             use_pooling=(not self.disable_request_pooling),
@@ -1076,8 +1139,9 @@ class SnowflakeConnection:
             proxy_port=self.proxy_port,
             proxy_user=self.proxy_user,
             proxy_password=self.proxy_password,
+            no_proxy=no_proxy_csv_str,
         )
-        self._session_manager = SessionManager(self._http_config)
+        self._session_manager = SessionManagerFactory.get_manager(self._http_config)
 
         if self.enable_connection_diag:
             exceptions_dict = {}
@@ -1119,11 +1183,17 @@ class SnowflakeConnection:
         else:
             self.__open_connection()
 
+        # Register the connection in the pool after successful connection
+        _connections_registry.add_connection(self)
+
     def close(self, retry: bool = True) -> None:
         """Closes the connection."""
         # unregister to dereference connection object as it's already closed after the execution
         atexit.unregister(self._close_at_exit)
         try:
+            # Remove connection from the pool
+            _connections_registry.remove_connection(self)
+
             if not self.rest:
                 logger.debug("Rest object has been destroyed, cannot close session")
                 return
@@ -1135,18 +1205,28 @@ class SnowflakeConnection:
 
             # close telemetry first, since it needs rest to send remaining data
             logger.debug("closed")
-            self._telemetry.close(send_on_close=bool(retry and self.telemetry_enabled))
-            if (
-                self._all_async_queries_finished()
-                and not self._server_session_keep_alive
-            ):
-                logger.debug("No async queries seem to be running, deleting session")
-                self.rest.delete_session(retry=retry)
-            else:
-                logger.debug(
-                    "There are {} async queries still running, not deleting session".format(
-                        len(self._async_sfqids)
+            if self.telemetry_enabled:
+                self._telemetry.close(retry=retry)
+
+            if not self._server_session_keep_alive:
+                if self._all_async_queries_finished():
+                    logger.debug(
+                        "No async queries seem to be running, deleting session"
                     )
+                    self.rest.delete_session(retry=retry)
+                else:
+                    logger.debug(
+                        "There are {} async queries still running, not deleting session".format(
+                            len(self._async_sfqids)
+                        )
+                    )
+            else:
+                logger.info(
+                    "Parameter server_session_keep_alive was set to True - skipping session logout. "
+                    "If there are any not-finished queries in the current session (session_id: %s) - "
+                    "they will continue to live in Snowflake and consume credits until they finish. "
+                    "To cancel them use Monitoring tab in Snowsight or plain SQL.",
+                    self.session_id,
                 )
             self.rest.close()
             self._rest = None
@@ -1368,9 +1448,11 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
+                # Enable SSO credential caching
                 self._session_parameters[
                     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL
                 ] = (self._client_store_temporary_credential if IS_LINUX else True)
+                # Try to load cached ID token to avoid browser popup
                 auth.read_temporary_credentials(
                     self.host,
                     self.user,
@@ -1400,6 +1482,7 @@ class SnowflakeConnection:
 
             elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
                 private_key = self._private_key
+                private_key_passphrase = self._private_key_passphrase
 
                 if self._private_key_file:
                     private_key = _get_private_bytes_from_file(
@@ -1409,6 +1492,7 @@ class SnowflakeConnection:
 
                 self.auth_class = AuthByKeyPair(
                     private_key=private_key,
+                    private_key_passphrase=private_key_passphrase,
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
@@ -1434,6 +1518,7 @@ class SnowflakeConnection:
                         host=self.host, port=self.port
                     ),
                     redirect_uri=self._oauth_redirect_uri,
+                    uri=self._oauth_socket_uri,
                     scope=self._oauth_scope,
                     pkce_enabled=not self._oauth_disable_pkce,
                     token_cache=(
@@ -1461,9 +1546,11 @@ class SnowflakeConnection:
                     connection=self,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
+                # Enable MFA token caching
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                     self._client_request_mfa_token if IS_LINUX else True
                 )
+                # Try to load cached MFA token to skip MFA prompt
                 if self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN]:
                     auth.read_temporary_credentials(
                         self.host,
@@ -1672,6 +1759,8 @@ class SnowflakeConnection:
             WORKLOAD_IDENTITY_AUTHENTICATOR,
             PROGRAMMATIC_ACCESS_TOKEN,
             PAT_WITH_EXTERNAL_SESSION,
+            OAUTH_AUTHORIZATION_CODE,
+            OAUTH_CLIENT_CREDENTIALS,
         }
 
         if not (self._master_token and self._session_token):
@@ -2183,20 +2272,22 @@ class SnowflakeConnection:
         real_max = int(self.rest.master_validity_in_seconds / 4)
         real_min = int(real_max / 4)
 
-        # ensure the type is integer
-        self._client_session_keep_alive_heartbeat_frequency = int(
-            self.client_session_keep_alive_heartbeat_frequency
-        )
+        value = self.client_session_keep_alive_heartbeat_frequency
 
-        if self.client_session_keep_alive_heartbeat_frequency is None:
+        if value is None:
             # This is an unlikely scenario but covering it just in case.
             self._client_session_keep_alive_heartbeat_frequency = real_min
-        elif self.client_session_keep_alive_heartbeat_frequency > real_max:
-            self._client_session_keep_alive_heartbeat_frequency = real_max
-        elif self.client_session_keep_alive_heartbeat_frequency < real_min:
-            self._client_session_keep_alive_heartbeat_frequency = real_min
+            return real_min
 
-        return self.client_session_keep_alive_heartbeat_frequency
+        value = int(value)
+
+        if value > real_max:
+            value = real_max
+        elif value < real_min:
+            value = real_min
+
+        self._client_session_keep_alive_heartbeat_frequency = value
+        return value
 
     def _validate_client_prefetch_threads(self) -> int:
         if self.client_prefetch_threads <= 0:
@@ -2440,6 +2531,41 @@ class SnowflakeConnection:
 
         return not found_unfinished_query
 
+    def _log_minicore_import(self):
+        """
+                OS - meaningful value like Windows, Linux, Darwin/MacOS etc.
+        OS_VERSION - meaningful version like kernel version for Linux/Darwin, etc. that your language provides
+        ISA - instruction set architecture, like amd64/arm64.
+        CORE_VERSION - result of sf_core_full_version call, if finished successfully.
+        CORE_FILE_NAME - a string representing binary name that driver tried to load
+        CORE_LOAD_ERROR - flag or error type included if there are any errors (can’t write a library to disk, can’t load it, can’t find symbols, etc).
+                :return:
+        """
+        ts = get_time_millis()
+        self._log_telemetry(
+            TelemetryData.from_telemetry_data_dict(
+                from_dict={
+                    TelemetryField.KEY_TYPE.value: TelemetryField.CORE_IMPORT.value,
+                    TelemetryField.KEY_VALUE.value: build_minicore_usage_for_telemetry(),
+                },
+                timestamp=ts,
+                connection=self,
+            )
+        )
+
+    def _log_nanoarrow_import(self):
+        ts = get_time_millis()
+        self._log_telemetry(
+            TelemetryData.from_telemetry_data_dict(
+                from_dict={
+                    TelemetryField.KEY_TYPE.value: TelemetryField.NANOARROW_IMPORT.value,
+                    TelemetryField.KEY_VALUE.value: build_nanoarrow_usage_for_telemetry(),
+                },
+                timestamp=ts,
+                connection=self,
+            )
+        )
+
     def _log_telemetry_imported_packages(self) -> None:
         if self._log_imported_packages_in_telemetry:
             # filter out duplicates caused by submodules
@@ -2492,3 +2618,56 @@ class SnowflakeConnection:
             return "jupyter_notebook"
         if "snowbooks" in sys.modules:
             return "snowflake_notebook"
+
+
+class _ConnectionsRegistry:
+    """Thread-safe registry for tracking opened SnowflakeConnection instances.
+
+    This class maintains a registry of active connections using weak references
+    to avoid preventing garbage collection.
+    """
+
+    def __init__(self):
+        """Initialize the connections registry with an empty registry and a lock."""
+        self._connections: weakref.WeakSet = weakref.WeakSet()
+        self._lock = Lock()
+
+    def add_connection(self, connection: SnowflakeConnection) -> None:
+        """Add a connection to the registry.
+
+        Args:
+            connection: The SnowflakeConnection instance to register.
+        """
+        with self._lock:
+            self._connections.add(connection)
+            logger.debug(
+                f"Connection {id(connection)} added to pool. Total connections: {len(self._connections)}"
+            )
+
+    def remove_connection(self, connection: SnowflakeConnection) -> None:
+        """Remove a connection from the registry.
+
+        Args:
+            connection: The SnowflakeConnection instance to unregister.
+        """
+        with self._lock:
+            self._connections.discard(connection)
+            logger.debug(
+                f"Connection {id(connection)} removed from registry. Total connections: {len(self._connections)}"
+            )
+
+            if len(self._connections) == 0:
+                self._last_connection_handler()
+
+    def _last_connection_handler(self):
+        # If no connections left then stop CRL background task
+        # to avoid script dangling
+        CRLCacheFactory.stop_periodic_cleanup()
+
+    def get_connection_count(self) -> int:
+        with self._lock:
+            return len(self._connections)
+
+
+# Global instance of the connections pool
+_connections_registry = _ConnectionsRegistry()

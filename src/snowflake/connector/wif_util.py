@@ -18,7 +18,7 @@ if installed_boto:
 
 from .errorcode import ER_INVALID_WIF_SETTINGS, ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import MissingDependencyError, ProgrammingError
-from .session_manager import SessionManager
+from .session_manager import SessionManager, SessionManagerFactory
 
 logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
@@ -195,29 +195,51 @@ def create_aws_attestation(
         )
     region = get_aws_region()
     partition = session.get_partition_for_region(region)
-    sts_hostname = get_aws_sts_hostname(region, partition)
-    request = AWSRequest(
-        method="POST",
-        url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
-        headers={
-            "Host": sts_hostname,
-            "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
-        },
-    )
+    # TODO: Remove this environment variable check once AWS WIF outbound token is fully released
+    # and make it the default behavior (SNOW-2919437)
+    if (
+        os.environ.get("SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN", "false").lower()
+        == "true"
+    ):
+        sts_client = session.client("sts", region_name=region)
+        response = sts_client.get_web_identity_token(
+            Audience=[SNOWFLAKE_AUDIENCE], SigningAlgorithm="ES384"
+        )
+        jwt_token = response["WebIdentityToken"]
+        logger.debug("AWS outbound token prefix: %s", jwt_token[:10])
+        return WorkloadIdentityAttestation(
+            AttestationProvider.AWS,
+            jwt_token,
+            {"region": region, "partition": partition},
+        )
+    else:
+        sts_hostname = get_aws_sts_hostname(region, partition)
+        request = AWSRequest(
+            method="POST",
+            url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
+            headers={
+                "Host": sts_hostname,
+                "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
+            },
+        )
 
-    SigV4Auth(aws_creds, "sts", region).add_auth(request)
+        SigV4Auth(aws_creds, "sts", region).add_auth(request)
 
-    assertion_dict = {
-        "url": request.url,
-        "method": request.method,
-        "headers": dict(request.headers.items()),
-    }
-    credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
-    # Unlike other providers, for AWS, we only include general identifiers (region and partition)
-    # rather than specific user identifiers, since we don't actually execute a GetCallerIdentity call.
-    return WorkloadIdentityAttestation(
-        AttestationProvider.AWS, credential, {"region": region, "partition": partition}
-    )
+        assertion_dict = {
+            "url": request.url,
+            "method": request.method,
+            "headers": dict(request.headers.items()),
+        }
+        credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode(
+            "utf-8"
+        )
+        # Unlike other providers, for AWS, we only include general identifiers (region and partition)
+        # rather than specific user identifiers, since we don't actually execute a GetCallerIdentity call.
+        return WorkloadIdentityAttestation(
+            AttestationProvider.AWS,
+            credential,
+            {"region": region, "partition": partition},
+        )
 
 
 def get_gcp_access_token(session_manager: SessionManager) -> str:
@@ -331,7 +353,7 @@ def create_azure_attestation(
 
     If the application isn't running on Azure or no credentials were found, raises an error.
     """
-    headers = {"Metadata": "True"}
+    headers = {"Metadata": "true"}
     url_without_query_string = "http://169.254.169.254/metadata/identity/oauth2/token"
     query_params = f"api-version=2018-02-01&resource={snowflake_entra_resource}"
 
@@ -416,7 +438,7 @@ def create_attestation(
     session_manager = (
         session_manager.clone()
         if session_manager
-        else SessionManager(use_pooling=True, max_retries=0)
+        else SessionManagerFactory.get_manager(use_pooling=True, max_retries=0)
     )
 
     if provider == AttestationProvider.AWS:

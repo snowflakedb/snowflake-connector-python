@@ -35,6 +35,14 @@ logger = logging.getLogger(__name__)
 
 
 class _OAuthTokensMixin:
+    """Manages OAuth token caching to avoid repeated browser authentication flows.
+
+    Access tokens: Short-lived (typically 10 minutes), cached to avoid immediate re-auth.
+    Refresh tokens: Long-lived (hours/days), used to obtain new access tokens silently.
+
+    Tokens are cached per (user, IDP host) to support multiple OAuth providers/accounts.
+    """
+
     def __init__(
         self,
         token_cache: TokenCache | None,
@@ -77,12 +85,18 @@ class _OAuthTokensMixin:
         return self._token_cache.retrieve(key)
 
     def _pop_cached_access_token(self) -> bool:
-        """Retrieves OAuth access token from the token cache if enabled"""
+        """Retrieves OAuth access token from the token cache if enabled, available and still valid.
+
+        Returns True if cached token found, allowing authentication to skip OAuth flow.
+        """
         self._access_token = self._pop_cached_token(self._get_access_token_cache_key())
         return self._access_token is not None
 
     def _pop_cached_refresh_token(self) -> bool:
-        """Retrieves OAuth refresh token from the token cache if enabled"""
+        """Retrieves OAuth refresh token from the token cache (if enabled) to silently obtain new access token.
+
+        Returns True if refresh token found, enabling automatic token renewal without user interaction.
+        """
         if self._refresh_token_enabled:
             self._refresh_token = self._pop_cached_token(
                 self._get_refresh_token_cache_key()
@@ -413,6 +427,27 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         }
+
+    @staticmethod
+    def _log_if_http_in_use(url: str) -> None:
+        """Log a warning if the URL uses insecure HTTP protocol.
+
+        Args:
+            url: The URL to check for HTTP usage
+        """
+        try:
+            parsed_url = urllib.parse.urlparse(url)
+            if parsed_url.scheme == "http":
+                logger.warning(
+                    "OAuth URL uses insecure HTTP protocol: %s",
+                    SecretDetector.mask_secrets(url),
+                )
+        except Exception as e:
+            logger.warning(
+                "Cannot parse URL: %s. %s",
+                SecretDetector.mask_secrets(url),
+                e,
+            )
 
     @staticmethod
     def _resolve_proxy_url(

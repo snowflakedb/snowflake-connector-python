@@ -1,11 +1,11 @@
-#!/bin/bash -e
+#!/bin/bash -e -l
 #
 # Test Snowflake Connector on a Darwin Jenkins slave
 # NOTES:
 #   - Versions to be tested should be passed in as the first argument, e.g: "3.9 3.10". If omitted 3.9-3.13 will be assumed.
 #   - This script uses .. to download the newest wheel files from S3
 
-PYTHON_VERSIONS="${1:-3.9 3.10 3.11 3.12 3.13}"
+PYTHON_VERSIONS="${1:-3.9 3.10 3.11 3.12 3.13 3.14}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 PARAMETERS_DIR="${CONNECTOR_DIR}/.github/workflows/parameters/public"
@@ -21,6 +21,9 @@ gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS
 
 # Decrypt private key file
 gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" "${CONNECTOR_DIR}/.github/workflows/parameters/public/rsa_keys/rsa_key_python_${cloud_provider}.p8.gpg" > "test/rsa_key_python_${cloud_provider}.p8"
+
+# Remove CRL cache directory if it exists to avoid permission issues (if it was created by older version of the connector)
+rm -rf ~/Library/Caches/Snowflake/crls
 
 rm -rf venv
 python3.12 -m venv venv

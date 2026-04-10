@@ -11,6 +11,9 @@
   },
   "response": {
     "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
     "jsonBody": {
       "data": {
         "parameters": [
@@ -355,7 +358,6 @@
             "collation": null
           }
         ],
-
         "rowset": [
           [
             "1"
@@ -368,13 +370,13 @@
         },
         "chunks": [
           {
-            "url": "{{WIREMOCK_HTTP_HOST_WITH_PORT}}/amazonaws/test/s3testaccount/stage/results/01bd1448-0100-0001-0000-0000001006f5_0/main/data_0_0_0_1?x-amz-server-side-encryption-customer-algorithm=AES256&response-content-encoding=gzip",
+            "url": "{{STORAGE_WIREMOCK_HTTP_HOST_WITH_PORT}}/amazonaws/test/s3testaccount/stage/results/01bd1448-0100-0001-0000-0000001006f5_0/main/data_0_0_0_1?x-amz-server-side-encryption-customer-algorithm=AES256&response-content-encoding=gzip",
             "rowCount": 4096,
             "uncompressedSize": 331328,
             "compressedSize": 326422
           },
           {
-            "url": "{{WIREMOCK_HTTP_HOST_WITH_PORT}}/amazonaws/test/s3testaccount/stage/results/01bd1448-0100-0001-0000-0000001006f5_0/main/data_0_0_0_2?x-amz-server-side-encryption-customer-algorithm=AES256&response-content-encoding=gzip",
+            "url": "{{STORAGE_WIREMOCK_HTTP_HOST_WITH_PORT}}/amazonaws/test/s3testaccount/stage/results/01bd1448-0100-0001-0000-0000001006f5_0/main/data_0_0_0_2?x-amz-server-side-encryption-customer-algorithm=AES256&response-content-encoding=gzip",
             "rowCount": 4096,
             "uncompressedSize": 331328,
             "compressedSize": 326176

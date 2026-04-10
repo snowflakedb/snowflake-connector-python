@@ -8,7 +8,8 @@ import random
 import re
 import string
 from io import StringIO
-from typing import Sequence
+from pathlib import Path
+from typing import Any, Sequence
 
 COMMENT_PATTERN_RE = re.compile(r"^\s*\-\-")
 EMPTY_LINE_RE = re.compile(r"^\s*$")
@@ -293,9 +294,27 @@ def _base64_bytes_to_str(x) -> str | None:
     return base64.b64encode(x).decode("utf-8") if x else None
 
 
-def get_md5(text: str | bytes) -> bytes:
+def get_md5_for_integrity(text: str | bytes) -> bytes:
+    # MD5 should not be used for security reasons - only integrity is safe and allowed
     if isinstance(text, str):
         text = text.encode("utf-8")
-    md5 = hashlib.md5()
+    # Usedforsecurity=False added to support FIPS envs as well
+    md5 = hashlib.md5(usedforsecurity=False)
     md5.update(text)
     return md5.digest()
+
+
+def expand_tilde(path_to_expand: Any) -> Any:
+    try:
+        path_to_expand = (
+            str(Path(path_to_expand).expanduser())
+            if isinstance(path_to_expand, str)
+            else path_to_expand
+        )
+    except Exception as e:
+        # user home could not be resolved
+        _logger.debug(
+            "User home could not be determined, not expanding tilde. Exception: %s", e
+        )
+
+    return path_to_expand

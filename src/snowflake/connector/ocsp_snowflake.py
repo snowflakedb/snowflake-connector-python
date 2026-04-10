@@ -10,6 +10,7 @@ import re
 import sys
 import tempfile
 import time
+import warnings
 from base64 import b64decode, b64encode
 from datetime import datetime, timezone
 from logging import getLogger
@@ -28,7 +29,10 @@ from OpenSSL.SSL import Connection
 
 from snowflake.connector import SNOWFLAKE_CONNECTOR_VERSION
 from snowflake.connector.compat import OK, urlsplit, urlunparse
-from snowflake.connector.constants import HTTP_HEADER_USER_AGENT
+from snowflake.connector.constants import (
+    ENV_VAR_ENABLE_CUSTOM_REVOCATION_ERRORS,
+    HTTP_HEADER_USER_AGENT,
+)
 from snowflake.connector.errorcode import (
     ER_INVALID_OCSP_RESPONSE_SSD,
     ER_INVALID_SSD,
@@ -59,6 +63,7 @@ from . import constants
 from .backoff_policies import exponential_backoff
 from .cache import CacheEntry, SFDictCache, SFDictFileCache
 from .constants import OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
+from .session_manager import SessionManagerFactory
 from .telemetry import TelemetryField, generate_telemetry_data_dict
 from .url_util import extract_top_level_domain_from_hostname, url_encode_str
 from .util_text import _base64_bytes_to_str
@@ -121,19 +126,40 @@ class OCSPResponseValidationResult(NamedTuple):
                 return
             exc_class = exception_dict.get("class")
             exc_module = exception_dict.get("module")
+
+            # For RevocationCheckError, deserialize directly
+            if (
+                exc_class == "RevocationCheckError"
+                and exc_module == "snowflake.connector.errors"
+            ):
+                return RevocationCheckError(
+                    msg=exception_dict["msg"],
+                    errno=exception_dict.get("errno", ER_OCSP_RESPONSE_LOAD_FAILURE),
+                )
+
+            # For non-RevocationCheckError, always try to deserialize to detect failures
             try:
-                if (
-                    exc_class == "RevocationCheckError"
-                    and exc_module == "snowflake.connector.errors"
+                module = importlib.import_module(exc_module)
+                exc_cls = getattr(module, exc_class)
+                custom_exc = exc_cls(exception_dict["msg"])
+
+                # If env var is set, return the custom exception with deprecation warning
+                if os.getenv(ENV_VAR_ENABLE_CUSTOM_REVOCATION_ERRORS, "").lower() in (
+                    "true",
+                    "1",
                 ):
-                    return RevocationCheckError(
-                        msg=exception_dict["msg"],
-                        errno=exception_dict["errno"],
+                    warnings.warn(
+                        "Support for custom revocation error classes will be removed in a future release.",
+                        DeprecationWarning,
+                        stacklevel=3,
                     )
-                else:
-                    module = importlib.import_module(exc_module)
-                    exc_cls = getattr(module, exc_class)
-                    return exc_cls(exception_dict["msg"])
+                    return custom_exc
+
+                # Otherwise, convert to RevocationCheckError
+                return RevocationCheckError(
+                    msg=exception_dict["msg"],
+                    errno=exception_dict.get("errno", ER_OCSP_RESPONSE_LOAD_FAILURE),
+                )
             except Exception as deserialize_exc:
                 logger.debug(
                     f"hitting error {str(deserialize_exc)} while deserializing exception,"
@@ -551,8 +577,8 @@ class OCSPServer:
             # Obtain SessionManager from ssl_wrap_socket context var if available
             session_manager = get_current_session_manager(
                 use_pooling=False
-            ) or SessionManager(use_pooling=False)
-            with session_manager.use_session() as session:
+            ) or SessionManagerFactory.get_manager(use_pooling=False)
+            with session_manager.use_session(url) as session:
                 max_retry = SnowflakeOCSP.OCSP_CACHE_SERVER_MAX_RETRY if do_retry else 1
                 sleep_time = 1
                 backoff = exponential_backoff()()
@@ -1646,9 +1672,9 @@ class SnowflakeOCSP:
         session_manager: SessionManager = (
             context_session_manager
             if context_session_manager is not None
-            else SessionManager(use_pooling=False)
+            else SessionManagerFactory.get_manager(use_pooling=False)
         )
-        with session_manager.use_session() as session:
+        with session_manager.use_session(target_url) as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
             backoff = exponential_backoff()()

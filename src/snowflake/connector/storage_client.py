@@ -25,7 +25,7 @@ from .constants import (
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
 from .errors import RequestExceedMaxRetryError
 from .file_util import SnowflakeFileUtil
-from .session_manager import SessionManager
+from .session_manager import SessionManager, SessionManagerFactory
 from .vendored import requests
 from .vendored.requests import ConnectionError, Timeout
 from .vendored.urllib3 import HTTPResponse
@@ -298,7 +298,9 @@ class SnowflakeStorageClient(ABC):
                     # SessionManager on the flight, if code ends up here, since we probably do not care about loosing
                     # proxy or HTTP setup.
                     logger.debug("storage client request with new session")
-                    session_manager = SessionManager(use_pooling=False)
+                    session_manager = SessionManagerFactory.get_manager(
+                        use_pooling=False
+                    )
                     response = rest_call(session_manager, url, **rest_kwargs)
 
                 if self._has_expired_presigned_url(response):

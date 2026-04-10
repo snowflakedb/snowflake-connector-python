@@ -22,6 +22,14 @@ T = TypeVar("T")
 
 
 class TokenType(Enum):
+    """Types of credentials that can be cached to avoid repeated authentication.
+
+    - ID_TOKEN: SSO identity token from external browser/Okta authentication
+    - MFA_TOKEN: Multi-factor authentication token to skip MFA prompts
+    - OAUTH_ACCESS_TOKEN: Short-lived OAuth access token
+    - OAUTH_REFRESH_TOKEN: Long-lived OAuth token to obtain new access tokens
+    """
+
     ID_TOKEN = "ID_TOKEN"
     MFA_TOKEN = "MFA_TOKEN"
     OAUTH_ACCESS_TOKEN = "OAUTH_ACCESS_TOKEN"
@@ -57,6 +65,16 @@ def _warn(warning: str) -> None:
 
 
 class TokenCache(ABC):
+    """Secure storage for authentication credentials to avoid repeated login prompts.
+
+    Platform-specific implementations:
+    - macOS/Windows: Uses OS keyring (Keychain/Credential Manager) via 'keyring' library
+    - Linux: Uses JSON file in ~/.cache/snowflake/ with 0o600 permissions
+    - Fallback: NoopTokenCache (no caching) if secure storage unavailable
+
+    Tokens are keyed by (host, user, token_type) to support multiple accounts.
+    """
+
     @staticmethod
     def make(skip_file_permissions_check: bool = False) -> TokenCache:
         if IS_MACOS or IS_WINDOWS:
@@ -127,6 +145,17 @@ class _CacheFileWriteError(_FileTokenCacheError):
 
 
 class FileTokenCache(TokenCache):
+    """Linux implementation: stores tokens in JSON file with strict security.
+
+    Cache location (in priority order):
+    1. $SF_TEMPORARY_CREDENTIAL_CACHE_DIR/credential_cache_v1.json
+    2. $XDG_CACHE_HOME/snowflake/credential_cache_v1.json
+    3. $HOME/.cache/snowflake/credential_cache_v1.json
+
+    Security: File must have 0o600 permissions and be owned by current user.
+    Uses file locks to prevent concurrent access corruption.
+    """
+
     @staticmethod
     def make(skip_file_permissions_check: bool = False) -> FileTokenCache | None:
         cache_dir = FileTokenCache.find_cache_dir(skip_file_permissions_check)
@@ -364,27 +393,47 @@ class FileTokenCache(TokenCache):
 
 
 class KeyringTokenCache(TokenCache):
+    """macOS/Windows implementation: uses OS-native secure credential storage.
+
+    - macOS: Stores tokens in Keychain
+    - Windows: Stores tokens in Windows Credential Manager
+
+    All tokens share a single keyring service name so that on macOS they fall
+    under one Keychain ACL entry, requiring only a single "Allow" prompt
+    instead of one per token. The keyring *account* field stores a SHA-256 hash
+    of ``{HOST}:{USER}:{TOKEN_TYPE}`` to avoid exposing plaintext identifiers
+    in the OS credential store.
+
+    For backward compatibility, :meth:`retrieve` also checks the legacy layout
+    where the service was the full string key and the account was the username.
+    """
+
+    SERVICE_NAME = "com.snowflake.connector.python"
+
     def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
 
     def store(self, key: TokenKey, token: str) -> None:
         try:
             keyring.set_password(
-                key.string_key(),
-                key.user.upper(),
+                self.SERVICE_NAME,
+                key.hash_key(),
                 token,
             )
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Could not retrieve {key.tokenType} from keyring, {e=}")
+            self.logger.error(f"Could not store {key.tokenType} in keyring, {e=}")
         except keyring.errors.KeyringError as ke:
-            self.logger.error("Could not store id_token to keyring, %s", str(ke))
+            self.logger.error("Could not store token in keyring, %s", str(ke))
 
     def retrieve(self, key: TokenKey) -> str | None:
         try:
-            return keyring.get_password(
-                key.string_key(),
-                key.user.upper(),
+            token = keyring.get_password(
+                self.SERVICE_NAME,
+                key.hash_key(),
             )
+            if token is not None:
+                return token
+            return self._retrieve_legacy(key)
         except keyring.errors.KeyringError as ke:
             self.logger.error(
                 "Could not retrieve {} from secure storage : {}".format(
@@ -394,19 +443,37 @@ class KeyringTokenCache(TokenCache):
         except _InvalidTokenKeyError as e:
             self.logger.error(f"Could not retrieve {key.tokenType} from keyring, {e=}")
 
-    def remove(self, key: TokenKey) -> None:
+    def _retrieve_legacy(self, key: TokenKey) -> str | None:
+        """Try to read from the old per-token-type service layout and migrate."""
         try:
-            keyring.delete_password(
+            token = keyring.get_password(
                 key.string_key(),
                 key.user.upper(),
             )
+        except (keyring.errors.KeyringError, _InvalidTokenKeyError):
+            return None
+        if token is None:
+            return None
+        self.store(key, token)
+        try:
+            keyring.delete_password(key.string_key(), key.user.upper())
+        except Exception:
+            pass
+        self.logger.debug("migrated legacy keyring entry for %s", key.tokenType.value)
+        return token
+
+    def remove(self, key: TokenKey) -> None:
+        try:
+            keyring.delete_password(
+                self.SERVICE_NAME,
+                key.hash_key(),
+            )
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Could not retrieve {key.tokenType} from keyring, {e=}")
+            self.logger.error(f"Could not remove {key.tokenType} from keyring, {e=}")
         except Exception as ex:
             self.logger.error(
                 "Failed to delete credential in the keyring: err=[%s]", ex
             )
-        pass
 
 
 class NoopTokenCache(TokenCache):

@@ -15,6 +15,8 @@ build-verbosity = 1
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
+# Exclude pre-built minicore libraries from auditwheel repair
+repair-wheel-command = ""
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
@@ -23,3 +25,6 @@ repair-wheel-command = ""
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
+
+[tool.check-manifest]
+ignore-bad-ideas = ["src/snowflake/connector/minicore/**"]

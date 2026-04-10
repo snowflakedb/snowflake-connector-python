@@ -180,13 +180,13 @@ class FakeAzureVmMetadataService(FakeMetadataService):
         if (
             method == "GET"
             and parsed_url.path == "/metadata/instance"
-            and headers.get("Metadata") == "True"
+            and headers.get("Metadata") == "true"
         ):
             return build_response(content=b"", status_code=200)
         elif (
             method == "GET"
             and parsed_url.path == "/metadata/identity/oauth2/token"
-            and headers.get("Metadata") == "True"
+            and headers.get("Metadata") == "true"
             and query_string["resource"]
             and self.has_token_endpoint
         ):
@@ -379,6 +379,7 @@ class FakeAwsEnvironment:
             b'{"region": "us-east-1", "instanceId": "i-1234567890abcdef0"}'
         )
         self.metadata_token = "test-token"
+        self.web_identity_token = "fake.jwt.token-for-testing-only"
 
     def assume_role(self, **kwargs):
         if (
@@ -423,11 +424,16 @@ class FakeAwsEnvironment:
         mock_client = mock.Mock()
         mock_client.get_caller_identity.return_value = self.caller_identity
         mock_client.assume_role = self.assume_role
+        mock_client.get_web_identity_token.return_value = {
+            "WebIdentityToken": self.web_identity_token
+        }
         return mock_client
 
     def __enter__(self):
         # Patch the relevant functions to do what we want.
         self.patchers = []
+
+        # Patch sync boto3 calls
         self.patchers.append(
             mock.patch(
                 "boto3.session.Session.get_credentials",
