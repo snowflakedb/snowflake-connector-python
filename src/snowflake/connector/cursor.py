@@ -79,6 +79,10 @@ from .options import installed_pandas
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
+from .vendored.ext_logging import (
+    disable_extended_networking_logging,
+    enable_extended_networking_logging,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from pandas import DataFrame
@@ -856,6 +860,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
         _dataframe_ast: str | None = None,
+        _trace_execute: bool = True,
+        _trace_file_transfer: bool = False,
     ) -> Self | None: ...
 
     @overload
@@ -886,6 +892,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
         _dataframe_ast: str | None = None,
+        _trace_execute: bool = True,
+        _trace_file_transfer: bool = False,
     ) -> dict[str, Any] | None: ...
 
     def execute(
@@ -916,6 +924,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         num_statements: int | None = None,
         _force_qmark_paramstyle: bool = False,
         _dataframe_ast: str | None = None,
+        _trace_execute: bool = True,
+        _trace_file_transfer: bool = False,
     ) -> Self | dict[str, Any] | None:
         """Executes a command/query.
 
@@ -1030,7 +1040,13 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             )
             query = query1
 
-        ret = self._execute_helper(query, **kwargs)
+        if _trace_execute:
+            enable_extended_networking_logging()
+        try:
+            ret = self._execute_helper(query, **kwargs)
+        finally:
+            if _trace_execute:
+                disable_extended_networking_logging()
         self._sfqid = (
             ret["data"]["queryId"]
             if "data" in ret and "queryId" in ret["data"]
@@ -1094,8 +1110,14 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                     source_from_stream=file_stream,
                     multipart_threshold=data.get("threshold"),
                 )
-                sf_file_transfer_agent.execute()
-                data = sf_file_transfer_agent.result()
+                if _trace_file_transfer or _trace_execute:
+                    enable_extended_networking_logging()
+                try:
+                    sf_file_transfer_agent.execute()
+                    data = sf_file_transfer_agent.result()
+                finally:
+                    if _trace_file_transfer or _trace_execute:
+                        disable_extended_networking_logging()
                 self._total_rowcount = len(data["rowset"]) if "rowset" in data else -1
 
             if _exec_async:
