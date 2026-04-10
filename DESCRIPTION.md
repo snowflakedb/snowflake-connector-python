@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - Upcoming Release
+  - Added ECDSA key support (ES256, ES384, ES512) for key-pair authentication.
   - Added HTTP 307/308 redirect status codes to the retryable set as defense-in-depth, with redirect-aware logging in both sync and async paths.
   - Consolidated keyring token cache to use a single service name with hashed account keys, reducing macOS Keychain password prompts. Legacy entries are auto-migrated on first read.
   - Added support for AWS outbound JWT token attestation for Workload Identity Federation (WIF). This can be enabled by setting the `SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN` environment variable to `true`. Note: This environment variable will be removed in a future release.
