@@ -9,18 +9,21 @@
         "method": "POST",
         "bodyPatterns": [
           {
-            "equalToJson" : {
+            "equalToJson": {
               "data": {
                 "AUTHENTICATOR": "PROGRAMMATIC_ACCESS_TOKEN",
                 "TOKEN": "some PAT"
               }
             },
-            "ignoreExtraElements" : true
+            "ignoreExtraElements": true
           }
         ]
       },
       "response": {
         "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "jsonBody": {
           "data": {
             "nextAction": "RETRY_LOGIN",

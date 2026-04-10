@@ -314,6 +314,10 @@ def init_test_schema(db_parameters) -> Generator[None]:
                     "private_key_file": db_parameters["private_key_file"],
                 }
             )
+            if "private_key_file_pwd" in db_parameters:
+                connection_params["private_key_file_pwd"] = db_parameters[
+                    "private_key_file_pwd"
+                ]
 
     # Role may be needed when running on preprod, but is not present on Jenkins jobs
     optional_role = db_parameters.get("role")
@@ -400,6 +404,16 @@ def conn_testaccount(request) -> SnowflakeConnection:
 
     request.addfinalizer(fin)
     return connection
+
+
+@pytest.fixture(autouse=True)
+def reset_default_paramstyle() -> Generator[None]:
+    """Keep tests isolated from process-global paramstyle changes."""
+    snowflake.connector.paramstyle = "pyformat"
+    try:
+        yield
+    finally:
+        snowflake.connector.paramstyle = "pyformat"
 
 
 @pytest.fixture()

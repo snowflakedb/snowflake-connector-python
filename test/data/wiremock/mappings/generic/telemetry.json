@@ -10,9 +10,9 @@
       "data": {
         "code": null,
         "data": "Log Received",
-        "message": null,
-        "success": true
-      }
+        "message": null
+      },
+      "success": true
     }
   }
 }

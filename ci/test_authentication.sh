@@ -15,6 +15,8 @@ if [[ -n "$JENKINS_HOME" ]]; then
 
 fi
 
+source "$THIS_DIR/setup_gpg_home.sh"
+
 gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" --output $THIS_DIR/../.github/workflows/parameters/private/parameters_aws_auth_tests.json "$THIS_DIR/../.github/workflows/parameters/private/parameters_aws_auth_tests.json.gpg"
 gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" --output $THIS_DIR/../.github/workflows/parameters/private/rsa_keys/rsa_key.p8 "$THIS_DIR/../.github/workflows/parameters/private/rsa_keys/rsa_key.p8.gpg"
 gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" --output $THIS_DIR/../.github/workflows/parameters/private/rsa_keys/rsa_key_invalid.p8 "$THIS_DIR/../.github/workflows/parameters/private/rsa_keys/rsa_key_invalid.p8.gpg"
@@ -23,5 +25,5 @@ docker run \
   -v $(cd $THIS_DIR/.. && pwd):/mnt/host \
   -v $WORKSPACE:/mnt/workspace \
   --rm \
-    nexus.int.snowflakecomputing.com:8086/docker/snowdrivers-test-external-browser-python:3 \
+    artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/internal-production-docker-snowflake-virtual/docker/snowdrivers-test-external-browser-python:3 \
   "/mnt/host/ci/container/test_authentication.sh"

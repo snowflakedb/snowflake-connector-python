@@ -42,6 +42,7 @@ from . import compat
 from ._sql_util import get_file_transfer_type
 from ._utils import (
     REQUEST_ID_STATEMENT_PARAM_NAME,
+    _nanoarrow_loader,
     _snowflake_max_parallelism_for_file_transfer,
     _TrackedQueryCancellationTimer,
     is_uuid4,
@@ -112,6 +113,7 @@ except ImportError as e:  # pragma: no cover
     logger.warning(
         f"Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: {e}",
     )
+    _nanoarrow_loader.set_load_error(e)
     CAN_USE_ARROW_RESULT_FORMAT = False
 
 STATEMENT_TYPE_ID_DML = 0x3000
@@ -418,6 +420,10 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         self._log_max_query_length = connection.log_max_query_length
         self._inner_cursor: SnowflakeCursorBase | None = None
         self._prefetch_hook = None
+        self._stats_data: dict[str, int] | None = (
+            None  # Stores stats from response for DML operations
+        )
+
         self._rownumber: int | None = None
 
         self.reset()
@@ -453,6 +459,23 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
     @property
     def rowcount(self) -> int | None:
         return self._total_rowcount if self._total_rowcount >= 0 else None
+
+    @property
+    def stats(self) -> QueryResultStats | None:
+        """Returns detailed rows affected statistics for DML operations.
+
+        Returns a NamedTuple with fields:
+        - num_rows_inserted: Number of rows inserted
+        - num_rows_deleted: Number of rows deleted
+        - num_rows_updated: Number of rows updated
+        - num_dml_duplicates: Number of duplicates in DML statement
+
+        Returns None on each position if no DML stats are available - this includes DML operations where no rows were
+            affected as well as other type of SQL statements (e.g. DDL, DQL).
+        """
+        if self._stats_data is None:
+            return QueryResultStats(None, None, None, None)
+        return QueryResultStats.from_dict(self._stats_data)
 
     @property
     def rownumber(self) -> int | None:
@@ -1201,6 +1224,10 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         self._rownumber = -1
         self._result_state = ResultState.VALID
 
+        # Extract stats object if available (for DML operations like CTAS, INSERT, UPDATE, DELETE)
+        self._stats_data = data.get("stats", None)
+        logger.debug("Execution DML stats: %s", self.stats)
+
         # don't update the row count when the result is returned from `describe` method
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:
             updated_rows = 0
@@ -1310,7 +1337,21 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             )
         return self
 
-    def fetch_arrow_batches(self) -> Iterator[Table]:
+    def fetch_arrow_batches(
+        self,
+        force_microsecond_precision: bool = False,
+    ) -> Iterator[Table]:
+        """Fetch Arrow Tables in batches.
+
+        Args:
+            force_microsecond_precision: When True, all timestamp columns are converted
+                to microsecond precision, ensuring consistent schema across all batches.
+                This is useful when your data contains timestamps outside the nanosecond
+                range (1677-2262), such as '9999-12-31' or '0001-01-01'. When False
+                (default), precision is determined per-batch based on the data, which
+                may cause pyarrow schema mismatch errors when combining batches.
+                Note: enabling this truncates sub-microsecond precision (scale 7-9).
+        """
         self.check_can_use_arrow_resultset()
         if self._prefetch_hook is not None:
             self._prefetch_hook()
@@ -1319,20 +1360,43 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         self._log_telemetry_job_data(
             TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.TRUE
         )
-        return self._result_set._fetch_arrow_batches()
+        return self._result_set._fetch_arrow_batches(
+            force_microsecond_precision=force_microsecond_precision
+        )
 
     @overload
-    def fetch_arrow_all(self, force_return_table: Literal[False]) -> Table | None: ...
+    def fetch_arrow_all(
+        self,
+        force_return_table: Literal[False] = ...,
+        force_microsecond_precision: bool = ...,
+    ) -> Table | None: ...
 
     @overload
-    def fetch_arrow_all(self, force_return_table: Literal[True]) -> Table: ...
+    def fetch_arrow_all(
+        self,
+        force_return_table: Literal[True],
+        force_microsecond_precision: bool = ...,
+    ) -> Table: ...
 
-    def fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
-        """
+    def fetch_arrow_all(
+        self,
+        force_return_table: bool = False,
+        force_microsecond_precision: bool = False,
+    ) -> Table | None:
+        """Fetch all results as a single Arrow Table.
+
         Args:
             force_return_table: Set to True so that when the query returns zero rows,
-                an empty pyarrow table will be returned with schema using the highest bit length for each column.
-                Default value is False in which case None is returned in case of zero rows.
+                an empty pyarrow table will be returned with schema using the highest
+                bit length for each column. Default value is False in which case None
+                is returned in case of zero rows.
+            force_microsecond_precision: When True, all timestamp columns are converted
+                to microsecond precision, ensuring consistent schema across all batches.
+                This is useful when your data contains timestamps outside the nanosecond
+                range (1677-2262), such as '9999-12-31' or '0001-01-01'. When False
+                (default), precision is determined per-batch based on the data, which
+                may cause pyarrow schema mismatch errors when combining batches.
+                Note: enabling this truncates sub-microsecond precision (scale 7-9).
         """
         self.check_can_use_arrow_resultset()
 
@@ -1341,7 +1405,10 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         if self._query_result_format != "arrow":
             raise NotSupportedError
         self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
-        return self._result_set._fetch_arrow_all(force_return_table=force_return_table)
+        return self._result_set._fetch_arrow_all(
+            force_return_table=force_return_table,
+            force_microsecond_precision=force_microsecond_precision,
+        )
 
     def fetch_pandas_batches(self, **kwargs: Any) -> Iterator[DataFrame]:
         """Fetches a single Arrow Table."""
@@ -2007,3 +2074,26 @@ def __getattr__(name):
         )
         return None
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+class QueryResultStats(NamedTuple):
+    """
+    Statistics for rows affected by a DML operation.
+    None value expresses particular statistic being unknown - not returned by the backend service.
+
+    Added in the first place to expose DML data of CTAS statements - SNOW-295953
+    """
+
+    num_rows_inserted: int | None = None
+    num_rows_deleted: int | None = None
+    num_rows_updated: int | None = None
+    num_dml_duplicates: int | None = None
+
+    @classmethod
+    def from_dict(cls, stats_dict: dict[str, int]) -> QueryResultStats:
+        return cls(
+            num_rows_inserted=stats_dict.get("numRowsInserted", None),
+            num_rows_deleted=stats_dict.get("numRowsDeleted", None),
+            num_rows_updated=stats_dict.get("numRowsUpdated", None),
+            num_dml_duplicates=stats_dict.get("numDmlDuplicates", None),
+        )

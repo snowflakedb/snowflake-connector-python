@@ -14,3 +14,4 @@ def inject_into_urllib3() -> None:
     HTTPSConnectionPool.ConnectionCls = EmscriptenHTTPSConnection
     snowflake.connector.vendored.urllib3.connection.HTTPConnection = EmscriptenHTTPConnection  # type: ignore[misc,assignment]
     snowflake.connector.vendored.urllib3.connection.HTTPSConnection = EmscriptenHTTPSConnection  # type: ignore[misc,assignment]
+    snowflake.connector.vendored.urllib3.connection.VerifiedHTTPSConnection = EmscriptenHTTPSConnection  # type: ignore[assignment]

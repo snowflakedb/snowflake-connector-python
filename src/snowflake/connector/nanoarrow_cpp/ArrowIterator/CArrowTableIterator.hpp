@@ -23,7 +23,8 @@ class CArrowTableIterator : public CArrowIterator {
    * Constructor
    */
   CArrowTableIterator(PyObject* context, char* arrow_bytes,
-                      int64_t arrow_bytes_size, bool number_to_decimal);
+                      int64_t arrow_bytes_size, bool number_to_decimal,
+                      bool force_microsecond_precision = false);
 
   /**
    * Destructor
@@ -49,6 +50,8 @@ class CArrowTableIterator : public CArrowIterator {
   /** local time zone */
   char* m_timezone;
   const bool m_convert_number_to_decimal;
+  /** force microsecond precision for timestamps to ensure consistent schema */
+  const bool m_force_microsecond_precision;
 
   /**
    * Reconstruct record batches with type conversion in place

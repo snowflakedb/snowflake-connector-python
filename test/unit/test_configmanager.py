@@ -21,10 +21,13 @@ from snowflake.connector.compat import IS_WINDOWS
 try:
     from snowflake.connector.config_manager import (
         CONFIG_MANAGER,
+        DEPRECATED_SKIP_WARNING_ENV_VAR,
+        SKIP_WARNING_ENV_VAR,
         ConfigManager,
         ConfigOption,
         ConfigSlice,
         ConfigSliceOptions,
+        _should_skip_warning_for_read_permissions_on_config_file,
     )
     from snowflake.connector.errors import (
         ConfigManagerError,
@@ -567,7 +570,7 @@ def test_warn_config_file_owner(tmp_path, monkeypatch):
         assert (
             str(c[0].message)
             == f"Bad owner or permissions on {str(c_file)}"
-            + f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n * To skip this warning, set environment variable SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE=true.\n'
+            + f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n * To skip this warning, set environment variable SF_SKIP_TOKEN_FILE_PERMISSIONS_VERIFICATION=true.\n'
         )
 
 
@@ -587,7 +590,7 @@ def test_warn_config_file_permissions(tmp_path):
     with warnings.catch_warnings(record=True) as c:
         assert c1["b"] is True
     assert len(c) == 1
-    chmod_message = f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n * To skip this warning, set environment variable SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE=true.\n'
+    chmod_message = f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n * To skip this warning, set environment variable SF_SKIP_TOKEN_FILE_PERMISSIONS_VERIFICATION=true.\n'
     assert (
         str(c[0].message)
         == f"Bad owner or permissions on {str(c_file)}" + chmod_message
@@ -640,6 +643,120 @@ def test_log_debug_config_file_parent_dir_permissions(tmp_path, caplog):
 
 
 @pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
+def test_error_config_file_writable_by_others(tmp_path):
+    c_file = tmp_path / "config.toml"
+    c1 = ConfigManager(file_path=c_file, name="root_parser")
+    c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
+    c_file.write_text(
+        dedent(
+            """\
+            b = true
+            """
+        )
+    )
+    # Make file writable by others
+    c_file.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IWOTH)
+    file_permissions = oct(c_file.stat().st_mode)[-3:]
+
+    with pytest.raises(
+        ConfigSourceError,
+        match=re.escape(
+            f"file '{str(c_file)}' is writable by group or others — this poses a security risk because it allows unauthorized users to modify sensitive settings. Your Permission: {file_permissions}"
+        ),
+    ):
+        c1["b"]
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
+def test_error_config_file_writable_by_group(tmp_path):
+    c_file = tmp_path / "config.toml"
+    c1 = ConfigManager(file_path=c_file, name="root_parser")
+    c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
+    c_file.write_text(
+        dedent(
+            """\
+            b = true
+            """
+        )
+    )
+    # Make file writable by group
+    c_file.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IWGRP)
+    file_permissions = oct(c_file.stat().st_mode)[-3:]
+
+    with pytest.raises(
+        ConfigSourceError,
+        match=re.escape(
+            f"file '{str(c_file)}' is writable by group or others — this poses a security risk because it allows unauthorized users to modify sensitive settings. Your Permission: {file_permissions}"
+        ),
+    ):
+        c1["b"]
+
+    # file permissions check can be skipped with unsafe_skip_file_permissions_check flag
+    c1.read_config(skip_file_permissions_check=True)
+    assert c1["b"] is True
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
+def test_skip_file_permissions_check_applies_to_slices(tmp_path):
+    """Test that skip_file_permissions_check also applies to config slices (connections.toml)."""
+    config_file = tmp_path / "config.toml"
+    connections_file = tmp_path / "connections.toml"
+
+    # Create config manager with connections slice
+    cm = ConfigManager(
+        name="test",
+        file_path=config_file,
+        _slices=(ConfigSlice(connections_file, ConfigSliceOptions(), "connections"),),
+    )
+    cm.add_option(name="connections")
+
+    # Write both files
+    config_file.write_text(
+        dedent(
+            """\
+            [settings]
+            """
+        )
+    )
+    connections_file.write_text(
+        dedent(
+            """\
+            [snowflake]
+            account = "snowflake"
+            user = "snowball"
+            password = "password"
+            """
+        )
+    )
+
+    # Make connections file writable by others (would trigger error)
+    connections_file.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IWOTH)
+    file_permissions = oct(connections_file.stat().st_mode)[-3:]
+
+    # Without skip flag, reading connections.toml should raise error
+    with pytest.raises(
+        ConfigSourceError,
+        match=re.escape(
+            f"file '{str(connections_file)}' is writable by group or others — "
+            f"this poses a security risk because it allows unauthorized users "
+            f"to modify sensitive settings. Your Permission: {file_permissions}"
+        ),
+    ):
+        cm.read_config(skip_file_permissions_check=False)
+
+    # With skip flag, should not raise error
+    cm.conf_file_cache = None  # Reset cache
+    cm.read_config(skip_file_permissions_check=True)
+    assert cm["connections"] == {
+        "snowflake": {
+            "account": "snowflake",
+            "user": "snowball",
+            "password": "password",
+        }
+    }
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
 def test_skip_warning_config_file_permissions(tmp_path, monkeypatch):
     c_file = tmp_path / "config.toml"
     c1 = ConfigManager(file_path=c_file, name="root_parser")
@@ -655,11 +772,9 @@ def test_skip_warning_config_file_permissions(tmp_path, monkeypatch):
     c_file.chmod(stat.S_IMODE(c_file.stat().st_mode) | stat.S_IROTH)
 
     with monkeypatch.context() as m:
-        # Set environment variable to skip warning
-        m.setenv("SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE", "true")
+        m.setenv("SF_SKIP_TOKEN_FILE_PERMISSIONS_VERIFICATION", "true")
         with warnings.catch_warnings(record=True) as c:
             assert c1["b"] is True
-        # Should have no warnings when skip is enabled
         assert len(c) == 0
 
 
@@ -783,3 +898,102 @@ def test_defaultconnectionname(tmp_path, monkeypatch):
     finally:
         CONFIG_MANAGER.file_path = old_path
         CONFIG_MANAGER.conf_file_cache = None
+
+
+class TestShouldSkipWarningForReadPermissions:
+    """Tests for _should_skip_warning_for_read_permissions_on_config_file
+    with the new/deprecated env var logic."""
+
+    def test_returns_false_when_no_env_vars_set(self, monkeypatch):
+        monkeypatch.delenv(SKIP_WARNING_ENV_VAR, raising=False)
+        monkeypatch.delenv(DEPRECATED_SKIP_WARNING_ENV_VAR, raising=False)
+        assert _should_skip_warning_for_read_permissions_on_config_file() is False
+
+    def test_new_env_var_true(self, monkeypatch):
+        monkeypatch.setenv(SKIP_WARNING_ENV_VAR, "true")
+        monkeypatch.delenv(DEPRECATED_SKIP_WARNING_ENV_VAR, raising=False)
+        assert _should_skip_warning_for_read_permissions_on_config_file() is True
+
+    def test_new_env_var_false(self, monkeypatch):
+        monkeypatch.setenv(SKIP_WARNING_ENV_VAR, "false")
+        monkeypatch.delenv(DEPRECATED_SKIP_WARNING_ENV_VAR, raising=False)
+        assert _should_skip_warning_for_read_permissions_on_config_file() is False
+
+    def test_new_env_var_case_insensitive(self, monkeypatch):
+        monkeypatch.delenv(DEPRECATED_SKIP_WARNING_ENV_VAR, raising=False)
+        for value in ("True", "TRUE", "TrUe"):
+            monkeypatch.setenv(SKIP_WARNING_ENV_VAR, value)
+            assert _should_skip_warning_for_read_permissions_on_config_file() is True
+
+    def test_deprecated_env_var_true_emits_warning(self, monkeypatch):
+        monkeypatch.delenv(SKIP_WARNING_ENV_VAR, raising=False)
+        monkeypatch.setenv(DEPRECATED_SKIP_WARNING_ENV_VAR, "true")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = _should_skip_warning_for_read_permissions_on_config_file()
+        assert result is True
+        assert len(w) == 1
+        assert (
+            f"{DEPRECATED_SKIP_WARNING_ENV_VAR} is deprecated. "
+            f"Please use {SKIP_WARNING_ENV_VAR} instead." in str(w[0].message)
+        )
+
+    def test_deprecated_env_var_false_emits_warning(self, monkeypatch):
+        monkeypatch.delenv(SKIP_WARNING_ENV_VAR, raising=False)
+        monkeypatch.setenv(DEPRECATED_SKIP_WARNING_ENV_VAR, "false")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = _should_skip_warning_for_read_permissions_on_config_file()
+        assert result is False
+        assert len(w) == 1
+        assert DEPRECATED_SKIP_WARNING_ENV_VAR in str(w[0].message)
+
+    def test_new_env_var_takes_precedence_over_deprecated(self, monkeypatch):
+        monkeypatch.setenv(SKIP_WARNING_ENV_VAR, "true")
+        monkeypatch.setenv(DEPRECATED_SKIP_WARNING_ENV_VAR, "false")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = _should_skip_warning_for_read_permissions_on_config_file()
+        assert result is True
+        assert len(w) == 0
+
+    def test_new_env_var_false_takes_precedence_over_deprecated_true(self, monkeypatch):
+        monkeypatch.setenv(SKIP_WARNING_ENV_VAR, "false")
+        monkeypatch.setenv(DEPRECATED_SKIP_WARNING_ENV_VAR, "true")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = _should_skip_warning_for_read_permissions_on_config_file()
+        assert result is False
+        assert len(w) == 0
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
+def test_skip_warning_with_deprecated_env_var_emits_deprecation(tmp_path, monkeypatch):
+    """Using the deprecated env var still suppresses the permissions warning
+    but also emits a deprecation warning."""
+    c_file = tmp_path / "config.toml"
+    c1 = ConfigManager(file_path=c_file, name="root_parser")
+    c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
+    c_file.write_text(
+        dedent(
+            """\
+            b = true
+            """
+        )
+    )
+    c_file.chmod(stat.S_IMODE(c_file.stat().st_mode) | stat.S_IROTH)
+
+    with monkeypatch.context() as m:
+        m.delenv(SKIP_WARNING_ENV_VAR, raising=False)
+        m.setenv(DEPRECATED_SKIP_WARNING_ENV_VAR, "true")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            assert c1["b"] is True
+        deprecation_warnings = [
+            x for x in w if DEPRECATED_SKIP_WARNING_ENV_VAR in str(x.message)
+        ]
+        assert len(deprecation_warnings) == 1
+        permission_warnings = [
+            x for x in w if "Bad owner or permissions" in str(x.message)
+        ]
+        assert len(permission_warnings) == 0

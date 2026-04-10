@@ -1,0 +1,38 @@
+[
+  {
+    "os_image_name": "ubuntu-latest",
+    "os_download_name": "manylinux_x86_64",
+    "python-version": "3.9",
+    "cloud-provider": "aws"
+  },
+  {
+    "os_image_name": "ubuntu-latest",
+    "os_download_name": "manylinux_x86_64",
+    "python-version": "3.14",
+    "cloud-provider": "aws"
+  },
+  {
+    "os_image_name": "macos-latest",
+    "os_download_name": "macosx_x86_64",
+    "python-version": "3.9",
+    "cloud-provider": "azure"
+  },
+  {
+    "os_image_name": "macos-latest",
+    "os_download_name": "macosx_x86_64",
+    "python-version": "3.14",
+    "cloud-provider": "azure"
+  },
+  {
+    "os_image_name": "windows-latest",
+    "os_download_name": "win_amd64",
+    "python-version": "3.9",
+    "cloud-provider": "gcp"
+  },
+  {
+    "os_image_name": "windows-latest",
+    "os_download_name": "win_amd64",
+    "python-version": "3.14",
+    "cloud-provider": "gcp"
+  }
+]

@@ -24,8 +24,10 @@ from .compat import (
     INTERNAL_SERVER_ERROR,
     METHOD_NOT_ALLOWED,
     OK,
+    PERMANENT_REDIRECT,
     REQUEST_TIMEOUT,
     SERVICE_UNAVAILABLE,
+    TEMPORARY_REDIRECT,
     TOO_MANY_REQUESTS,
     UNAUTHORIZED,
     BadStatusLine,
@@ -41,7 +43,9 @@ from .constants import (
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
     HTTP_HEADER_USER_AGENT,
+    OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,
 )
+from .crl import CRLConfig
 from .description import (
     CLIENT_NAME,
     CLIENT_VERSION,
@@ -79,7 +83,12 @@ from .errors import (
     ServiceUnavailableError,
     TooManyRequests,
 )
-from .session_manager import ProxySupportAdapterFactory, SessionManager, SessionPool
+from .session_manager import (
+    ProxySupportAdapterFactory,
+    SessionManager,
+    SessionManagerFactory,
+    SessionPool,
+)
 from .sqlstate import (
     SQLSTATE_CONNECTION_NOT_EXISTS,
     SQLSTATE_CONNECTION_REJECTED,
@@ -99,6 +108,7 @@ from .vendored.requests.exceptions import (
     ConnectTimeout,
     ReadTimeout,
     SSLError,
+    TooManyRedirects,
 )
 from .vendored.urllib3.exceptions import ProtocolError
 from .vendored.urllib3.util.url import parse_url
@@ -184,8 +194,17 @@ PAT_WITH_EXTERNAL_SESSION = "PAT_WITH_EXTERNAL_SESSION"
 
 
 def is_retryable_http_code(code: int) -> bool:
-    """Decides whether code is a retryable HTTP issue."""
+    """Decides whether code is a retryable HTTP issue.
+
+    Note: 307/308 are normally auto-followed by the HTTP library (vendored
+    requests / aiohttp). They appear here as defense-in-depth — if a redirect
+    response is ever surfaced without being followed (e.g. max redirects
+    reached, allow_redirects=False, or library edge case), we retry instead
+    of failing. See SNOW-1997074.
+    """
     return 500 <= code < 600 or code in (
+        TEMPORARY_REDIRECT,  # 307
+        PERMANENT_REDIRECT,  # 308
         BAD_REQUEST,  # 400
         FORBIDDEN,  # 403
         METHOD_NOT_ALLOWED,  # 405
@@ -322,7 +341,9 @@ class SnowflakeRestful:
             session_manager = (
                 connection._session_manager
                 if (connection and connection._session_manager)
-                else SessionManager(adapter_factory=ProxySupportAdapterFactory())
+                else SessionManagerFactory.get_manager(
+                    adapter_factory=ProxySupportAdapterFactory()
+                )
             )
         self._session_manager = session_manager
         self._lock_token = Lock()
@@ -336,6 +357,19 @@ class SnowflakeRestful:
         # cache file name (enabled by default)
         ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = (
             self._connection._ocsp_response_cache_filename if self._connection else None
+        )
+        # OCSP root timeout
+        ssl_wrap_socket.FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT = (
+            self._connection._ocsp_root_certs_dict_lock_timeout
+            if self._connection
+            else OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
+        )
+
+        # CRL mode (should be DISABLED by default)
+        ssl_wrap_socket.FEATURE_CRL_CONFIG = (
+            CRLConfig.from_connection(self._connection)
+            if self._connection
+            else ssl_wrap_socket.DEFAULT_CRL_CONFIG
         )
 
         # This is to address the issue where requests hangs
@@ -836,7 +870,7 @@ class SnowflakeRestful:
         include_retry_reason = self._connection._enable_retry_reason_in_query_response
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
-        with self.use_requests_session(full_url) as session:
+        with self.use_session(full_url) as session:
             retry_ctx = RetryCtx(
                 _include_retry_params=include_retry_params,
                 _include_retry_reason=include_retry_reason,
@@ -1096,6 +1130,20 @@ class SnowflakeRestful:
             )
             download_end_time = get_time_millis()
 
+            # Log when the HTTP library auto-followed a redirect chain before
+            # delivering this response (history is populated by requests).
+            if raw_ret.history:
+                for hist_resp in raw_ret.history:
+                    if hist_resp.status_code in (
+                        TEMPORARY_REDIRECT,
+                        PERMANENT_REDIRECT,
+                    ):
+                        logger.debug(
+                            "Request was redirected: HTTP %d to %s",
+                            hist_resp.status_code,
+                            hist_resp.headers.get("Location", "unknown"),
+                        )
+
             try:
                 if raw_ret.status_code == OK:
                     logger.debug("SUCCESS")
@@ -1195,8 +1243,28 @@ class SnowflakeRestful:
                     exc_info=True,
                 )
                 raise RetryRequest(err)
+        except TooManyRedirects as err:
+            # requests raises TooManyRedirects when max_redirects is exceeded.
+            # Unlike .NET's HttpClient (which returns the last 307/308 response),
+            # requests throws here — so is_retryable_http_code(307/308) never fires.
+            # Catch explicitly and apply the same retry/login logic.
+            if is_login_request(full_url):
+                raise OperationalError(
+                    msg="Login request is retryable. Will be handled by authenticator",
+                    errno=ER_RETRYABLE_CODE,
+                )
+            else:
+                logger.debug(
+                    "Too many redirects. Retrying... Ignore the following "
+                    f"error stack: {err}",
+                    exc_info=True,
+                )
+                raise RetryRequest(err)
         except Exception as err:
             raise err
 
-    def use_requests_session(self, url=None) -> Generator[Session, Any, None]:
-        return self.session_manager.use_requests_session(url)
+    def use_session(self, url: str | bytes) -> Generator[Session, Any, None]:
+        return self.session_manager.use_session(url)
+
+    def use_requests_session(self, url: str | bytes) -> Generator[Session, Any, None]:
+        return self.use_session(url)

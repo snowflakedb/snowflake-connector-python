@@ -242,9 +242,9 @@ def test_auth_okta_step4_negative(caplog):
         nonlocal raise_token_refresh_error
         if raise_token_refresh_error:
             raise_token_refresh_error = False
-            return Mock(status_code=429)
+            return Mock(status_code=429, history=[])
         else:
-            return Mock(status_code=200, text="success")
+            return Mock(status_code=200, text="success", history=[])
 
     with patch.object(
         snowflake.connector.vendored.requests.sessions.Session,
@@ -345,6 +345,7 @@ def _init_rest(
     connection = mock_connection(disable_saml_url_check=disable_saml_url_check)
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
+    connection.cert_revocation_check_mode = "TEST_CRL_MODE"
     type(connection).application = PropertyMock(return_value=CLIENT_NAME)
     type(connection)._internal_application_name = PropertyMock(return_value=CLIENT_NAME)
     type(connection)._internal_application_version = PropertyMock(
