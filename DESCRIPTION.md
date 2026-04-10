@@ -15,7 +15,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v4.4.0(March 25,2026)
   - Bump the lower boundary of cryptography to 46.0.5 due to CVE-2026-26007.
-  - Added support for Python 3.14.
+  - Added support for Python 3.14 and Python 3.14t (free-threaded). Note: Python 3.14t CI testing excludes `win_arm64` (no `cryptography` wheels available) and `mitmproxy` proxy tests on all platforms (transitive dependencies `aioquic`/`pylsqpack` lack free-threaded-compatible wheels).
   - Removed pyOpenSSL upper bound dependency constraint to allow installation of pyOpenSSL 26.0.0+, which includes a fix for GHSA-vp96-hxj8-p424.
   - Fixed Azure IMDS `Metadata` header to use lowercase `"true"` instead of `"True"`, which caused 400 errors during Azure Workload Identity Federation authentication.
   - Fixed default `crl_download_max_size` to be 20MB instead of 200MB, as the previous value was set too high and could cause out-of-memory issues.
