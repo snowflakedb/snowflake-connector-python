@@ -113,6 +113,27 @@ def test_connect_with_service_name(mock_post_requests):
     assert fake_connector().service_name == "FAKE_SERVICE_NAME"
 
 
+def test_connect_client_prefetch_threads_zero_clamps_to_one(mock_post_requests):
+    conn = fake_connector(client_prefetch_threads=0)
+    try:
+        assert conn.client_prefetch_threads == 1
+        assert (
+            mock_post_requests["data"]["SESSION_PARAMETERS"]["CLIENT_PREFETCH_THREADS"]
+            == 1
+        )
+    finally:
+        conn.close()
+
+
+def test_client_prefetch_threads_setter_zero_clamps_to_one(mock_post_requests):
+    conn = fake_connector()
+    try:
+        conn.client_prefetch_threads = 0
+        assert conn.client_prefetch_threads == 1
+    finally:
+        conn.close()
+
+
 @pytest.mark.skip(reason="Mock doesn't work as expected.")
 @patch("snowflake.connector.network.SnowflakeRestful._post_request")
 def test_connection_ignore_exception(mockSnowflakeRestfulPostRequest):

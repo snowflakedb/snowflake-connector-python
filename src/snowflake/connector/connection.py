@@ -2290,12 +2290,19 @@ class SnowflakeConnection:
         return value
 
     def _validate_client_prefetch_threads(self) -> int:
-        if self.client_prefetch_threads <= 0:
-            self._client_prefetch_threads = 1
-        elif self.client_prefetch_threads > MAX_CLIENT_PREFETCH_THREADS:
-            self._client_prefetch_threads = MAX_CLIENT_PREFETCH_THREADS
-        self._client_prefetch_threads = int(self.client_prefetch_threads)
-        return self.client_prefetch_threads
+        value = self._client_prefetch_threads
+
+        if value is None:
+            value = DEFAULT_CLIENT_PREFETCH_THREADS
+        else:
+            value = int(value)
+            if value <= 0:
+                value = 1
+            elif value > MAX_CLIENT_PREFETCH_THREADS:
+                value = MAX_CLIENT_PREFETCH_THREADS
+
+        self._client_prefetch_threads = value
+        return value
 
     def _update_parameters(
         self,
