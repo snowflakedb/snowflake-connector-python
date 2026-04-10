@@ -8,8 +8,10 @@ from __future__ import annotations
 import logging
 import sys
 
+from ..logging_utils.filters import SecretMaskingFilter
 
 log = logging.getLogger(__name__)
+log.addFilter(SecretMaskingFilter())
 
 
 def _relevant_path(path: str) -> str | None:
@@ -24,7 +26,7 @@ def _trace(frame, event, arg):
         rel_path = _relevant_path(frame.f_back.f_code.co_filename)
         if rel_path:
             log.debug(
-                f"EXT-NTWRK-LOG:%s:%d:%s",
+                "EXT-NTWRK-LOG:%s:%d:%s",
                 rel_path,
                 frame.f_back.f_lineno,
                 frame.f_code.co_name,
