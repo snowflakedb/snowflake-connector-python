@@ -105,8 +105,8 @@ class Auth:
     def _add_spcs_token_to_body(self, body: dict[Any, Any]) -> None:
         """Inject SPCS_TOKEN into the login request body when available.
 
-        This reads the SPCS token from the path specified by SF_SPCS_TOKEN_PATH,
-        or from ``/snowflake/session/spcs_token`` when the env var is unset.
+        The token is read from /snowflake/session/spcs_token when
+        SNOWFLAKE_RUNNING_INSIDE_SPCS is set.
         """
         spcs_token = get_spcs_token()
         if spcs_token is not None:
