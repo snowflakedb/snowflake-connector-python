@@ -26,7 +26,6 @@ from .crl import CertRevocationCheckMode, CRLConfig, CRLValidator
 from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
 from .session_manager import SessionManager, SessionManagerFactory
-from .vendored.ext_logging import disable_extended_networking_logging
 from .vendored.urllib3 import connection as connection_
 from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext, WrappedSocket
 from .vendored.urllib3.util import ssl_ as ssl_
@@ -193,8 +192,6 @@ def ssl_wrap_socket_with_cert_revocation_checks(
         _ensure_partial_chain_on_context(provided_ctx, cafile_for_ctx)
 
     ret = ssl_.ssl_wrap_socket(**params)
-
-    disable_extended_networking_logging()
 
     log.debug(
         "CRL Check Mode: %s",
