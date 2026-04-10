@@ -125,10 +125,35 @@ def test_errorhandler_wrapper_from_ready_exception_normalizes_error_instances():
     assert captured["error_value"]["sqlstate"] == error_exc.sqlstate
     assert captured["error_value"]["done_format_msg"] is True
 
-def test_errorhandler_wrapper_from_ready_exception_reraises_generic_exception():
-    with pytest.raises(Exception, match="boom"):
+def test_errorhandler_wrapper_from_ready_exception_normalizes_and_calls_handler_for_generic_exception():
+    captured = {}
+    def handler(connection, cursor, error_class, error_value):
+        captured["error_class"] = error_class
+        captured["error_value"] = error_value
+
+    connection = MagicMock()
+    connection.messages = []
+    cursor = MagicMock()
+    cursor.messages = []
+    cursor.errorhandler = handler
+
+    error_exc = ValueError("generic boom")
+    
+    errors.Error.errorhandler_wrapper_from_ready_exception(
+        connection,
+        cursor,
+        error_exc,
+    )
+
+    assert captured["error_class"] is errors.InterfaceError
+    assert captured["error_value"]["msg"] == "generic boom"
+    assert captured["error_value"]["done_format_msg"] is True
+
+def test_errorhandler_wrapper_from_ready_exception_reraises_original_when_no_handler():
+    # Verify the original exception type is preserved on re-raise
+    with pytest.raises(ValueError, match="boom"):
         errors.Error.errorhandler_wrapper_from_ready_exception(
             None,
             None,
-            Exception("boom"),
+            ValueError("boom"),
         )

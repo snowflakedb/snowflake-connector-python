@@ -330,22 +330,33 @@ class Error(Exception):
         error_exc: Error | Exception,
     ) -> None:
         """Like errorhandler_wrapper, but it takes a ready to go Exception."""
-        if not isinstance(error_exc, Error):
-            raise error_exc
-
-        Error.errorhandler_wrapper(
-            connection,
-            cursor,
-            type(error_exc),
-            {
+        if isinstance(error_exc, Error):
+            error_class = type(error_exc)
+            error_value: ErrorDetails = {
                 "msg": error_exc.msg,
                 "errno": error_exc.errno,
                 "sqlstate": error_exc.sqlstate,
                 "sfqid": error_exc.sfqid,
                 "query": error_exc.query,
                 "done_format_msg": True,
-            },
+            }
+        else:
+            error_class = InterfaceError
+            error_value = {
+                "msg": str(error_exc),
+                "errno": None,
+                "sqlstate": None,
+                "done_format_msg": True,
+            }
+
+        handed_over = Error.hand_to_other_handler(
+            connection,
+            cursor,
+            error_class,
+            error_value,
         )
+        if not handed_over:
+            raise error_exc
 
     @staticmethod
     def hand_to_other_handler(
