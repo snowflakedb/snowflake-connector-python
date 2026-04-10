@@ -24,8 +24,10 @@ from .compat import (
     INTERNAL_SERVER_ERROR,
     METHOD_NOT_ALLOWED,
     OK,
+    PERMANENT_REDIRECT,
     REQUEST_TIMEOUT,
     SERVICE_UNAVAILABLE,
+    TEMPORARY_REDIRECT,
     TOO_MANY_REQUESTS,
     UNAUTHORIZED,
     BadStatusLine,
@@ -106,6 +108,7 @@ from .vendored.requests.exceptions import (
     ConnectTimeout,
     ReadTimeout,
     SSLError,
+    TooManyRedirects,
 )
 from .vendored.urllib3.exceptions import ProtocolError
 from .vendored.urllib3.util.url import parse_url
@@ -191,8 +194,17 @@ PAT_WITH_EXTERNAL_SESSION = "PAT_WITH_EXTERNAL_SESSION"
 
 
 def is_retryable_http_code(code: int) -> bool:
-    """Decides whether code is a retryable HTTP issue."""
+    """Decides whether code is a retryable HTTP issue.
+
+    Note: 307/308 are normally auto-followed by the HTTP library (vendored
+    requests / aiohttp). They appear here as defense-in-depth — if a redirect
+    response is ever surfaced without being followed (e.g. max redirects
+    reached, allow_redirects=False, or library edge case), we retry instead
+    of failing. See SNOW-1997074.
+    """
     return 500 <= code < 600 or code in (
+        TEMPORARY_REDIRECT,  # 307
+        PERMANENT_REDIRECT,  # 308
         BAD_REQUEST,  # 400
         FORBIDDEN,  # 403
         METHOD_NOT_ALLOWED,  # 405
@@ -1118,6 +1130,20 @@ class SnowflakeRestful:
             )
             download_end_time = get_time_millis()
 
+            # Log when the HTTP library auto-followed a redirect chain before
+            # delivering this response (history is populated by requests).
+            if raw_ret.history:
+                for hist_resp in raw_ret.history:
+                    if hist_resp.status_code in (
+                        TEMPORARY_REDIRECT,
+                        PERMANENT_REDIRECT,
+                    ):
+                        logger.debug(
+                            "Request was redirected: HTTP %d to %s",
+                            hist_resp.status_code,
+                            hist_resp.headers.get("Location", "unknown"),
+                        )
+
             try:
                 if raw_ret.status_code == OK:
                     logger.debug("SUCCESS")
@@ -1213,6 +1239,23 @@ class SnowflakeRestful:
             else:
                 logger.debug(
                     "Hit retryable client error. Retrying... Ignore the following "
+                    f"error stack: {err}",
+                    exc_info=True,
+                )
+                raise RetryRequest(err)
+        except TooManyRedirects as err:
+            # requests raises TooManyRedirects when max_redirects is exceeded.
+            # Unlike .NET's HttpClient (which returns the last 307/308 response),
+            # requests throws here — so is_retryable_http_code(307/308) never fires.
+            # Catch explicitly and apply the same retry/login logic.
+            if is_login_request(full_url):
+                raise OperationalError(
+                    msg="Login request is retryable. Will be handled by authenticator",
+                    errno=ER_RETRYABLE_CODE,
+                )
+            else:
+                logger.debug(
+                    "Too many redirects. Retrying... Ignore the following "
                     f"error stack: {err}",
                     exc_info=True,
                 )

@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash -e -l
 #
 # Build Snowflake Python Connector on Mac
 # NOTES:
@@ -12,32 +12,31 @@ DIST_DIR="$CONNECTOR_DIR/dist"
 BUILD_START=$(date +%s)
 _elapsed() { echo $(( $(date +%s) - BUILD_START )); }
 
-echo "[diag] build_darwin.sh started at $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-echo "[diag] hostname=$(hostname) user=$(whoami) arch=$(uname -m) os=$(sw_vers -productVersion 2>/dev/null || uname -r)"
-echo "[diag] PYTHON_VERSIONS=${PYTHON_VERSIONS}"
-echo "[diag] CONNECTOR_DIR=${CONNECTOR_DIR}"
-echo "[diag] disk free (CONNECTOR_DIR):"
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] (+$(_elapsed)s) $*"
+}
+
+log "[Info] Starting build_darwin.sh"
+log "[Info] Host: $(uname -a)"
+log "[Info] Python versions to build: ${PYTHON_VERSIONS}"
+log "[diag] hostname=$(hostname) user=$(whoami) arch=$(uname -m) os=$(sw_vers -productVersion 2>/dev/null || uname -r)"
+log "[diag] PATH=${PATH}"
+log "[diag] disk free (CONNECTOR_DIR):"
 df -h "${CONNECTOR_DIR}" 2>/dev/null || true
-echo "[diag] PATH=${PATH}"
-echo "[diag] SHELL=${SHELL} BASH_VERSION=${BASH_VERSION}"
-echo "[diag] stdin is a TTY: $([ -t 0 ] && echo yes || echo no)"
 
 if command -v pyenv &>/dev/null; then
-    echo "[diag] pyenv version: $(pyenv --version 2>&1)"
-    echo "[diag] pyenv root: $(pyenv root 2>/dev/null || echo 'N/A')"
-    echo "[diag] pyenv versions installed:"
-    pyenv versions 2>&1 | sed 's/^/[diag]   /'
-    echo "[diag] PYENV_VERSION=${PYENV_VERSION:-<unset>}"
-    echo "[diag] PYENV_ROOT=${PYENV_ROOT:-<unset>}"
-    echo "[diag] .python-version file: $(cat .python-version 2>/dev/null || echo '<none>')"
+    log "[diag] pyenv version: $(pyenv --version 2>&1)"
+    log "[diag] pyenv root: $(pyenv root 2>/dev/null || echo 'N/A')"
+    log "[diag] pyenv versions installed:"
+    pyenv versions 2>&1 | sed 's/^/  /'
 else
-    echo "[diag] pyenv: NOT FOUND"
+    log "[diag] pyenv: NOT FOUND"
 fi
 
 cd $CONNECTOR_DIR
 # Clean up previously built DIST_DIR
 if [ -d "${DIST_DIR}" ]; then
-    echo "[WARN] ${DIST_DIR} already existing, deleting it..."
+    log "[WARN] ${DIST_DIR} already existing, deleting it..."
     rm -rf "${DIST_DIR}"
 fi
 mkdir -p ${DIST_DIR}
@@ -51,68 +50,57 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     PYTHON="python${PYTHON_VERSION}"
     VENV_DIR="${CONNECTOR_DIR}/venv-${PYTHON_VERSION}"
 
-    echo ""
-    echo "[diag] ======== Python ${PYTHON_VERSION} ======== (+$(_elapsed)s elapsed)"
-    echo "[diag] which ${PYTHON} => $(which ${PYTHON} 2>/dev/null || echo 'NOT FOUND')"
+    log "[Info] ===== Starting build for Python ${PYTHON_VERSION} ====="
 
-    # Select the pyenv version so the shim resolves to the real binary;
-    # without this the shim hangs in non-interactive (Jenkins) environments.
+    # Select the matching pyenv-installed version (e.g. 3.9 -> 3.9.21)
     if command -v pyenv &>/dev/null; then
-        # Find the latest installed patch for this minor version
-        _pyenv_match=$(pyenv versions --bare 2>/dev/null | grep "^${PYTHON_VERSION}" | tail -1)
-        if [ -z "${_pyenv_match}" ]; then
-            echo "[ERROR] pyenv has no installed version matching ${PYTHON_VERSION}.*, skipping"
-            pyenv versions --bare 2>&1 | sed 's/^/[diag]   available: /'
+        PYENV_MATCH=$(pyenv versions --bare 2>/dev/null | grep "^${PYTHON_VERSION//./\\.}" | tail -1)
+        if [ -n "$PYENV_MATCH" ]; then
+            export PYENV_VERSION="${PYENV_MATCH}"
+            log "[Info] set PYENV_VERSION=${PYENV_VERSION}"
+        else
+            log "[ERROR] pyenv has no installed version matching ${PYTHON_VERSION}.*, skipping"
+            pyenv versions --bare 2>&1 | sed 's/^/  available: /'
             continue
         fi
-        export PYENV_VERSION="${_pyenv_match}"
-        echo "[diag] set PYENV_VERSION=${PYENV_VERSION} (matched from ${PYTHON_VERSION})"
-        echo "[diag] pyenv which ${PYTHON} => $(pyenv which ${PYTHON} 2>&1 || echo 'FAILED')"
     fi
 
-    echo "[diag] about to run: ${PYTHON} --version (+$(_elapsed)s)"
-    ${PYTHON} --version 2>&1 || { echo "[ERROR] ${PYTHON} not found, skipping"; continue; }
-    echo "[diag] ${PYTHON} --version succeeded (+$(_elapsed)s)"
+    log "[Info] Checking if ${PYTHON} is available..."
+    which ${PYTHON} || { log "[ERROR] ${PYTHON} not found in PATH, skipping"; unset PYENV_VERSION; continue; }
+    ${PYTHON} --version 2>&1
 
     # Need to create a venv to update build dependencies
-    echo "[diag] Creating venv at ${VENV_DIR} ... (+$(_elapsed)s)"
+    log "[Info] Creating venv at ${VENV_DIR}..."
     ${PYTHON} -m venv ${VENV_DIR}
-    echo "[diag] venv created (+$(_elapsed)s)"
     source ${VENV_DIR}/bin/activate
-    echo "[diag] venv activated — python: $(python --version 2>&1) at $(which python)"
-    echo "[diag] venv pip: $(python -m pip --version 2>&1)"
+    log "[Info] Created and activated new venv at ${VENV_DIR}"
+    log "[diag] venv python: $(python --version 2>&1) at $(which python)"
 
     # Build
-    echo "[Info] Creating a wheel: snowflake_connector using $PYTHON"
+    log "[Info] Creating a wheel: snowflake_connector using $PYTHON"
+    # Clean up possible build artifacts
     rm -rf build generated_version.py
-
-    echo "[diag] pip install -U pip setuptools wheel build ... (+$(_elapsed)s)"
+    # Update PEP-517 dependencies
+    log "[Info] Upgrading pip, setuptools, wheel, build..."
     python -m pip install -U pip setuptools wheel build 2>&1 | tail -5
-    echo "[diag] pip install finished (+$(_elapsed)s)"
-
-    echo "[diag] disk free before wheel build:"
-    df -h "${CONNECTOR_DIR}" 2>/dev/null || true
-    echo "[diag] python -m build --wheel starting ... (+$(_elapsed)s)"
+    log "[Info] pip install complete"
+    # Use new PEP-517 build
+    log "[Info] Running python -m build --wheel ..."
     python -m build --wheel . 2>&1 || {
-        echo "[ERROR] wheel build failed for ${PYTHON_VERSION} (+$(_elapsed)s)"
+        log "[ERROR] wheel build failed for ${PYTHON_VERSION}"
         deactivate; unset PYENV_VERSION; rm -rf ${VENV_DIR}
         continue
     }
-    echo "[diag] python -m build --wheel finished (+$(_elapsed)s)"
-
-    echo "[diag] wheels so far in dist/:"
-    ls -lh "${DIST_DIR}"/*.whl 2>/dev/null || echo "[diag]   (none)"
-
+    log "[Info] python -m build complete"
     deactivate
     unset PYENV_VERSION
-    echo "[diag] Deleting venv at ${VENV_DIR} (+$(_elapsed)s)"
+    log "[Info] Deleting venv at ${VENV_DIR}"
     rm -rf ${VENV_DIR}
 
     STEP_ELAPSED=$(( $(date +%s) - STEP_START ))
-    echo "[diag] Python ${PYTHON_VERSION} completed in ${STEP_ELAPSED}s (total +$(_elapsed)s)"
+    log "[Info] ===== Finished build for Python ${PYTHON_VERSION} in ${STEP_ELAPSED}s ====="
 done
 
-echo ""
-echo "[diag] build_darwin.sh finished at $(date -u '+%Y-%m-%dT%H:%M:%SZ') — total $(_elapsed)s"
-echo "[diag] wheels built:"
-ls -lh "${DIST_DIR}"/*.whl 2>/dev/null || echo "[diag] (no wheels found in ${DIST_DIR})"
+log "[Info] build_darwin.sh finished successfully — total $(_elapsed)s"
+log "[Info] wheels built:"
+ls -lh "${DIST_DIR}"/*.whl 2>/dev/null || log "[WARN] no wheels found in ${DIST_DIR}"
