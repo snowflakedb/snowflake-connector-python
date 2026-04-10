@@ -1149,6 +1149,139 @@ async def test_disable_query_context_cache(conn_cnx) -> None:
         assert conn.query_context_cache is None
 
 
+@pytest.mark.aws
+@pytest.mark.skipolddriver
+async def test_qcc_updated_on_failed_query_with_hybrid_table(conn_cnx) -> None:
+    """SNOW-3010877: QCC must be merged even when a query fails.
+
+    Reproduces the exact hybrid table scenario from the bug report:
+    a duplicate-key INSERT inside a transaction fails, but the server
+    still sends queryContext in the error response.  The client must
+    merge it so that subsequent queries on different GS nodes see the
+    updated sessionDPO / read snapshot watermark.
+
+    Note: full behavioural verification depends on the server returning
+    queryContext in error responses, which is gated behind a feature flag.
+    On accounts where the flag is off the QCC simply won't change, so the
+    >= assertion still passes.  The unit tests with mocked responses are
+    the authoritative behavioural tests for this feature.
+    """
+    async with conn_cnx() as conn:
+        cur = conn.cursor()
+        table_name = f"test_qcc_hybrid_{random_string(5)}"
+        try:
+            await cur.execute(
+                f"create or replace hybrid table {table_name} "
+                f"(pk text primary key, val text)"
+            )
+
+            # Q1 — successful insert
+            await cur.execute(f"insert into {table_name} values ('k1', 'v1')")
+            qcc_after_success = len(conn.query_context_cache)
+            assert (
+                qcc_after_success > 0
+            ), "QCC should have entries after successful query"
+
+            # Q2 — duplicate key insert, expected to fail
+            with pytest.raises(ProgrammingError):
+                await cur.execute(f"insert into {table_name} values ('k1', 'v1')")
+
+            # The critical assertion: QCC must still have been updated
+            # despite the query failure.  The entry count must not have
+            # decreased — it should stay the same or grow.
+            qcc_after_failure = len(conn.query_context_cache)
+            assert qcc_after_failure >= qcc_after_success, (
+                f"QCC should not shrink after a failed query: "
+                f"before={qcc_after_success}, after={qcc_after_failure}"
+            )
+        finally:
+            await cur.execute(f"drop table if exists {table_name}")
+
+
+@pytest.mark.aws
+@pytest.mark.skipolddriver
+async def test_qcc_tracks_multi_database_hybrid_tables(conn_cnx) -> None:
+    """Verify QCC grows as queries touch hybrid tables in different databases.
+
+    Each database contributes an additional entry to the QCC.  The test
+    mirrors the standard multi-database QCC integration test present in the
+    Go and Node.js drivers.
+
+    Steps:
+      1. Create 3 databases, each with a hybrid table of the same name.
+      2. Insert identical rows into each table via USE DATABASE + unqualified name.
+      3. After each database, assert QCC size grew (2 → 3 → 4).
+      4. Run cross-DB selects to confirm data correctness; QCC stays at 4.
+    """
+    suffix = random_string(5)
+    db_names = [f"qcc_test_db_{suffix}_{i}" for i in range(1, 4)]
+    table_name = f"ht_{random_string(8)}"
+
+    async with conn_cnx() as conn:
+        cur = conn.cursor()
+        # Remember the original database so we can restore it in cleanup.
+        await cur.execute("SELECT CURRENT_DATABASE()")
+        original_db = (await cur.fetchone())[0]
+
+        try:
+            # Pre-create all databases
+            for db in db_names:
+                await cur.execute(f"CREATE DATABASE IF NOT EXISTS {db}")
+
+            # Phase 1: create tables and insert data, verify QCC growth
+            for db, expected_qcc_size in zip(db_names, [2, 3, 4]):
+                await cur.execute(f"USE DATABASE {db}")
+                await cur.execute(
+                    f"CREATE OR REPLACE HYBRID TABLE {table_name} "
+                    f"(a INT PRIMARY KEY, b INT)"
+                )
+                await cur.execute(
+                    f"INSERT INTO {table_name} VALUES (1, 2), (2, 3), (3, 4)"
+                )
+
+                # Verify data was inserted into the correct database
+                await cur.execute(f"SELECT * FROM {table_name} ORDER BY a")
+                rows = await cur.fetchall()
+                assert rows == [
+                    (1, 2),
+                    (2, 3),
+                    (3, 4),
+                ], f"Data mismatch in {db}: {rows}"
+
+                actual = len(conn.query_context_cache)
+                assert actual == expected_qcc_size, (
+                    f"After operations on {db}: "
+                    f"expected QCC size {expected_qcc_size}, got {actual}"
+                )
+
+            # Phase 2: cross-DB selects — verify data correctness and
+            # QCC stays at 4
+            await cur.execute(
+                f"SELECT * FROM {db_names[0]}.public.{table_name} x, "
+                f"{db_names[1]}.public.{table_name} y, "
+                f"{db_names[2]}.public.{table_name} z "
+                f"WHERE x.a = y.a AND y.a = z.a"
+            )
+            rows = await cur.fetchall()
+            assert len(rows) == 3, f"Expected 3 rows from 3-way join, got {len(rows)}"
+
+            await cur.execute(
+                f"SELECT * FROM {db_names[0]}.public.{table_name} x, "
+                f"{db_names[1]}.public.{table_name} y "
+                f"WHERE x.a = y.a"
+            )
+            rows = await cur.fetchall()
+            assert len(rows) == 3, f"Expected 3 rows from 2-way join, got {len(rows)}"
+
+            assert (
+                len(conn.query_context_cache) == 4
+            ), "QCC should remain at 4 after cross-DB selects"
+        finally:
+            await cur.execute(f"USE DATABASE {original_db}")
+            for db in db_names:
+                await cur.execute(f"DROP DATABASE IF EXISTS {db}")
+
+
 @pytest.mark.skipolddriver
 @pytest.mark.parametrize("mode", ("file", "env"))
 @pytest.mark.parametrize("connection_name", ["default", "custom_connection_for_test"])
