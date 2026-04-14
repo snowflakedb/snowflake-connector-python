@@ -11,6 +11,79 @@ from io import StringIO
 from pathlib import Path
 from typing import Any, Sequence
 
+_VALUES_CLAUSE_RE = re.compile(r"\bVALUES\s*\(", re.IGNORECASE)
+
+
+def extract_values_clause(sql: str) -> str | None:
+    """Extract the VALUES clause from an INSERT SQL statement.
+
+    Uses a balanced-parentheses parser rather than a greedy regex so that
+    nested function calls (e.g. ``PARSE_JSON(%(col)s)``) and string literals
+    that contain parentheses are handled correctly.
+
+    Examples that the greedy regex gets wrong but this function handles:
+
+    * ``INSERT INTO t (raw) (SELECT PARSE_JSON(c) as raw FROM VALUES (%(raw)s))``
+      → returns ``(%(raw)s)``  (greedy regex returns ``(%(raw)s))``)
+    * ``INSERT INTO t (col) VALUES (PARSE_JSON(%(col)s))``
+      → returns ``(PARSE_JSON(%(col)s))``
+
+    Returns:
+        The VALUES clause including its outer parentheses, e.g. ``(%(col)s)``,
+        or ``None`` when no balanced VALUES clause can be found.
+    """
+    m = _VALUES_CLAUSE_RE.search(sql)
+    if not m:
+        return None
+
+    start = m.end() - 1  # position of the opening '('
+    depth = 0
+    in_single_quote = False
+    in_double_quote = False
+    in_dollar_quote = False
+    i = start
+
+    while i < len(sql):
+        ch = sql[i]
+
+        if in_dollar_quote:
+            if sql[i : i + 2] == "$$":
+                in_dollar_quote = False
+                i += 2
+                continue
+        elif in_single_quote:
+            if ch == "'":
+                if i + 1 < len(sql) and sql[i + 1] == "'":
+                    i += 2  # '' escape inside single-quoted string
+                    continue
+                in_single_quote = False
+        elif in_double_quote:
+            if ch == '"':
+                if i + 1 < len(sql) and sql[i + 1] == '"':
+                    i += 2  # "" escape inside double-quoted string
+                    continue
+                in_double_quote = False
+        else:
+            if sql[i : i + 2] == "$$":
+                in_dollar_quote = True
+                i += 2
+                continue
+            elif ch == "'":
+                in_single_quote = True
+            elif ch == '"':
+                in_double_quote = True
+            elif ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    return sql[start : i + 1]
+
+        i += 1
+
+    return None  # unbalanced or no VALUES clause found
+
+
 COMMENT_PATTERN_RE = re.compile(r"^\s*\-\-")
 EMPTY_LINE_RE = re.compile(r"^\s*$")
 

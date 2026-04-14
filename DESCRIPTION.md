@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - Upcoming Release
+  - Added `use_values_clause_parser` connection parameter (default `False`). When enabled, `executemany` uses a balanced-parentheses parser instead of a greedy regex to locate the VALUES clause in pyformat INSERT rewrites. This fixes incorrect behaviour with nested function calls such as SQLAlchemy `@compiles VARIANT` patterns (e.g. `PARSE_JSON(%(col)s)`) and subquery-form INSERTs (SNOW-298756). Usage tracking is reported via in-band telemetry when the feature is active.
   - Added ECDSA key support (ES256, ES384, ES512) for key-pair authentication.
   - Added HTTP 307/308 redirect status codes to the retryable set as defense-in-depth, with redirect-aware logging in both sync and async paths.
   - Consolidated keyring token cache to use a single service name with hashed account keys, reducing macOS Keychain password prompts. Legacy entries are auto-migrated on first read.

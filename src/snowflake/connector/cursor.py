@@ -79,6 +79,7 @@ from .options import installed_pandas
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
+from .util_text import extract_values_clause
 
 if TYPE_CHECKING:  # pragma: no cover
     from pandas import DataFrame
@@ -1473,8 +1474,15 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                 #  accumulate results to mock the result from a single insert statement as formatted below
                 logger.debug("rewriting INSERT query")
                 command_wo_comments = re.sub(self.COMMENT_SQL_RE, "", command)
-                m = self.INSERT_SQL_VALUES_RE.match(command_wo_comments)
-                if not m:
+                if self._connection._use_values_clause_parser:
+                    fmt = extract_values_clause(command_wo_comments)
+                    self._log_telemetry_job_data(
+                        TelemetryField.VALUES_CLAUSE_PARSER, TelemetryData.TRUE
+                    )
+                else:
+                    m = self.INSERT_SQL_VALUES_RE.match(command_wo_comments)
+                    fmt = m.group(1) if m else None
+                if fmt is None:
                     Error.errorhandler_wrapper(
                         self.connection,
                         self,
@@ -1484,8 +1492,6 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                             "errno": ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
                         },
                     )
-
-                fmt = m.group(1)
                 values = []
                 for param in seqparams:
                     logger.debug(f"parameter: {param}")

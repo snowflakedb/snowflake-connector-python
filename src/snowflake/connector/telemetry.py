@@ -44,6 +44,8 @@ class TelemetryField(Enum):
     NANOARROW_IMPORT = "nanoarrow_import"
     # multi-statement usage
     MULTI_STATEMENT = "client_multi_statement_query"
+    # executemany INSERT VALUES clause balanced-parentheses parser usage (SNOW-298756)
+    VALUES_CLAUSE_PARSER = "client_executemany_values_clause_parser"
     # Keys for telemetry data sent through either in-band or out-of-band telemetry
     KEY_TYPE = "type"
     KEY_SOURCE = "source"
