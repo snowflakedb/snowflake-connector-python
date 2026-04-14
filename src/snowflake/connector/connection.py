@@ -309,10 +309,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "reuse_results": (False, bool),
     # parameter protecting behavior change of SNOW-501058
     "interpolate_empty_sequences": (False, bool),
-    # Use balanced-parentheses parser for VALUES clause in executemany INSERT
-    # rewrite (SNOW-298756). Correctly handles nested function calls such as
-    # PARSE_JSON(...) and SQLAlchemy @compiles VARIANT patterns.
-    "use_values_clause_parser": (False, bool),
     "enable_connection_diag": (False, bool),  # Generate SnowCD like report
     "connection_diag_log_path": (
         None,

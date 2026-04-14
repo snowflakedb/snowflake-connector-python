@@ -41,7 +41,7 @@ def test_random_string_generation_with_same_global_seed():
 @pytest.mark.parametrize(
     "sql, expected",
     [
-        # Simple pyformat single column — also the default path via INSERT_SQL_VALUES_RE
+        # Simple pyformat single column
         (
             "INSERT INTO t (col) VALUES (%(col)s)",
             "(%(col)s)",

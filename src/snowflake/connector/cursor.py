@@ -349,9 +349,6 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
     INSERT_SQL_RE = re.compile(r"^insert\s+into", flags=re.IGNORECASE)
     COMMENT_SQL_RE = re.compile(r"/\*.*\*/")
-    INSERT_SQL_VALUES_RE = re.compile(
-        r".*VALUES\s*(\(.*\)).*", re.IGNORECASE | re.MULTILINE | re.DOTALL
-    )
     ALTER_SESSION_RE = re.compile(
         r"alter\s+session\s+set\s+(\w*?)\s*=\s*\'?([^\']+?)\'?\s*(?:;|$)",
         flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
@@ -1474,14 +1471,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                 #  accumulate results to mock the result from a single insert statement as formatted below
                 logger.debug("rewriting INSERT query")
                 command_wo_comments = re.sub(self.COMMENT_SQL_RE, "", command)
-                if self._connection._use_values_clause_parser:
-                    fmt = extract_values_clause(command_wo_comments)
-                    self._log_telemetry_job_data(
-                        TelemetryField.VALUES_CLAUSE_PARSER, TelemetryData.TRUE
-                    )
-                else:
-                    m = self.INSERT_SQL_VALUES_RE.match(command_wo_comments)
-                    fmt = m.group(1) if m else None
+                fmt = extract_values_clause(command_wo_comments)
                 if fmt is None:
                     Error.errorhandler_wrapper(
                         self.connection,
