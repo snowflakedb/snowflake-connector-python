@@ -39,7 +39,7 @@ def _is_prefix_equal(url1, url2):
     port1 = parsed_url1.port
     if not port1 and parsed_url1.scheme == "https":
         port1 = "443"
-    port2 = parsed_url1.port
+    port2 = parsed_url2.port
     if not port2 and parsed_url2.scheme == "https":
         port2 = "443"
 
