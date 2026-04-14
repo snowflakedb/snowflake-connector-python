@@ -13,6 +13,16 @@ from typing import Any, Sequence
 
 _VALUES_CLAUSE_RE = re.compile(r"\bVALUES\s*\(", re.IGNORECASE)
 
+# Matches only the tokens that affect parser state.  Two-char tokens are
+# listed first so the alternation is greedy and consumes them whole:
+#   $$   — dollar-quote delimiter
+#   ''   — escaped single-quote inside a single-quoted string
+#   ""   — escaped double-quote inside a double-quoted string
+#   ( ) ' "  — individual state-change characters
+# Everything between tokens is skipped at C speed by the regex engine,
+# avoiding a Python-level loop over every character.
+_SQL_TOKENS_RE = re.compile(r"\$\$|''|\"\"|[()'\"]")
+
 
 def extract_values_clause(sql: str) -> str | None:
     """Extract the VALUES clause from an INSERT SQL statement.
@@ -41,45 +51,34 @@ def extract_values_clause(sql: str) -> str | None:
     in_single_quote = False
     in_double_quote = False
     in_dollar_quote = False
-    i = start
 
-    while i < len(sql):
-        ch = sql[i]
+    for tok in _SQL_TOKENS_RE.finditer(sql, start):
+        t = tok.group()
 
         if in_dollar_quote:
-            if sql[i : i + 2] == "$$":
+            if t == "$$":
                 in_dollar_quote = False
-                i += 2
-                continue
         elif in_single_quote:
-            if ch == "'":
-                if i + 1 < len(sql) and sql[i + 1] == "'":
-                    i += 2  # '' escape inside single-quoted string
-                    continue
+            if t == "'":
                 in_single_quote = False
+            # t == "''" → escaped quote, stay in string (fall through, do nothing)
         elif in_double_quote:
-            if ch == '"':
-                if i + 1 < len(sql) and sql[i + 1] == '"':
-                    i += 2  # "" escape inside double-quoted string
-                    continue
+            if t == '"':
                 in_double_quote = False
+            # t == '""' → escaped quote, stay in string (fall through, do nothing)
         else:
-            if sql[i : i + 2] == "$$":
-                in_dollar_quote = True
-                i += 2
-                continue
-            elif ch == "'":
-                in_single_quote = True
-            elif ch == '"':
-                in_double_quote = True
-            elif ch == "(":
+            if t == "(":
                 depth += 1
-            elif ch == ")":
+            elif t == ")":
                 depth -= 1
                 if depth == 0:
-                    return sql[start : i + 1]
-
-        i += 1
+                    return sql[start : tok.end()]
+            elif t == "'":
+                in_single_quote = True
+            elif t == '"':
+                in_double_quote = True
+            elif t == "$$":
+                in_dollar_quote = True
 
     return None  # unbalanced or no VALUES clause found
 
