@@ -862,8 +862,8 @@ def test_json_cache_serialization_and_deserialization(tmpdir):
         ):
             assert key1 == key2 and value1 == value2
 
-    def verify_exception_default(_, loaded_cache):
-        """Test default behavior: custom exceptions are converted to RevocationCheckError"""
+    def verify_exception(_, loaded_cache):
+        """All cached exceptions are deserialized as RevocationCheckError (no dynamic import)."""
         exc_1 = loaded_cache[(b"key1", b"key2", b"key3")].exception
         exc_2 = loaded_cache[(b"key4", b"key5", b"key6")].exception
         exc_3 = loaded_cache[(b"key7", b"key8", b"key9")].exception
@@ -872,31 +872,10 @@ def test_json_cache_serialization_and_deserialization(tmpdir):
             and exc_1.raw_msg == "error"
             and exc_1.errno == 1
         )
-        # By default, custom exceptions (ValueError) are converted to RevocationCheckError
         assert isinstance(exc_2, RevocationCheckError)
-        assert (
-            isinstance(exc_3, RevocationCheckError)
-            and "while deserializing ocsp cache, please try cleaning up the OCSP cache under directory"
-            in exc_3.msg
-        )
-
-    def verify_exception_deprecated(_, loaded_cache):
-        """Test deprecated behavior with env var: custom exceptions are preserved"""
-        exc_1 = loaded_cache[(b"key1", b"key2", b"key3")].exception
-        exc_2 = loaded_cache[(b"key4", b"key5", b"key6")].exception
-        exc_3 = loaded_cache[(b"key7", b"key8", b"key9")].exception
-        assert (
-            isinstance(exc_1, RevocationCheckError)
-            and exc_1.raw_msg == "error"
-            and exc_1.errno == 1
-        )
-        # With env var set, custom exceptions are preserved
-        assert isinstance(exc_2, ValueError) and str(exc_2) == "value error"
-        assert (
-            isinstance(exc_3, RevocationCheckError)
-            and "while deserializing ocsp cache, please try cleaning up the OCSP cache under directory"
-            in exc_3.msg
-        )
+        assert exc_2.raw_msg == "value error"
+        assert isinstance(exc_3, RevocationCheckError)
+        assert exc_3.raw_msg == "json error: line 1 column 1 (char 0)"
 
     verify(verify_happy_path, copy.deepcopy(test_cache))
 
@@ -906,7 +885,6 @@ def test_json_cache_serialization_and_deserialization(tmpdir):
     )
     verify(verify_none, origin_cache)
 
-    # Test default behavior (no env var)
     origin_cache = copy.deepcopy(test_cache)
     origin_cache.update(
         {
@@ -921,27 +899,4 @@ def test_json_cache_serialization_and_deserialization(tmpdir):
             ),
         }
     )
-    verify(verify_exception_default, origin_cache)
-
-    # Test deprecated behavior (with env var set)
-    with mock.patch.dict(
-        os.environ, {"SNOWFLAKE_ENABLE_CUSTOM_REVOCATION_ERRORS": "true"}
-    ):
-        origin_cache = copy.deepcopy(test_cache)
-        origin_cache.update(
-            {
-                (b"key1", b"key2", b"key3"): OCSPResponseValidationResult(
-                    exception=RevocationCheckError(msg="error", errno=1),
-                ),
-                (b"key4", b"key5", b"key6"): OCSPResponseValidationResult(
-                    exception=ValueError("value error"),
-                ),
-                (b"key7", b"key8", b"key9"): OCSPResponseValidationResult(
-                    exception=json.JSONDecodeError("json error", "doc", 0)
-                ),
-            }
-        )
-        with pytest.warns(
-            DeprecationWarning, match="Support for custom revocation error classes"
-        ):
-            verify(verify_exception_deprecated, origin_cache)
+    verify(verify_exception, origin_cache)
