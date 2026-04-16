@@ -107,6 +107,31 @@ async def test_cursor_execute_timeout(mockCancelQuery):
     assert mockCancelQuery.called
 
 
+async def test_executemany_with_num_statements_does_not_duplicate_trailing_semicolon():
+    fake_conn = FakeConnection()
+    fake_conn._paramstyle = "pyformat"
+
+    cursor = SnowflakeCursor(fake_conn)
+    cursor.reset = MagicMock()
+    cursor._preprocess_pyformat_query = AsyncMock(
+        side_effect=lambda command, params=None: command
+    )
+    cursor.execute = AsyncMock()
+
+    await cursor.executemany(
+        "select %(value)s;",
+        [{"value": 1}, {"value": 2}],
+        num_statements=1,
+    )
+
+    cursor.execute.assert_awaited_once_with(
+        "select %(value)s;select %(value)s;",
+        None,
+        _do_reset=False,
+        num_statements=2,
+    )
+
+
 # The _upload/_download/_upload_stream/_download_stream are newly introduced
 # and therefore should not be tested in old drivers.
 @pytest.mark.skipolddriver
