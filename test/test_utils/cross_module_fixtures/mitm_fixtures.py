@@ -1,5 +1,6 @@
 """Mitmproxy fixtures for testing."""
 
+import shutil
 from typing import Any, Generator, Union
 
 import pytest
@@ -25,9 +26,18 @@ def mitm_proxy() -> Generator[Union[MitmClient, Any], Any, None]:
     Yields:
         MitmClient: Running mitmproxy client instance
 
+    Skips:
+        When mitmdump binary is not available (e.g., Python 3.14+ where
+        mitmproxy is excluded from [development] extras because transitive
+        dependencies aioquic/pylsqpack lack compatible wheels).
+
     Fails:
-        When RuntimeError: If mitmproxy is not installed or fails to start
+        When RuntimeError: If mitmproxy is installed but fails to start
     """
+    # mitmproxy is excluded for Python 3.14+ in setup.cfg; skip dynamically
+    # so tests auto-re-enable when upstream wheels become available.
+    if not shutil.which("mitmdump"):
+        pytest.skip("mitmdump not available (mitmproxy not installed)")
     try:
         with MitmClient() as client:
             yield client
