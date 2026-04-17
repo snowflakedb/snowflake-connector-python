@@ -28,7 +28,7 @@ from ._session_manager import SessionManager, SessionManagerFactory
 logger = logging.getLogger(__name__)
 
 GCP_METADATA_SERVICE_ACCOUNT_BASE_URL = (
-    "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default"
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default"
 )
 
 
