@@ -127,9 +127,12 @@ fi
 PYTHON="$VENV_DIR/bin/python"
 echo ""
 
-# Show installed connector version
+# Show installed connector version and full environment
 echo "snowflake-connector-python version:"
 "$PYTHON" -c "import snowflake.connector; print(f'  {snowflake.connector.__version__}')"
+FREEZE_FILE="$LOG_DIR/pip_freeze.txt"
+"$VENV_DIR/bin/pip" freeze > "$FREEZE_FILE"
+echo "pip freeze saved to: $FREEZE_FILE"
 echo ""
 
 # --- Check parameters.json exists ---
