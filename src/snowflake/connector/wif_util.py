@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
 DEFAULT_ENTRA_SNOWFLAKE_RESOURCE = "api://fd3f753b-eed3-462c-b6a7-a4b5bb650aad"
 GCP_METADATA_SERVICE_ACCOUNT_BASE_URL = (
-    "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default"
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default"
 )
 
 
