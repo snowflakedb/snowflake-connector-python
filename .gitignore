@@ -139,6 +139,7 @@ ci/wif/parameters/parameters_wif.json
 testing-repro/parameters.json
 testing-repro/logs/
 testing-repro/.venv/
-testing-repro/wheel/
+testing-repro/wheel/*
+!testing-repro/wheel/.gitkeep
 testing-repro/data/*
 !testing-repro/data/.gitkeep
