@@ -29,29 +29,31 @@ import sys
 import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_FILE = os.path.join(SCRIPT_DIR, "test-upload-bypass.log")
+LOG_FILE = os.path.join(SCRIPT_DIR, "bypass.log")
 DATA_DIR = os.path.join(SCRIPT_DIR, "data")
 
 # ---------------------------------------------------------------------------
-# Logging — verbose, everything captured
+# Logging — DEBUG to file, INFO to console
 # ---------------------------------------------------------------------------
+_LOG_FMT = (
+    "%(asctime)s %(levelname)-5s %(threadName)s [%(name)s] "
+    "%(filename)s:%(lineno)d %(funcName)s() - %(message)s"
+)
+
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.DEBUG)
 
 fh = logging.FileHandler(LOG_FILE, mode="w")
 fh.setLevel(logging.DEBUG)
-fh.setFormatter(
-    logging.Formatter(
-        "%(asctime)s %(levelname)-5s %(threadName)s [%(name)s] "
-        "%(filename)s:%(lineno)d %(funcName)s() - %(message)s"
-    )
-)
+fh.setFormatter(logging.Formatter(_LOG_FMT))
 root_logger.addHandler(fh)
 
 ch = logging.StreamHandler(sys.stdout)
 ch.setLevel(logging.INFO)
 ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)-5s %(message)s"))
 root_logger.addHandler(ch)
+
+print(f"Debug log file: {LOG_FILE}")
 
 import http.client
 
@@ -397,4 +399,4 @@ for label, results in [
     for name, size, status, elapsed in results:
         logger.info("%-30s %-10s %-15s %s", name, size, status, elapsed)
 
-logger.info("Full debug log: %s", LOG_FILE)
+logger.info("Full debug log written to: %s", LOG_FILE)

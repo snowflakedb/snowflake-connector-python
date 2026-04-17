@@ -29,7 +29,30 @@ from typing import Any, Dict
 
 import snowflake.connector
 
-logging.basicConfig(level=logging.DEBUG)
+# ---------------------------------------------------------------------------
+# Logging — DEBUG to file, INFO to console
+# ---------------------------------------------------------------------------
+SCRIPT_DIR_EARLY = os.path.dirname(os.path.abspath(__file__))
+LOG_FILE = os.path.join(SCRIPT_DIR_EARLY, "repro.log")
+_LOG_FMT = (
+    "%(asctime)s %(levelname)-5s %(threadName)s [%(name)s] "
+    "%(filename)s:%(lineno)d %(funcName)s() - %(message)s"
+)
+
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)
+
+_fh = logging.FileHandler(LOG_FILE, mode="w")
+_fh.setLevel(logging.DEBUG)
+_fh.setFormatter(logging.Formatter(_LOG_FMT))
+root_logger.addHandler(_fh)
+
+_ch = logging.StreamHandler(sys.stdout)
+_ch.setLevel(logging.INFO)
+_ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)-5s %(message)s"))
+root_logger.addHandler(_ch)
+
+print(f"Debug log file: {LOG_FILE}")
 
 try:
     from cryptography.hazmat.backends import default_backend

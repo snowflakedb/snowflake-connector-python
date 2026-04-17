@@ -18,8 +18,10 @@ cd "$SCRIPT_DIR"
 
 MODE="${1:-all}"
 VENV_DIR="$SCRIPT_DIR/.venv"
-BYPASS_LOG="$SCRIPT_DIR/test-upload-bypass.log"
-PUT_LOG="$SCRIPT_DIR/put_repro.log"
+
+# Log files written by the Python scripts themselves (DEBUG level)
+BYPASS_LOG="$SCRIPT_DIR/bypass.log"
+REPRO_LOG="$SCRIPT_DIR/repro.log"
 
 # --- Validate mode ---
 case "$MODE" in
@@ -89,14 +91,14 @@ fi
 if [ "$MODE" = "all" ] || [ "$MODE" = "bypass" ]; then
     echo "============================================================"
     echo "Running bypass_test.py ..."
-    echo "  Log file: $BYPASS_LOG"
+    echo "  Debug log (written by script): $BYPASS_LOG"
     echo "============================================================"
-    "$PYTHON" "$SCRIPT_DIR/bypass_test.py" 2>&1 | tee "$SCRIPT_DIR/bypass_test_console.log"
+    "$PYTHON" "$SCRIPT_DIR/bypass_test.py"
     echo ""
 
     if [ -f "$BYPASS_LOG" ]; then
         LINES=$(wc -l < "$BYPASS_LOG")
-        echo "bypass_test.py log written: $BYPASS_LOG ($LINES lines)"
+        echo "bypass_test.py debug log: $BYPASS_LOG ($LINES lines)"
     else
         echo "WARNING: bypass_test.py did not produce log at $BYPASS_LOG"
     fi
@@ -107,23 +109,22 @@ fi
 if [ "$MODE" = "all" ] || [ "$MODE" = "repro" ]; then
     echo "============================================================"
     echo "Running put_repro.py ..."
-    echo "  Log file: $PUT_LOG"
+    echo "  Debug log (written by script): $REPRO_LOG"
     echo "============================================================"
-    "$PYTHON" "$SCRIPT_DIR/put_repro.py" 2>&1 | tee "$PUT_LOG"
+    "$PYTHON" "$SCRIPT_DIR/put_repro.py"
     echo ""
 
-    if [ -f "$PUT_LOG" ]; then
-        LINES=$(wc -l < "$PUT_LOG")
-        echo "put_repro.py log written: $PUT_LOG ($LINES lines)"
+    if [ -f "$REPRO_LOG" ]; then
+        LINES=$(wc -l < "$REPRO_LOG")
+        echo "put_repro.py debug log: $REPRO_LOG ($LINES lines)"
     else
-        echo "WARNING: put_repro.py did not produce log at $PUT_LOG"
+        echo "WARNING: put_repro.py did not produce log at $REPRO_LOG"
     fi
 fi
 
 echo ""
 echo "============================================================"
-echo "Done. Log files:"
-[ "$MODE" = "all" ] || [ "$MODE" = "bypass" ] && echo "  bypass_test  : $BYPASS_LOG"
-[ "$MODE" = "all" ] || [ "$MODE" = "bypass" ] && echo "  bypass console: $SCRIPT_DIR/bypass_test_console.log"
-[ "$MODE" = "all" ] || [ "$MODE" = "repro" ]  && echo "  put_repro    : $PUT_LOG"
+echo "Done. Debug log files (full DEBUG output):"
+[ "$MODE" = "all" ] || [ "$MODE" = "bypass" ] && echo "  bypass : $BYPASS_LOG"
+[ "$MODE" = "all" ] || [ "$MODE" = "repro" ]  && echo "  repro  : $REPRO_LOG"
 echo "============================================================"
