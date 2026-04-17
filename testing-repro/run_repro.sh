@@ -3,11 +3,15 @@
 # Run the testing-repro diagnostic scripts and verify log output.
 #
 # Usage:
-#   ./run_repro.sh                              # run both, use PyPI connector
+#   ./run_repro.sh                              # run both, auto-detect wheel/ dir
 #   ./run_repro.sh bypass                       # run only bypass_test.py
 #   ./run_repro.sh repro                        # run only put_repro.py
-#   ./run_repro.sh repro --wheel path/to.whl    # install connector from local wheel
-#   ./run_repro.sh --wheel path/to.whl          # run both with local wheel
+#   ./run_repro.sh repro --wheel path/to.whl    # install connector from specific wheel
+#
+# By default the script looks for a .whl file in the wheel/ subdirectory.
+# If found, it installs from that wheel; otherwise it falls back to PyPI.
+#
+# All debug logs are written to the logs/ subdirectory.
 #
 # Before running, create testing-repro/parameters.json from the .example file:
 #   cp parameters.json.example parameters.json
@@ -46,18 +50,35 @@ while [ $# -gt 0 ]; do
             echo "  repro   run only put_repro.py (PUT repro)"
             echo ""
             echo "Options:"
-            echo "  --wheel <path>  install snowflake-connector-python from a local wheel"
-            echo "                  instead of PyPI (recreates venv)"
+            echo "  --wheel <path>  install snowflake-connector-python from a specific wheel"
+            echo ""
+            echo "By default, looks for a .whl in wheel/ — falls back to PyPI if not found."
+            echo "Logs are written to logs/ subdirectory."
             exit 1
             ;;
     esac
 done
 
-VENV_DIR="$SCRIPT_DIR/.venv"
+# --- Auto-detect wheel from wheel/ directory if --wheel not given ---
+if [ -z "$WHEEL" ]; then
+    WHEEL_DIR="$SCRIPT_DIR/wheel"
+    if [ -d "$WHEEL_DIR" ]; then
+        # Pick the newest .whl file
+        FOUND_WHEEL="$(ls -t "$WHEEL_DIR"/*.whl 2>/dev/null | head -1 || true)"
+        if [ -n "$FOUND_WHEEL" ]; then
+            WHEEL="$FOUND_WHEEL"
+            echo "Auto-detected wheel: $WHEEL"
+        fi
+    fi
+fi
 
-# Log files written by the Python scripts themselves (DEBUG level)
-BYPASS_LOG="$SCRIPT_DIR/bypass.log"
-REPRO_LOG="$SCRIPT_DIR/repro.log"
+VENV_DIR="$SCRIPT_DIR/.venv"
+LOG_DIR="$SCRIPT_DIR/logs"
+mkdir -p "$LOG_DIR"
+
+# Log file paths
+BYPASS_LOG="$LOG_DIR/bypass.log"
+REPRO_LOG="$LOG_DIR/repro.log"
 
 echo "============================================================"
 echo "testing-repro runner  (mode: $MODE)"
@@ -65,7 +86,12 @@ echo "============================================================"
 echo ""
 echo "Working directory : $SCRIPT_DIR"
 echo "Parameters file   : $SCRIPT_DIR/parameters.json"
-[ -n "$WHEEL" ] && echo "Connector wheel   : $WHEEL"
+echo "Log directory     : $LOG_DIR"
+if [ -n "$WHEEL" ]; then
+    echo "Connector wheel   : $WHEEL"
+else
+    echo "Connector source  : PyPI (no wheel found in wheel/)"
+fi
 echo ""
 
 # --- Set up venv ---
@@ -138,7 +164,7 @@ fi
 if [ "$MODE" = "all" ] || [ "$MODE" = "bypass" ]; then
     echo "============================================================"
     echo "Running bypass_test.py ..."
-    echo "  Debug log (written by script): $BYPASS_LOG"
+    echo "  Debug log: $BYPASS_LOG"
     echo "============================================================"
     "$PYTHON" "$SCRIPT_DIR/bypass_test.py"
     echo ""
@@ -156,7 +182,7 @@ fi
 if [ "$MODE" = "all" ] || [ "$MODE" = "repro" ]; then
     echo "============================================================"
     echo "Running put_repro.py ..."
-    echo "  Debug log (written by script): $REPRO_LOG"
+    echo "  Debug log: $REPRO_LOG"
     echo "============================================================"
     "$PYTHON" "$SCRIPT_DIR/put_repro.py"
     echo ""
@@ -171,7 +197,7 @@ fi
 
 echo ""
 echo "============================================================"
-echo "Done. Debug log files (full DEBUG output):"
+echo "Done. Debug log files in $LOG_DIR:"
 [ "$MODE" = "all" ] || [ "$MODE" = "bypass" ] && echo "  bypass : $BYPASS_LOG"
 [ "$MODE" = "all" ] || [ "$MODE" = "repro" ]  && echo "  repro  : $REPRO_LOG"
 echo "============================================================"

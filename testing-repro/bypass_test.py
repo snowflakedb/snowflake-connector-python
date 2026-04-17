@@ -29,7 +29,9 @@ import sys
 import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_FILE = os.path.join(SCRIPT_DIR, "bypass.log")
+LOG_DIR = os.path.join(SCRIPT_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "bypass.log")
 DATA_DIR = os.path.join(SCRIPT_DIR, "data")
 
 # ---------------------------------------------------------------------------

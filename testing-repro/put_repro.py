@@ -33,7 +33,9 @@ import snowflake.connector
 # Logging — DEBUG to file, INFO to console
 # ---------------------------------------------------------------------------
 SCRIPT_DIR_EARLY = os.path.dirname(os.path.abspath(__file__))
-LOG_FILE = os.path.join(SCRIPT_DIR_EARLY, "repro.log")
+LOG_DIR = os.path.join(SCRIPT_DIR_EARLY, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "repro.log")
 _LOG_FMT = (
     "%(asctime)s %(levelname)-5s %(threadName)s [%(name)s] "
     "%(filename)s:%(lineno)d %(funcName)s() - %(message)s"
