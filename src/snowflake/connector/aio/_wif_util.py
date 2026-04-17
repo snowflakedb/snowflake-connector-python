@@ -27,9 +27,7 @@ from ._session_manager import SessionManager, SessionManagerFactory
 
 logger = logging.getLogger(__name__)
 
-GCP_METADATA_SERVICE_ACCOUNT_BASE_URL = (
-    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default"
-)
+GCP_METADATA_SERVICE_ACCOUNT_BASE_URL = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default"
 
 
 async def get_aws_region() -> str:
