@@ -125,7 +125,7 @@ def get_gcp_access_token() -> str:
     try:
         command = (
             'curl -H "Metadata-Flavor: Google" '
-            '"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience=snowflakecomputing.com"'
+            '"http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=snowflakecomputing.com"'
         )
 
         result = subprocess.run(
