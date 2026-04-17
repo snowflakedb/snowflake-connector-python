@@ -134,3 +134,12 @@ prober/snowflake_prober.egg-info/
 ci/wif/parameters/rsa_wif_aws_azure
 ci/wif/parameters/rsa_wif_gcp
 ci/wif/parameters/parameters_wif.json
+
+# Testing-repro local credentials, logs, venv, wheel, and generated data
+testing-repro/parameters.json
+testing-repro/logs/
+testing-repro/.venv/
+testing-repro/wheel/*
+!testing-repro/wheel/.gitkeep
+testing-repro/data/*
+!testing-repro/data/.gitkeep
