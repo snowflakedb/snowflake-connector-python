@@ -135,8 +135,9 @@ ci/wif/parameters/rsa_wif_aws_azure
 ci/wif/parameters/rsa_wif_gcp
 ci/wif/parameters/parameters_wif.json
 
-# Testing-repro local credentials, logs, and generated data
+# Testing-repro local credentials, logs, venv, and generated data
 testing-repro/parameters.json
 testing-repro/*.log
+testing-repro/.venv/
 testing-repro/data/*
 !testing-repro/data/.gitkeep
