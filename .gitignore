@@ -134,3 +134,6 @@ prober/snowflake_prober.egg-info/
 ci/wif/parameters/rsa_wif_aws_azure
 ci/wif/parameters/rsa_wif_gcp
 ci/wif/parameters/parameters_wif.json
+
+# Testing-repro local credentials
+testing-repro/parameters.json

@@ -3,12 +3,22 @@
 Customer-style PUT repro:
   1. Connect via snowflake.connector (raw connector, not Snowpark)
   2. Create a named stage if it doesn't exist
-  3. Generate random CSV data → temp file
+  3. Generate random CSV data -> temp file
   4. PUT 'file:///...tmpXXX.csv' @STAGE AUTO_COMPRESS=FALSE PARALLEL=1 OVERWRITE=TRUE
   5. Clean up: REMOVE staged files, optionally DROP stage
+
+Connection parameters are read from a ``parameters.json`` file in the same
+directory as this script.  Copy ``parameters.json.example`` to
+``parameters.json`` and fill in your Snowflake credentials before running.
+
+Required keys: account, user, host, private_key_file (or password),
+               database, schema.
+Optional keys: authenticator (default SNOWFLAKE_JWT), role, warehouse,
+               port (default 443), protocol (default https).
 """
 
 import csv
+import json
 import logging
 import os
 import random
@@ -29,21 +39,38 @@ except ImportError:
     default_backend = None  # type: ignore
 
 # ---------------------------------------------------------------------------
-# Connection config  (reuses the "preprod" block from the original main.py)
+# Connection parameters — loaded from parameters.json in this directory
 # ---------------------------------------------------------------------------
-CONNECTION_PARAMETERS: Dict[str, Any] = {
-    "account": "driverspreprod6.preprod6.us-west-2.aws",
-    "user": "fpawlowski",
-    "schema": "test_python",
-    "database": "TEST_FPAWLOWSKI",
-    "host": "driverspreprod6.preprod6.us-west-2.aws.snowflakecomputing.com",
-    "port": 443,
-    "protocol": "https",
-    "role": "ACCOUNTADMIN",
-    "warehouse": "COMPUTE_WH",
-    "authenticator": "SNOWFLAKE_JWT",
-    "private_key_file": "/Users/fpawlowski/.snowflake/rsa_key.p8",
-}
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PARAMS_FILE = os.path.join(SCRIPT_DIR, "parameters.json")
+
+
+def _load_parameters() -> Dict[str, Any]:
+    print(f"Loading connection parameters from: {PARAMS_FILE}")
+    if not os.path.isfile(PARAMS_FILE):
+        print(
+            f"ERROR: parameters.json not found at {PARAMS_FILE}\n"
+            f"  Copy parameters.json.example to parameters.json and fill in "
+            f"your Snowflake credentials.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    with open(PARAMS_FILE) as f:
+        params = json.load(f)
+    for key in ("account", "user", "host", "database", "schema"):
+        if key not in params:
+            print(
+                f"ERROR: Missing required key '{key}' in {PARAMS_FILE}", file=sys.stderr
+            )
+            sys.exit(1)
+    params.setdefault("port", 443)
+    params.setdefault("protocol", "https")
+    params.setdefault("authenticator", "SNOWFLAKE_JWT")
+    print(f"Parameters loaded: account={params['account']}, user={params['user']}")
+    return params
+
+
+CONNECTION_PARAMETERS: Dict[str, Any] = _load_parameters()
 
 STAGE_NAME = "PUT_REPRO_STAGE"
 

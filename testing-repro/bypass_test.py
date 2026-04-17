@@ -9,9 +9,15 @@ Flow:
   3. Uses boto3 (standard AWS SDK) and system requests with a presigned URL to
      upload the same files directly to S3.
 
+Connection parameters are read from a ``parameters.json`` file in the same
+directory as this script.  Copy ``parameters.json.example`` to
+``parameters.json`` and fill in your Snowflake credentials before running.
+
+Required keys: account, user, host, authenticator, private_key_file.
+
 Usage:
     pip install snowflake-connector-python boto3 requests cryptography
-    python main.py
+    python bypass_test.py
 """
 
 import base64
@@ -71,16 +77,36 @@ logging.getLogger("urllib3.connectionpool").setLevel(logging.DEBUG)
 logger = logging.getLogger("bypass-upload")
 
 from cryptography.hazmat.backends import default_backend
-
-# ---------------------------------------------------------------------------
-# Credentials (preprod — JWT / private key auth)
-# ---------------------------------------------------------------------------
 from cryptography.hazmat.primitives import serialization
 
-SF_ACCOUNT = "driverspreprod6.preprod6.us-west-2.aws"
-SF_USER = "fpawlowski"
-SF_HOST = "driverspreprod6.preprod6.us-west-2.aws.snowflakecomputing.com"
-SF_PRIVATE_KEY_FILE = "/Users/fpawlowski/.snowflake/rsa_key.p8"
+# ---------------------------------------------------------------------------
+# Connection parameters — loaded from parameters.json in this directory
+# ---------------------------------------------------------------------------
+PARAMS_FILE = os.path.join(SCRIPT_DIR, "parameters.json")
+
+
+def _load_parameters() -> dict:
+    logger.info("Loading connection parameters from: %s", PARAMS_FILE)
+    print(f"Loading connection parameters from: {PARAMS_FILE}")
+    if not os.path.isfile(PARAMS_FILE):
+        msg = (
+            f"parameters.json not found at {PARAMS_FILE}\n"
+            f"  Copy parameters.json.example to parameters.json and fill in "
+            f"your Snowflake credentials."
+        )
+        logger.error(msg)
+        print(f"ERROR: {msg}", file=sys.stderr)
+        sys.exit(1)
+    with open(PARAMS_FILE) as f:
+        params = json.load(f)
+    for key in ("account", "user", "host", "private_key_file"):
+        if key not in params:
+            logger.error("Missing required key '%s' in %s", key, PARAMS_FILE)
+            sys.exit(1)
+    logger.info(
+        "Parameters loaded: account=%s, user=%s", params["account"], params["user"]
+    )
+    return params
 
 
 def _load_private_key_bytes(path: str) -> bytes:
@@ -97,6 +123,12 @@ def _load_private_key_bytes(path: str) -> bytes:
     )
 
 
+PARAMS = _load_parameters()
+SF_ACCOUNT = PARAMS["account"]
+SF_USER = PARAMS["user"]
+SF_HOST = PARAMS.get("host", f"{SF_ACCOUNT}.snowflakecomputing.com")
+SF_PRIVATE_KEY_FILE = PARAMS["private_key_file"]
+
 # ---------------------------------------------------------------------------
 # Step 1: Use the connector ONLY to get stage info from Snowflake GS
 # ---------------------------------------------------------------------------
@@ -107,7 +139,7 @@ ctx = snowflake.connector.connect(
     user=SF_USER,
     account=SF_ACCOUNT,
     host=SF_HOST,
-    authenticator="SNOWFLAKE_JWT",
+    authenticator=PARAMS.get("authenticator", "SNOWFLAKE_JWT"),
     private_key=_load_private_key_bytes(SF_PRIVATE_KEY_FILE),
 )
 cs = ctx.cursor()
