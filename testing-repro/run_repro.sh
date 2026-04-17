@@ -25,6 +25,7 @@ cd "$SCRIPT_DIR"
 # --- Parse arguments ---
 MODE="all"
 WHEEL=""
+FORCE_REINSTALL=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -41,8 +42,10 @@ while [ $# -gt 0 ]; do
                 exit 1
             fi
             shift 2 ;;
+        --force-reinstall)
+            FORCE_REINSTALL=1; shift ;;
         *)
-            echo "Usage: $0 [all|bypass|repro] [--wheel <path-to-wheel>]"
+            echo "Usage: $0 [all|bypass|repro] [--wheel <path>] [--force-reinstall]"
             echo ""
             echo "Modes:"
             echo "  all     run both bypass_test.py and put_repro.py (default)"
@@ -50,7 +53,8 @@ while [ $# -gt 0 ]; do
             echo "  repro   run only put_repro.py (PUT repro)"
             echo ""
             echo "Options:"
-            echo "  --wheel <path>  install snowflake-connector-python from a specific wheel"
+            echo "  --wheel <path>      install connector from a specific wheel"
+            echo "  --force-reinstall   recreate venv and reinstall everything"
             echo ""
             echo "By default, looks for a .whl in wheel/ — falls back to PyPI if not found."
             echo "Logs are written to logs/ subdirectory."
@@ -96,9 +100,8 @@ echo ""
 
 # --- Set up venv ---
 NEED_INSTALL=0
-if [ -n "$WHEEL" ]; then
-    # Always recreate venv when a wheel is specified to ensure correct version
-    echo "Recreating venv to install from wheel ..."
+if [ "$FORCE_REINSTALL" -eq 1 ] || [ -n "$WHEEL" ]; then
+    echo "Recreating venv ..."
     rm -rf "$VENV_DIR"
     python3 -m venv "$VENV_DIR"
     NEED_INSTALL=1
