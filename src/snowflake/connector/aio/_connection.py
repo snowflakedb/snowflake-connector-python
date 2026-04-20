@@ -266,7 +266,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY
             ] = self._validate_client_session_keep_alive_heartbeat_frequency()
 
-        if self.client_prefetch_threads:
+        if self.client_prefetch_threads is not None:
             self._session_parameters[PARAMETER_CLIENT_PREFETCH_THREADS] = (
                 self._validate_client_prefetch_threads()
             )
@@ -841,6 +841,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
     @client_prefetch_threads.setter
     def client_prefetch_threads(self, value) -> None:
         self._client_prefetch_threads = value
+        self._validate_client_prefetch_threads()
 
     @property
     def errorhandler(self) -> None:
