@@ -16,6 +16,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added support for AWS outbound JWT token attestation for Workload Identity Federation (WIF). This can be enabled by setting the `SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN` environment variable to `true`. Note: This environment variable will be removed in a future release.
   - Removed dynamic class deserialization from the OCSP response validation cache to prevent arbitrary code execution via crafted cache files (SNOW-2439940). The `SNOWFLAKE_ENABLE_CUSTOM_REVOCATION_ERRORS` environment variable is now a no-op.
   - Updated SPCS token injection to gate on `SNOWFLAKE_RUNNING_INSIDE_SPCS` environment variable, trim whitespace, and remove configurable token path.
+  - Refined structured error handler typing and improved handling of non-Snowflake exceptions by re-raising generic Python exceptions directly instead of routing them through structured handlers.
 
 - v4.4.0(March 25,2026)
   - Bump the lower boundary of cryptography to 46.0.5 due to CVE-2026-26007.
@@ -28,7 +29,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed `unsafe_skip_file_permissions_check` flag not being respected when reading `connections.toml`.
   - Fixed JSONDecodeError in result_batch._load() when fetching large result sets
   - Fixed validation ordering for `client_session_keep_alive_heartbeat_frequency`.
-
 
 - v4.3.0(February 12,2026)
   - Ensured proper list conversion - the converter runs to_snowflake on all list elements.
