@@ -9,10 +9,11 @@ from test.integ.conftest import (
     get_db_parameters,
     is_public_testaccount,
 )
-from typing import Any, AsyncContextManager, AsyncGenerator, Callable
+from typing import Any, AsyncContextManager, AsyncGenerator, Callable, Generator
 
 import pytest
 
+import snowflake.connector
 from snowflake.connector.aio import SnowflakeConnection
 from snowflake.connector.aio import connect as async_connect
 from snowflake.connector.aio._telemetry import TelemetryClient
@@ -141,6 +142,16 @@ async def negative_db(
 @pytest.fixture
 def conn_cnx():
     return db
+
+
+@pytest.fixture(autouse=True)
+def reset_default_paramstyle() -> Generator[None, None, None]:
+    """Keep async integration tests isolated from global paramstyle changes."""
+    snowflake.connector.paramstyle = "pyformat"
+    try:
+        yield
+    finally:
+        snowflake.connector.paramstyle = "pyformat"
 
 
 @pytest.fixture()
