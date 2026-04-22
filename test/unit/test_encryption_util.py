@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-import codecs
 import glob
 import os
 from os import path
@@ -46,7 +45,7 @@ def test_encrypt_decrypt_file(tmp_path):
         )
 
         contents = ""
-        with open(decrypted_file, "r", encoding=UTF8) as fd:
+        with open(decrypted_file, encoding=UTF8) as fd:
             for line in fd:
                 contents += line
         assert data == contents, "encrypted and decrypted contents"
