@@ -29,7 +29,14 @@ LOGGER = logging.getLogger(__name__)
 READABLE_BY_OTHERS = stat.S_IRGRP | stat.S_IROTH
 WRITABLE_BY_OTHERS = stat.S_IWGRP | stat.S_IWOTH
 
+# NOTE: For historical and compatibility reasons, three environment variables are recognized:
+# - The skip warning mechanism was originally for internal use (only within SPCS containers).
+# - SPCS containers set SKIP_TOKEN_FILE_PERMISSIONS_VERIFICATION.
+# - SF_SKIP_TOKEN_FILE_PERMISSIONS_VERIFICATION is the documented/public way to disable the warning.
+# - In the Universal driver, this warning will become unskippable and the message will clarify:
+#   "SNOWFLAKE_RUNNING_INSIDE_SPCS is detected, skipping permission checks."
 DEPRECATED_SKIP_WARNING_ENV_VAR = "SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE"
+SPCS_INJECTED_SKIP_WARNING_ENV_VAR = "SKIP_TOKEN_FILE_PERMISSIONS_VERIFICATION"
 SKIP_WARNING_ENV_VAR = "SF_SKIP_TOKEN_FILE_PERMISSIONS_VERIFICATION"
 
 
@@ -37,6 +44,10 @@ def _should_skip_warning_for_read_permissions_on_config_file() -> bool:
     """Check if the warning should be skipped based on environment variable."""
     if SKIP_WARNING_ENV_VAR in os.environ:
         return os.getenv(SKIP_WARNING_ENV_VAR, "false").lower() == "true"
+    if SPCS_INJECTED_SKIP_WARNING_ENV_VAR in os.environ:
+        return (
+            os.getenv(SPCS_INJECTED_SKIP_WARNING_ENV_VAR, "false").lower() == "true"
+        )
     # Else fallback to old value
     if DEPRECATED_SKIP_WARNING_ENV_VAR in os.environ:
         warn(
