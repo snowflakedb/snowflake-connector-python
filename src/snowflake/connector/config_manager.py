@@ -45,9 +45,7 @@ def _should_skip_warning_for_read_permissions_on_config_file() -> bool:
     if SKIP_WARNING_ENV_VAR in os.environ:
         return os.getenv(SKIP_WARNING_ENV_VAR, "false").lower() == "true"
     if SPCS_INJECTED_SKIP_WARNING_ENV_VAR in os.environ:
-        return (
-            os.getenv(SPCS_INJECTED_SKIP_WARNING_ENV_VAR, "false").lower() == "true"
-        )
+        return os.getenv(SPCS_INJECTED_SKIP_WARNING_ENV_VAR, "false").lower() == "true"
     # Else fallback to old value
     if DEPRECATED_SKIP_WARNING_ENV_VAR in os.environ:
         warn(
