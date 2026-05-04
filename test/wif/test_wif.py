@@ -141,3 +141,26 @@ def get_gcp_access_token() -> str:
 
     except Exception as e:
         raise RuntimeError(f"Error executing GCP metadata request: {e}")
+
+
+@pytest.mark.wif
+def test_should_authenticate_with_azure_impersonation():
+    if PROVIDER != "AZURE":
+        pytest.skip("Skipping test - not running on Azure")
+    if not isinstance(IMPERSONATION_PATH, str) or not IMPERSONATION_PATH:
+        pytest.skip("Skipping test - IMPERSONATION_PATH is not set")
+
+    os.environ["SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION"] = "true"
+    try:
+        connection_params = {
+            "host": HOST,
+            "account": ACCOUNT,
+            "authenticator": "WORKLOAD_IDENTITY",
+            "workload_identity_provider": "AZURE",
+            "workload_identity_impersonation_path": [IMPERSONATION_PATH],
+        }
+        assert connect_and_execute_simple_query(
+            connection_params, EXPECTED_USERNAME_IMPERSONATION
+        ), "Failed to connect using WIF with Azure impersonation"
+    finally:
+        os.environ.pop("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", None)
