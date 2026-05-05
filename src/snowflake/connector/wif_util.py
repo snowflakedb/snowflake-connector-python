@@ -343,6 +343,7 @@ def create_gcp_attestation(
         AttestationProvider.GCP, jwt_str, {"sub": subject}
     )
 
+
 def get_azure_sp_token_via_impersonation(
     mi_token: str,
     sp_client_id: str,
