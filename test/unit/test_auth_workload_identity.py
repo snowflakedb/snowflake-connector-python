@@ -594,7 +594,9 @@ def test_azure_impersonation_raises_error_if_multi_hop(monkeypatch):
 
 @mock.patch("snowflake.connector.session_manager.SessionManager.post")
 def test_azure_impersonation_raises_error_if_mi_token_missing_tid(
-    mock_post_request, fake_azure_vm_metadata_service: FakeAzureVmMetadataService, monkeypatch
+    mock_post_request,
+    fake_azure_vm_metadata_service: FakeAzureVmMetadataService,
+    monkeypatch,
 ):
     monkeypatch.setenv("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "true")
 

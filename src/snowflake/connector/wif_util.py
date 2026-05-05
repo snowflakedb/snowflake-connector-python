@@ -394,7 +394,10 @@ def create_azure_attestation(
     If the application isn't running on Azure or no credentials were found, raises an error.
     """
     if impersonation_path:
-        if os.environ.get("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "false").lower() != "true":
+        if (
+            os.environ.get("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "false").lower()
+            != "true"
+        ):
             raise ProgrammingError(
                 msg="Azure WIF impersonation is not enabled. Set SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION=true to enable.",
                 errno=ER_INVALID_WIF_SETTINGS,
@@ -404,7 +407,11 @@ def create_azure_attestation(
                 msg="Azure WIF impersonation only supports a single service principal (single-hop). impersonation_path must contain exactly one client_id.",
                 errno=ER_INVALID_WIF_SETTINGS,
             )
-    resource = AZURE_WIF_FEDERATION_AUDIENCE if impersonation_path else snowflake_entra_resource
+    resource = (
+        AZURE_WIF_FEDERATION_AUDIENCE
+        if impersonation_path
+        else snowflake_entra_resource
+    )
     headers = {"Metadata": "true"}
     url_without_query_string = "http://169.254.169.254/metadata/identity/oauth2/token"
     query_params = f"api-version=2018-02-01&resource={resource}"
@@ -499,7 +506,9 @@ def create_attestation(
     if provider == AttestationProvider.AWS:
         return create_aws_attestation(impersonation_path)
     elif provider == AttestationProvider.AZURE:
-        return create_azure_attestation(entra_resource, session_manager, impersonation_path)
+        return create_azure_attestation(
+            entra_resource, session_manager, impersonation_path
+        )
     elif provider == AttestationProvider.GCP:
         return create_gcp_attestation(session_manager, impersonation_path)
     elif provider == AttestationProvider.OIDC:
