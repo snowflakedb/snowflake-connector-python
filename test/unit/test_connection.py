@@ -684,10 +684,8 @@ def test_workload_identity_provider_is_required_for_wif_authenticator(
     "provider_param",
     [
         # Strongly-typed values.
-        AttestationProvider.AZURE,
         AttestationProvider.OIDC,
         # String values.
-        "AZURE",
         "OIDC",
     ],
 )
@@ -709,9 +707,33 @@ def test_workload_identity_impersonation_path_errors_for_unsupported_providers(
                 ],
             )
         assert (
-            "workload_identity_impersonation_path is currently only supported for GCP and AWS."
+            "workload_identity_impersonation_path is currently only supported for GCP, AWS, and AZURE."
             in str(excinfo.value)
         )
+
+
+@pytest.mark.parametrize(
+    "env_value",
+    [None, "false"],
+    ids=["env_var_not_set", "env_var_false"],
+)
+def test_azure_impersonation_errors_if_not_enabled(monkeypatch, env_value):
+    if env_value is not None:
+        monkeypatch.setenv("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", env_value)
+
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        with pytest.raises(ProgrammingError) as excinfo:
+            snowflake.connector.connect(
+                account="account",
+                authenticator="WORKLOAD_IDENTITY",
+                workload_identity_provider="AZURE",
+                workload_identity_impersonation_path=["some-sp-client-id"],
+            )
+        assert "SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION" in str(excinfo.value)
 
 
 @pytest.mark.parametrize(

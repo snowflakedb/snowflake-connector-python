@@ -562,24 +562,6 @@ def test_explicit_azure_uses_explicit_client_id_if_set(
     assert fake_azure_metadata_service.requested_client_id == "custom-client-id"
 
 
-@pytest.mark.parametrize(
-    "env_value",
-    [None, "false"],
-    ids=["env_var_not_set", "env_var_false"],
-)
-def test_azure_impersonation_raises_error_if_not_enabled(monkeypatch, env_value):
-    if env_value is not None:
-        monkeypatch.setenv("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", env_value)
-
-    auth_class = AuthByWorkloadIdentity(
-        provider=AttestationProvider.AZURE,
-        impersonation_path=["some-sp-client-id"],
-    )
-    with pytest.raises(ProgrammingError) as excinfo:
-        auth_class.prepare(conn=None)
-    assert "SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION" in str(excinfo.value)
-
-
 def test_azure_impersonation_raises_error_if_multi_hop(monkeypatch):
     monkeypatch.setenv("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "true")
 
