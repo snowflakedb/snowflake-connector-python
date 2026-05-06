@@ -351,6 +351,8 @@ def get_azure_sp_token_via_impersonation(
     session_manager: SessionManager,
 ) -> str:
     """Exchanges a managed identity token for a service principal token via the Entra ID token endpoint."""
+    # Azure requires the MI and the app registration to be in the same tenant, so the
+    # tid claim from the MI token is always the correct tenant for the token exchange endpoint.
     tenant_id = jwt.decode(mi_token, options={"verify_signature": False}).get("tid")
     if not tenant_id:
         raise ProgrammingError(
