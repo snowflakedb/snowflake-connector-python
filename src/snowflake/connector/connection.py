@@ -1628,7 +1628,10 @@ class SnowflakeConnection:
                 if (
                     self._workload_identity_impersonation_path
                     and self._workload_identity_provider == AttestationProvider.AZURE
-                    and os.environ.get("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "false").lower() != "true"
+                    and os.environ.get(
+                        "SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "false"
+                    ).lower()
+                    != "true"
                 ):
                     Error.errorhandler_wrapper(
                         self,
