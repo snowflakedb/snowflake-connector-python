@@ -524,3 +524,33 @@ async def test_explicit_azure_uses_explicit_client_id_if_set(
     await auth_class.prepare(conn=None)
 
     assert fake_azure_metadata_service.requested_client_id == "custom-client-id"
+
+
+async def test_azure_impersonation_raises_error_if_multi_hop(monkeypatch):
+    monkeypatch.setenv("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "true")
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=["client-id-1", "client-id-2"],
+    )
+    with pytest.raises(ProgrammingError) as excinfo:
+        await auth_class.prepare(conn=None)
+    assert "single-hop" in str(excinfo.value)
+
+
+@mock.patch("snowflake.connector.aio._session_manager.SessionManager.post")
+async def test_azure_impersonation_raises_error_if_mi_token_missing_tid(
+    mock_post_request,
+    fake_azure_vm_metadata_service,
+    monkeypatch,
+):
+    monkeypatch.setenv("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "true")
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=["some-sp-client-id"],
+    )
+    with pytest.raises(ProgrammingError) as excinfo:
+        await auth_class.prepare(conn=None)
+    assert "tid" in str(excinfo.value)
+    mock_post_request.assert_not_called()
