@@ -195,7 +195,9 @@ class FakeAzureVmMetadataService(FakeMetadataService):
         ):
             resource = query_string["resource"][0]
             self.requested_client_id = query_string.get("client_id", [None])[0]
-            self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=resource, tid=self.tid)
+            self.token = gen_dummy_id_token(
+                sub=self.sub, iss=self.iss, aud=resource, tid=self.tid
+            )
             return build_response(
                 json.dumps({"access_token": self.token}).encode("utf-8")
             )

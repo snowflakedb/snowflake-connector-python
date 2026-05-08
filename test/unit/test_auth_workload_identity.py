@@ -603,7 +603,9 @@ def test_azure_impersonation_calls_correct_api_and_populates_auth_data(
     tenant_id = "2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
     fake_azure_vm_metadata_service.tid = tenant_id
     sp_client_id = "some-sp-client-id"
-    sp_token = gen_dummy_id_token(sub="sp-subject", iss=f"https://sts.windows.net/{tenant_id}")
+    sp_token = gen_dummy_id_token(
+        sub="sp-subject", iss=f"https://sts.windows.net/{tenant_id}"
+    )
 
     mock_post_request.return_value = build_response(
         json.dumps({"access_token": sp_token}).encode("utf-8")
@@ -630,7 +632,10 @@ def test_azure_impersonation_calls_correct_api_and_populates_auth_data(
         },
     )
 
-    assert auth_class.assertion_content == '{"_provider":"AZURE","iss":"https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd","sub":"sp-subject"}'
+    assert (
+        auth_class.assertion_content
+        == '{"_provider":"AZURE","iss":"https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd","sub":"sp-subject"}'
+    )
     assert extract_api_data(auth_class) == {
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
         "PROVIDER": "AZURE",
