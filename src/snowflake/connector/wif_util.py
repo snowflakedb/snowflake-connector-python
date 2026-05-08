@@ -359,6 +359,7 @@ def get_azure_sp_token_via_impersonation(
             msg="MI token is missing 'tid' claim; cannot determine tenant ID for impersonation.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
+    response_text = None
     try:
         res = session_manager.post(
             url=f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
@@ -370,14 +371,16 @@ def get_azure_sp_token_via_impersonation(
                 "scope": f"{snowflake_entra_resource}/.default",
             },
         )
+        response_text = res.text
         res.raise_for_status()
+        response_data = res.json()
     except Exception as e:
         raise ProgrammingError(
-            msg=f"Error fetching SP token for Azure client_id '{sp_client_id}': {e}.",
+            msg=f"Error fetching SP token for Azure client_id '{sp_client_id}': {e}. Response: {response_text}",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
 
-    sp_token = res.json().get("access_token")
+    sp_token = response_data.get("access_token")
     if not sp_token:
         raise ProgrammingError(
             msg=f"No access token found in Entra ID response for client_id '{sp_client_id}'.",
@@ -441,20 +444,23 @@ def create_azure_attestation(
     if managed_identity_client_id:
         query_params += f"&client_id={managed_identity_client_id}"
 
+    response_text = None
     try:
         res = session_manager.request(
             method="GET",
             url=f"{url_without_query_string}?{query_params}",
             headers=headers,
         )
+        response_text = res.text
         res.raise_for_status()
+        response_data = res.json()
     except Exception as e:
         raise ProgrammingError(
-            msg=f"Error fetching Azure metadata: {e}. Ensure the application is running on Azure.",
+            msg=f"Error fetching Azure metadata: {e}. Response: {response_text}. Ensure the application is running on Azure.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
 
-    jwt_str = res.json().get("access_token")
+    jwt_str = response_data.get("access_token")
     if not jwt_str:
         raise ProgrammingError(
             msg="No access token found in Azure metadata service response.",

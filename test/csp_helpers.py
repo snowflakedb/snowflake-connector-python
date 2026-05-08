@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def gen_dummy_id_token(
-    sub="test-subject", iss="test-issuer", aud="snowflakecomputing.com"
+    sub="test-subject", iss="test-issuer", aud="snowflakecomputing.com", tid=None
 ) -> str:
     """Generates a dummy ID token using the given subject and issuer."""
     now = int(time())
@@ -32,6 +32,8 @@ def gen_dummy_id_token(
         "iat": now,
         "exp": now + 60 * 60,
     }
+    if tid is not None:
+        payload["tid"] = tid
     logger.debug(f"Generating dummy token with the following claims:\n{str(payload)}")
     return jwt.encode(
         payload=payload,
@@ -165,6 +167,7 @@ class FakeAzureVmMetadataService(FakeMetadataService):
         # Defaults used for generating an Entra ID token. Can be overriden in individual tests.
         self.sub = "611ab25b-2e81-4e18-92a7-b21f2bebb269"
         self.iss = "https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
+        self.tid = None
         self.has_token_endpoint = True
         self.requested_client_id = None
 
@@ -192,7 +195,7 @@ class FakeAzureVmMetadataService(FakeMetadataService):
         ):
             resource = query_string["resource"][0]
             self.requested_client_id = query_string.get("client_id", [None])[0]
-            self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=resource)
+            self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=resource, tid=self.tid)
             return build_response(
                 json.dumps({"access_token": self.token}).encode("utf-8")
             )

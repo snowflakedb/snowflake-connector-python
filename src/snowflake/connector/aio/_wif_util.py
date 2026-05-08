@@ -243,6 +243,7 @@ async def get_azure_sp_token_via_impersonation(
             msg="MI token is missing 'tid' claim; cannot determine tenant ID for impersonation.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
+    response_text = None
     try:
         res = await session_manager.post(
             url=f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
@@ -255,10 +256,12 @@ async def get_azure_sp_token_via_impersonation(
             },
         )
         content = await res.content.read()
-        response_data = json.loads(content.decode("utf-8"))
+        response_text = content.decode("utf-8")
+        res.raise_for_status()
+        response_data = json.loads(response_text)
     except Exception as e:
         raise ProgrammingError(
-            msg=f"Error fetching SP token for Azure client_id '{sp_client_id}': {e}.",
+            msg=f"Error fetching SP token for Azure client_id '{sp_client_id}': {e}. Response: {response_text}",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
 
@@ -335,6 +338,7 @@ async def create_azure_attestation(
 
         content = await res.content.read()
         response_text = content.decode("utf-8")
+        res.raise_for_status()
         response_data = json.loads(response_text)
     except Exception as e:
         raise ProgrammingError(
