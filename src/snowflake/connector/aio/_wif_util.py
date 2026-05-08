@@ -329,6 +329,7 @@ async def create_azure_attestation(
     if managed_identity_client_id:
         query_params += f"&client_id={managed_identity_client_id}"
 
+    response_text = None
     try:
         res = await session_manager.request(
             method="GET",
@@ -342,7 +343,7 @@ async def create_azure_attestation(
         response_data = json.loads(response_text)
     except Exception as e:
         raise ProgrammingError(
-            msg=f"Error fetching Azure metadata: {e}. Ensure the application is running on Azure.",
+            msg=f"Error fetching Azure metadata: {e}. Response: {response_text}. Ensure the application is running on Azure.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
 
