@@ -372,8 +372,8 @@ def get_azure_sp_token_via_impersonation(
             },
         )
         response_text = res.text
-        res.raise_for_status()
         response_data = res.json()
+        res.raise_for_status()
     except Exception as e:
         raise ProgrammingError(
             msg=f"Error fetching SP token for Azure client_id '{sp_client_id}': {e}. Response: {response_text}",
@@ -452,8 +452,8 @@ def create_azure_attestation(
             headers=headers,
         )
         response_text = res.text
-        res.raise_for_status()
         response_data = res.json()
+        res.raise_for_status()
     except Exception as e:
         raise ProgrammingError(
             msg=f"Error fetching Azure metadata: {e}. Response: {response_text}. Ensure the application is running on Azure.",

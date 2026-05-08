@@ -257,8 +257,8 @@ async def get_azure_sp_token_via_impersonation(
         )
         content = await res.content.read()
         response_text = content.decode("utf-8")
-        res.raise_for_status()
         response_data = json.loads(response_text)
+        res.raise_for_status()
     except Exception as e:
         raise ProgrammingError(
             msg=f"Error fetching SP token for Azure client_id '{sp_client_id}': {e}. Response: {response_text}",
@@ -339,8 +339,8 @@ async def create_azure_attestation(
 
         content = await res.content.read()
         response_text = content.decode("utf-8")
-        res.raise_for_status()
         response_data = json.loads(response_text)
+        res.raise_for_status()
     except Exception as e:
         raise ProgrammingError(
             msg=f"Error fetching Azure metadata: {e}. Response: {response_text}. Ensure the application is running on Azure.",
