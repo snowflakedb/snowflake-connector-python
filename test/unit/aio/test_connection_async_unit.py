@@ -690,7 +690,6 @@ async def test_workload_identity_impersonation_path_errors_for_unsupported_provi
         )
 
 
-
 @pytest.mark.parametrize(
     "provider_param,impersonation_path",
     [
