@@ -1625,23 +1625,6 @@ class SnowflakeConnection:
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
-                if (
-                    self._workload_identity_impersonation_path
-                    and self._workload_identity_provider == AttestationProvider.AZURE
-                    and os.environ.get(
-                        "SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "false"
-                    ).lower()
-                    != "true"
-                ):
-                    Error.errorhandler_wrapper(
-                        self,
-                        None,
-                        ProgrammingError,
-                        {
-                            "msg": "Azure WIF impersonation is not enabled. Set SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION=true to enable.",
-                            "errno": ER_INVALID_WIF_SETTINGS,
-                        },
-                    )
                 self.auth_class = AuthByWorkloadIdentity(
                     provider=self._workload_identity_provider,
                     token=self._token,

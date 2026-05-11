@@ -66,24 +66,17 @@ def test_should_authenticate_with_impersonation():
     logger.debug(f"Using impersonation path: {IMPERSONATION_PATH}")
     impersonation_path_list = IMPERSONATION_PATH.split(",")
 
-    if PROVIDER == "AZURE":
-        os.environ["SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION"] = "true"
+    connection_params = {
+        "host": HOST,
+        "account": ACCOUNT,
+        "authenticator": "WORKLOAD_IDENTITY",
+        "workload_identity_provider": PROVIDER,
+        "workload_identity_impersonation_path": impersonation_path_list,
+    }
 
-    try:
-        connection_params = {
-            "host": HOST,
-            "account": ACCOUNT,
-            "authenticator": "WORKLOAD_IDENTITY",
-            "workload_identity_provider": PROVIDER,
-            "workload_identity_impersonation_path": impersonation_path_list,
-        }
-
-        assert connect_and_execute_simple_query(
-            connection_params, EXPECTED_USERNAME_IMPERSONATION
-        ), f"Failed to connect using WIF with provider {PROVIDER}"
-    finally:
-        if PROVIDER == "AZURE":
-            os.environ.pop("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", None)
+    assert connect_and_execute_simple_query(
+        connection_params, EXPECTED_USERNAME_IMPERSONATION
+    ), f"Failed to connect using WIF with provider {PROVIDER}"
 
 
 @pytest.mark.wif

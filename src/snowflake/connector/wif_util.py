@@ -399,14 +399,6 @@ def create_azure_attestation(
     If the application isn't running on Azure or no credentials were found, raises an error.
     """
     if impersonation_path:
-        if (
-            os.environ.get("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "false").lower()
-            != "true"
-        ):
-            raise ProgrammingError(
-                msg="Azure WIF impersonation is not enabled. Set SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION=true to enable.",
-                errno=ER_INVALID_WIF_SETTINGS,
-            )
         if len(impersonation_path) != 1:
             raise ProgrammingError(
                 msg="Azure WIF impersonation only supports a single service principal (single-hop). impersonation_path must contain exactly one client_id.",

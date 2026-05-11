@@ -20,7 +20,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - GCP WIF attestation now uses hostname `metadata.google.internal` instead of the IPv4 link-local address, so it works on IPv6-only GCP VMs.
   - Fixed a bug where `write_pandas()` with `auto_create_table=False` and `overwrite=True` would execute `CREATE TABLE IF NOT EXISTS`, which required unnecessary `OWNERSHIP` privilege on the table. Now only `TRUNCATE TABLE` is executed in this case. Note: users who relied on the table being implicitly created despite `auto_create_table=False` should set `auto_create_table=True` instead.
   - Added validation of the `account` connection parameter so malformed identifiers (for example path-like values or labels outside letters, digits, `_`, and `-`) are rejected with `ProgrammingError` before login (SNOW-1902886).
-  - Added support for Azure Workload Identity Federation impersonation, allowing a managed identity to authenticate as a service principal. This can be enabled by setting the `SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION` environment variable to `true`. Note: This environment variable will be removed in a future release.
+  - Added support for Azure Workload Identity Federation impersonation, allowing a managed identity to authenticate as a service principal.
 
 - v4.4.0(March 25,2026)
   - Bump the lower boundary of cryptography to 46.0.5 due to CVE-2026-26007.

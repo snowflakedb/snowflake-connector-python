@@ -526,9 +526,7 @@ async def test_explicit_azure_uses_explicit_client_id_if_set(
     assert fake_azure_metadata_service.requested_client_id == "custom-client-id"
 
 
-async def test_azure_impersonation_raises_error_if_multi_hop(monkeypatch):
-    monkeypatch.setenv("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "true")
-
+async def test_azure_impersonation_raises_error_if_multi_hop():
     auth_class = AuthByWorkloadIdentity(
         provider=AttestationProvider.AZURE,
         impersonation_path=["client-id-1", "client-id-2"],
@@ -542,10 +540,7 @@ async def test_azure_impersonation_raises_error_if_multi_hop(monkeypatch):
 async def test_azure_impersonation_raises_error_if_mi_token_missing_tid(
     mock_post_request,
     fake_azure_vm_metadata_service,
-    monkeypatch,
 ):
-    monkeypatch.setenv("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "true")
-
     auth_class = AuthByWorkloadIdentity(
         provider=AttestationProvider.AZURE,
         impersonation_path=["some-sp-client-id"],
@@ -560,10 +555,7 @@ async def test_azure_impersonation_raises_error_if_mi_token_missing_tid(
 async def test_azure_impersonation_calls_correct_api_and_populates_auth_data(
     mock_post_request,
     fake_azure_vm_metadata_service,
-    monkeypatch,
 ):
-    monkeypatch.setenv("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "true")
-
     tenant_id = "2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
     fake_azure_vm_metadata_service.tid = tenant_id
     sp_client_id = "some-sp-client-id"
@@ -620,9 +612,7 @@ async def test_azure_impersonation_calls_correct_api_and_populates_auth_data(
 async def test_azure_impersonation_raises_error_if_entra_api_fails(
     mock_post_request,
     fake_azure_vm_metadata_service,
-    monkeypatch,
 ):
-    monkeypatch.setenv("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "true")
     fake_azure_vm_metadata_service.tid = "2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
 
     mock_post_request.side_effect = aiohttp.ClientError()
@@ -640,9 +630,7 @@ async def test_azure_impersonation_raises_error_if_entra_api_fails(
 async def test_azure_impersonation_raises_error_if_access_token_missing_in_response(
     mock_post_request,
     fake_azure_vm_metadata_service,
-    monkeypatch,
 ):
-    monkeypatch.setenv("SNOWFLAKE_ENABLE_AZURE_WIF_IMPERSONATION", "true")
     fake_azure_vm_metadata_service.tid = "2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
 
     class AsyncResponse:
