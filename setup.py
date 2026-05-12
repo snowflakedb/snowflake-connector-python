@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 
 import os
+import platform
+import shutil
 import sys
 import warnings
 
 from setuptools import Extension, setup
 from setuptools.command.egg_info import egg_info
+from setuptools.command.sdist import sdist
 
 CONNECTOR_SRC_DIR = os.path.join("src", "snowflake", "connector")
 NANOARROW_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "nanoarrow_cpp", "ArrowIterator")
@@ -192,8 +195,69 @@ class SetDefaultInstallationExtras(egg_info):
             self.distribution.install_requires += boto_extras
 
 
+def _host_minicore_subdir():
+    """Return the minicore/<platform> name matching the host, or None."""
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        arch = "x86_64"
+    elif machine in ("aarch64", "arm64"):
+        arch = "aarch64"
+    elif machine == "ppc64":
+        arch = "ppc64"
+    else:
+        return None
+
+    if system == "linux":
+        libc, _ = platform.libc_ver()
+        return f"linux_{arch}_{'glibc' if libc == 'glibc' else 'musl'}"
+    if system == "darwin":
+        return f"macos_{arch}"
+    if system == "windows":
+        return f"windows_{arch}"
+    if system == "aix":
+        return f"aix_{arch}"
+    return None
+
+
+class HostOnlyMinicoreSdist(sdist):
+    # The sdist only ever needs the host's minicore binary — the runtime loader
+    # opens one, and downstream packaging audits (Homebrew, conda-forge,
+    # nixpkgs) reject foreign-arch binaries. Wheels are built from the git
+    # tree, not the sdist, so keeping all platforms in git is fine.
+
+    def make_release_tree(self, base_dir, files):
+        super().make_release_tree(base_dir, files)
+        minicore_dir = os.path.join(
+            base_dir, "src", "snowflake", "connector", "minicore"
+        )
+        if not os.path.isdir(minicore_dir):
+            return
+        keep = _host_minicore_subdir()
+        if keep is None:
+            raise RuntimeError(
+                "Cannot build sdist: host platform "
+                f"({platform.system()}/{platform.machine()}) has no matching "
+                "minicore subdir. Build the sdist on a supported platform."
+            )
+        keep_path = os.path.join(minicore_dir, keep)
+        if not os.path.isdir(keep_path):
+            raise RuntimeError(
+                f"Cannot build sdist: expected {keep_path} to exist. Run "
+                "ci/download_minicore.py (or the normal wheel-build pipeline) "
+                "to populate it before building the sdist."
+            )
+        for entry in os.listdir(minicore_dir):
+            if entry == keep or entry.startswith("__"):
+                continue
+            full = os.path.join(minicore_dir, entry)
+            if os.path.isdir(full):
+                shutil.rmtree(full)
+
+
 # Update command classes
 cmd_class["egg_info"] = SetDefaultInstallationExtras
+cmd_class["sdist"] = HostOnlyMinicoreSdist
 
 setup(
     version=version,

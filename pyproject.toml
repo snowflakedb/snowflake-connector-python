@@ -27,4 +27,9 @@ repair-wheel-command = ""
 archs = ["AMD64"]
 
 [tool.check-manifest]
+# Prebuilt minicore binaries live in git for every supported platform so
+# wheel CI can consume them directly. setup.py's HostOnlyMinicoreSdist
+# strips foreign-arch subdirs from the sdist. Tell check-manifest not to
+# flag the resulting asymmetry between the git tree and the sdist tarball.
+ignore = ["src/snowflake/connector/minicore/**"]
 ignore-bad-ideas = ["src/snowflake/connector/minicore/**"]
