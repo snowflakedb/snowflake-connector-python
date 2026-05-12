@@ -34,10 +34,10 @@ run_tests_and_set_result() {
           bash -c "
             echo 'Running tests on branch: \$BRANCH'
             if [[ \"\$BRANCH\" =~ ^PR-[0-9]+\$ ]]; then
-              curl -L https://github.com/snowflakedb/snowflake-connector-python/archive/refs/pull/\$(echo \$BRANCH | cut -d- -f2)/head.tar.gz | tar -xz
+              curl -L https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/development-github-virtual/snowflakedb/snowflake-connector-python/archive/refs/pull/\$(echo \$BRANCH | cut -d- -f2)/head.tar.gz | tar -xz
               mv snowflake-connector-python-* snowflake-connector-python
             else
-              curl -L https://github.com/snowflakedb/snowflake-connector-python/archive/refs/heads/\$BRANCH.tar.gz | tar -xz
+              curl -L https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/development-github-virtual/snowflakedb/snowflake-connector-python/archive/refs/heads/\$BRANCH.tar.gz | tar -xz
               mv snowflake-connector-python-\$BRANCH snowflake-connector-python
             fi
             cd snowflake-connector-python

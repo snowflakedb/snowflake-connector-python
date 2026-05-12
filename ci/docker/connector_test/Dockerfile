@@ -7,7 +7,7 @@ RUN yum install -y java-11-openjdk
 RUN yum -y install rust cargo
 
 # This is to solve permission issue, read https://denibertovic.com/posts/handling-permissions-with-docker-volumes/
-ARG GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-amd64
+ARG GOSU_URL=https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/development-github-virtual/tianon/gosu/releases/download/1.14/gosu-amd64
 ENV GOSU_PATH $GOSU_URL
 RUN curl -o /usr/local/bin/gosu -SL $GOSU_PATH
 RUN chmod +x /usr/local/bin/gosu

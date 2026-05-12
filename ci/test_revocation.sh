@@ -58,11 +58,8 @@ REVOCATION_DIR="/tmp/revocation-validation"
 REVOCATION_BRANCH="${REVOCATION_BRANCH:-main}"
 
 rm -rf "$REVOCATION_DIR"
-if [ -n "$GITHUB_USER" ] && [ -n "$GITHUB_TOKEN" ]; then
-    git clone --depth 1 --branch "$REVOCATION_BRANCH" "https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/snowflake-eng/revocation-validation.git" "$REVOCATION_DIR"
-else
-    git clone --depth 1 --branch "$REVOCATION_BRANCH" "https://github.com/snowflake-eng/revocation-validation.git" "$REVOCATION_DIR"
-fi
+mkdir -p "$REVOCATION_DIR"
+curl -sL "https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/development-github-virtual/snowflake-eng/revocation-validation/archive/refs/heads/${REVOCATION_BRANCH}.tar.gz" | tar -xz --strip-components=1 -C "$REVOCATION_DIR"
 
 cd "$REVOCATION_DIR"
 

@@ -40,7 +40,7 @@ ENV PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${PATH}"
 
 
 # Install pyenv
-RUN git clone --depth=1 https://github.com/pyenv/pyenv.git ${PYENV_ROOT}
+RUN curl -sL https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/development-github-virtual/pyenv/pyenv/archive/refs/heads/master.tar.gz | tar -xz && mv pyenv-master ${PYENV_ROOT}
 
 # Build arguments for Python versions and Snowflake connector versions
 ARG MATRIX_VERSION='{"3.13.4": ["3.16.0", "3.15.0", "3.13.2", "3.14.0", "3.12.3", "3.12.1", "3.12.4", "3.11.0", "3.12.2", "3.6.0", "3.7.0"], "3.9.22": ["3.16.0", "3.15.0", "3.13.2", "3.14.0", "3.12.3", "3.12.1", "3.12.4", "3.11.0", "3.12.2", "3.6.0", "3.7.0"]}'
