@@ -32,7 +32,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # This is to solve permission issue, read https://denibertovic.com/posts/handling-permissions-with-docker-volumes/
-ARG GOSU_URL=https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/development-github-virtual/tianon/gosu/releases/download/1.14/gosu-amd64
+ARG GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-amd64
 ENV GOSU_PATH=${GOSU_URL}
 RUN curl -o /usr/local/bin/gosu -SL $GOSU_PATH
 RUN chmod +x /usr/local/bin/gosu

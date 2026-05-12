@@ -1,7 +1,7 @@
 FROM centos:8
 
 # This is to solve permission issue, read https://denibertovic.com/posts/handling-permissions-with-docker-volumes/
-RUN curl -o /usr/local/bin/gosu -SL "https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/development-github-virtual/tianon/gosu/releases/download/1.14/gosu-amd64"
+RUN curl -o /usr/local/bin/gosu -SL "https://github.com/tianon/gosu/releases/download/1.14/gosu-amd64"
 RUN chmod +x /usr/local/bin/gosu
 
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
