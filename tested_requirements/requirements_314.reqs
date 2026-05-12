@@ -25,4 +25,4 @@ tomlkit==0.14.0
 typing_extensions==4.15.0
 urllib3==2.6.3
 wheel==0.46.3
-snowflake-connector-python==4.4.0
+snowflake-connector-python==4.5.0

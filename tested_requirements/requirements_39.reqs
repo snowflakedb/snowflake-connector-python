@@ -23,4 +23,4 @@ sortedcontainers==2.4.0
 tomlkit==0.14.0
 typing_extensions==4.15.0
 urllib3==1.26.20
-snowflake-connector-python==4.4.0
+snowflake-connector-python==4.5.0
