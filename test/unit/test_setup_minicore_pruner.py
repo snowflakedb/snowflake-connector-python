@@ -18,6 +18,11 @@ import pytest
 
 pytestmark = pytest.mark.skipolddriver
 
+pytest.importorskip(
+    "setuptools",
+    reason="setup.py imports setuptools at module scope; Python 3.14+ envs may not bundle it",
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SETUP_PY = REPO_ROOT / "setup.py"
 
