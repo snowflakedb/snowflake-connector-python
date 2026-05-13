@@ -7,8 +7,10 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v4.5.0(May 12,2026)
+- Upcoming Release
   - Fixed sdist to only install the minicore binary matching the current platform (SNOW-3526469). Previous 4.x releases copied every platform's minicore `.so`/`.dylib`/`.dll` into the install prefix, breaking downstream packagers (e.g. Homebrew) whose audits reject foreign-arch binaries.
+
+- v4.5.0(May 12,2026)
   - Fixed `write_pandas` temp stage name collisions (SNOW-3481510). The old PRNG could produce identical name sequences in forked processes (e.g. Notebook kernels), causing `CREATE TEMPORARY STAGE` to fail with "Object already exists".
   - Fixed a security bug in Okta SAML authentication where `_is_prefix_equal()` compared `url1`'s port against itself instead of `url2`'s port, allowing an attacker to redirect credentials to a different port on the same hostname. Also fixed the default port fallback to use `int` instead of `str` for correct comparison when one URL omits the port.
   - Fixed `executemany` with `paramstyle="pyformat"` to correctly locate the VALUES clause using a balanced-parentheses parser instead of a greedy regex. This fixes incorrect behaviour with nested function calls such as SQLAlchemy `@compiles VARIANT` patterns (e.g. `PARSE_JSON(%(col)s)`) and subquery-form INSERTs (SNOW-298756).
