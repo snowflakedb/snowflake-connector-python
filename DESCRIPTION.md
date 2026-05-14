@@ -9,6 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - Upcoming Release
   - Fixed sdist to only install the minicore binary matching the current platform (SNOW-3526469). Previous 4.x releases copied every platform's minicore `.so`/`.dylib`/`.dll` into the install prefix, breaking downstream packagers (e.g. Homebrew) whose audits reject foreign-arch binaries.
+  - Fixed a bug where `client_prefetch_threads=0` could fall back to the default thread count instead of following the existing lower-bound correction, and aligned async `client_prefetch_threads` validation with the sync path.
 
 - v4.5.0(May 12,2026)
   - Fixed `write_pandas` temp stage name collisions (SNOW-3481510). The old PRNG could produce identical name sequences in forked processes (e.g. Notebook kernels), causing `CREATE TEMPORARY STAGE` to fail with "Object already exists".

@@ -110,6 +110,20 @@ def mock_post_requests(monkeypatch):
 
     return request_body
 
+async def test_connect_client_prefetch_threads_zero_clamps_to_one(mock_post_requests):
+    async with fake_db_conn(client_prefetch_threads=0) as conn:
+        assert conn.client_prefetch_threads == 1
+        assert (
+            mock_post_requests["data"]["SESSION_PARAMETERS"]["CLIENT_PREFETCH_THREADS"]
+            == 1
+        )
+
+
+async def test_client_prefetch_threads_setter_zero_clamps_to_one(mock_post_requests):
+    async with fake_db_conn() as conn:
+        conn.client_prefetch_threads = 0
+        assert conn.client_prefetch_threads == 1
+
 
 async def test_connect_with_service_name(mock_post_requests):
     async with fake_db_conn() as conn:
