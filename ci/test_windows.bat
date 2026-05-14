@@ -44,7 +44,7 @@ if %errorlevel% neq 0 goto :error
 cd %CONNECTOR_DIR%
 
 :: Fetch wiremock
-curl https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/api/maven/maven-remote/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output %CONNECTOR_DIR%\.wiremock\wiremock-standalone.jar
+curl https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/development-maven-virtual/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output %CONNECTOR_DIR%\.wiremock\wiremock-standalone.jar
 
 set JUNIT_REPORT_DIR=%workspace%
 set COV_REPORT_DIR=%workspace%
