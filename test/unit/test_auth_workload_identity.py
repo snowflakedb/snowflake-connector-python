@@ -23,6 +23,7 @@ from snowflake.connector.wif_util import (
 
 from ..csp_helpers import (
     FakeAwsEnvironment,
+    FakeAzureVmMetadataService,
     FakeGceMetadataService,
     build_response,
     gen_dummy_access_token,
@@ -559,3 +560,113 @@ def test_explicit_azure_uses_explicit_client_id_if_set(
     auth_class.prepare(conn=None)
 
     assert fake_azure_metadata_service.requested_client_id == "custom-client-id"
+
+
+def test_azure_impersonation_raises_error_if_multi_hop():
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=["client-id-1", "client-id-2"],
+    )
+    with pytest.raises(ProgrammingError) as excinfo:
+        auth_class.prepare(conn=None)
+    assert "single-hop" in str(excinfo.value)
+
+
+@mock.patch("snowflake.connector.session_manager.SessionManager.post")
+def test_azure_impersonation_raises_error_if_mi_token_missing_tid(
+    mock_post_request,
+    fake_azure_vm_metadata_service: FakeAzureVmMetadataService,
+):
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=["some-sp-client-id"],
+    )
+    with pytest.raises(ProgrammingError) as excinfo:
+        auth_class.prepare(conn=None)
+    assert "tid" in str(excinfo.value)
+    mock_post_request.assert_not_called()
+
+
+@mock.patch("snowflake.connector.session_manager.SessionManager.post")
+def test_azure_impersonation_calls_correct_api_and_populates_auth_data(
+    mock_post_request,
+    fake_azure_vm_metadata_service: FakeAzureVmMetadataService,
+):
+    tenant_id = "2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
+    fake_azure_vm_metadata_service.tid = tenant_id
+    sp_client_id = "some-sp-client-id"
+    sp_token = gen_dummy_id_token(
+        sub="sp-subject", iss=f"https://sts.windows.net/{tenant_id}"
+    )
+
+    mock_post_request.return_value = build_response(
+        json.dumps({"access_token": sp_token}).encode("utf-8")
+    )
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=[sp_client_id],
+    )
+    auth_class.prepare(conn=None)
+
+    mi_token = fake_azure_vm_metadata_service.token
+    decoded_mi = jwt.decode(mi_token, options={"verify_signature": False})
+    assert decoded_mi["aud"] == "api://AzureADTokenExchange"
+
+    mock_post_request.assert_called_once_with(
+        url=f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
+        data={
+            "grant_type": "client_credentials",
+            "client_id": sp_client_id,
+            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            "client_assertion": mi_token,
+            "scope": "api://fd3f753b-eed3-462c-b6a7-a4b5bb650aad/.default",
+        },
+    )
+
+    assert (
+        auth_class.assertion_content
+        == '{"_provider":"AZURE","iss":"https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd","sub":"sp-subject"}'
+    )
+    assert extract_api_data(auth_class) == {
+        "AUTHENTICATOR": "WORKLOAD_IDENTITY",
+        "PROVIDER": "AZURE",
+        "TOKEN": sp_token,
+        "CLIENT_ENVIRONMENT": {"WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH": 1},
+    }
+
+
+@mock.patch("snowflake.connector.session_manager.SessionManager.post")
+def test_azure_impersonation_raises_error_if_entra_api_fails(
+    mock_post_request,
+    fake_azure_vm_metadata_service: FakeAzureVmMetadataService,
+):
+    fake_azure_vm_metadata_service.tid = "2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
+
+    mock_post_request.side_effect = HTTPError("401 Unauthorized")
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=["some-sp-client-id"],
+    )
+    with pytest.raises(ProgrammingError) as excinfo:
+        auth_class.prepare(conn=None)
+    assert "Error fetching SP token" in str(excinfo.value)
+
+
+@mock.patch("snowflake.connector.session_manager.SessionManager.post")
+def test_azure_impersonation_raises_error_if_access_token_missing_in_response(
+    mock_post_request,
+    fake_azure_vm_metadata_service: FakeAzureVmMetadataService,
+):
+    fake_azure_vm_metadata_service.tid = "2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
+
+    mock_post_request.return_value = build_response(json.dumps({}).encode("utf-8"))
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=["some-sp-client-id"],
+    )
+    with pytest.raises(ProgrammingError) as excinfo:
+        auth_class.prepare(conn=None)
+    assert "No access token found" in str(excinfo.value)

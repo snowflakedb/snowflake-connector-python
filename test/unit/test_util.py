@@ -95,6 +95,31 @@ class TestCoreLoader:
         with mock.patch("platform.libc_ver", return_value=("", "")):
             assert _CoreLoader._detect_libc() == "musl"
 
+    def test_get_libc_version(self):
+        """Test get_libc_version returns the version string from platform.libc_ver."""
+        with mock.patch("platform.libc_ver", return_value=("glibc", "2.31")):
+            assert _CoreLoader.get_libc_version() == "2.31"
+
+    def test_get_libc_version_strips_whitespace(self):
+        with mock.patch("platform.libc_ver", return_value=("glibc", "  2.35 \n")):
+            assert _CoreLoader.get_libc_version() == "2.35"
+
+    def test_get_libc_version_empty_returns_none(self):
+        with mock.patch("platform.libc_ver", return_value=("glibc", "")):
+            assert _CoreLoader.get_libc_version() is None
+        with mock.patch("platform.libc_ver", return_value=("", "")):
+            assert _CoreLoader.get_libc_version() is None
+
+    def test_get_libc_family_linux(self):
+        with mock.patch.object(_CoreLoader, "_detect_os", return_value="linux"):
+            with mock.patch.object(_CoreLoader, "_detect_libc", return_value="glibc"):
+                assert _CoreLoader.get_libc_family() == "glibc"
+
+    def test_get_libc_family_non_linux(self):
+        with mock.patch.object(_CoreLoader, "_detect_os", return_value="macos"):
+            with mock.patch.object(_CoreLoader, "_detect_libc", return_value="glibc"):
+                assert _CoreLoader.get_libc_family() is None
+
     @pytest.mark.parametrize(
         "os_name,arch,libc,expected_subdir",
         [
@@ -595,6 +620,8 @@ class TestBuildMinicoreUsage:
         assert "ISA" in result
         assert "CORE_VERSION" in result
         assert "CORE_FILE_NAME" in result
+        assert "LIBC_FAMILY" in result
+        assert "LIBC_VERSION" in result
 
     def test_build_minicore_usage_for_session_isa_matches_platform(self):
         """Test that ISA value matches platform.machine()."""
@@ -603,6 +630,27 @@ class TestBuildMinicoreUsage:
         result = build_minicore_usage_for_session()
 
         assert result["ISA"] == platform.machine()
+
+    def test_build_minicore_usage_for_session_libc_version_matches_platform(self):
+        """Test that LIBC_VERSION matches platform.libc_ver (normalized)."""
+        import platform
+
+        _, libc_version = platform.libc_ver()
+        result = build_minicore_usage_for_session()
+        stripped = libc_version.strip() if libc_version else ""
+        assert result["LIBC_VERSION"] == (stripped or None)
+
+    def test_build_minicore_usage_for_session_libc_family_matches_platform(self):
+        """Test that LIBC_FAMILY is set on Linux and omitted elsewhere."""
+        import platform
+
+        result = build_minicore_usage_for_session()
+        if platform.system().lower() == "linux":
+            lib, _ = platform.libc_ver()
+            expected = "glibc" if lib == "glibc" else "musl"
+            assert result["LIBC_FAMILY"] == expected
+        else:
+            assert result["LIBC_FAMILY"] is None
 
     def test_build_minicore_usage_for_session_with_mocked_core_loader(self):
         """Test build_minicore_usage_for_session with mocked core loader values."""
@@ -647,6 +695,8 @@ class TestBuildMinicoreUsage:
         assert "ISA" in result
         assert "CORE_VERSION" in result
         assert "CORE_FILE_NAME" in result
+        assert "LIBC_FAMILY" in result
+        assert "LIBC_VERSION" in result
 
     def test_build_minicore_usage_for_telemetry_os_matches_platform(self):
         """Test that OS value matches platform.system()."""

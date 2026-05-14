@@ -39,6 +39,13 @@ def fake_azure_metadata_service(request):
 
 
 @pytest.fixture
+def fake_azure_vm_metadata_service():
+    """Fixture that emulates only the Azure VM metadata service."""
+    with FakeAzureVmMetadataServiceAsync() as server:
+        yield server
+
+
+@pytest.fixture
 def fake_gce_metadata_service():
     """Emulates the GCE metadata service, returning a dummy token."""
     with FakeGceMetadataServiceAsync() as server:
