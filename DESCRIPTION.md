@@ -7,6 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- Upcoming Release
+  - Fixed sdist to only install the minicore binary matching the current platform (SNOW-3526469). Previous 4.x releases copied every platform's minicore `.so`/`.dylib`/`.dll` into the install prefix, breaking downstream packagers (e.g. Homebrew) whose audits reject foreign-arch binaries.
+
 - v4.5.0(May 12,2026)
   - Fixed `write_pandas` temp stage name collisions (SNOW-3481510). The old PRNG could produce identical name sequences in forked processes (e.g. Notebook kernels), causing `CREATE TEMPORARY STAGE` to fail with "Object already exists".
   - Replaced third-party download URLs in CI scripts and Dockerfiles with Snowflake Artifactory to improve supply-chain security.
