@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 
 import os
+import platform
+import shutil
 import sys
 import warnings
 
 from setuptools import Extension, setup
+from setuptools.command.build_py import build_py
 from setuptools.command.egg_info import egg_info
 
 CONNECTOR_SRC_DIR = os.path.join("src", "snowflake", "connector")
@@ -192,8 +195,71 @@ class SetDefaultInstallationExtras(egg_info):
             self.distribution.install_requires += boto_extras
 
 
+def _minicore_native_subdir():
+    """Return the minicore/<platform> subdir matching the current interpreter.
+
+    Mirrors snowflake.connector._utils._CoreLoader._get_platform_subdir so the
+    build-time pruner and the runtime loader always agree on the layout.
+    Returns None when the platform is not recognised (leave tree untouched).
+    """
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        arch = "x86_64"
+    elif machine in ("aarch64", "arm64"):
+        arch = "aarch64"
+    elif machine == "ppc64":
+        arch = "ppc64"
+    else:
+        return None
+
+    if system == "linux":
+        libc, _ = platform.libc_ver()
+        libc_family = "glibc" if libc == "glibc" else "musl"
+        return f"linux_{arch}_{libc_family}"
+    if system == "darwin":
+        return f"macos_{arch}"
+    if system == "windows":
+        return f"windows_{arch}"
+    if system == "aix":
+        return f"aix_{arch}"
+    return None
+
+
+class PlatformBuildPy(build_py):
+    """Strip non-native minicore/<platform>/ dirs from the built distribution.
+
+    The sdist ships minicore binaries for every supported platform. At
+    build-time we keep only the one matching the current interpreter so wheels
+    and downstream sdist consumers (pip install, Homebrew, conda-forge,
+    nixpkgs) end up with a clean single-platform layout.
+    """
+
+    def run(self):
+        super().run()
+        self._prune_minicore()
+
+    def _prune_minicore(self):
+        minicore_build_dir = os.path.join(
+            self.build_lib, "snowflake", "connector", "minicore"
+        )
+        if not os.path.isdir(minicore_build_dir):
+            return
+        keep = _minicore_native_subdir()
+        if keep is None:
+            return
+        for entry in os.listdir(minicore_build_dir):
+            full = os.path.join(minicore_build_dir, entry)
+            if not os.path.isdir(full) or entry.startswith("__"):
+                continue
+            if entry == keep:
+                continue
+            shutil.rmtree(full)
+
+
 # Update command classes
 cmd_class["egg_info"] = SetDefaultInstallationExtras
+cmd_class["build_py"] = PlatformBuildPy
 
 setup(
     version=version,

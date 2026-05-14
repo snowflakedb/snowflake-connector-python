@@ -132,3 +132,51 @@ class TestWritePandasOverwriteWithoutAutoCreate:
         assert not any(
             "TRUNCATE" in sql for sql in executed_sqls
         ), "Should not TRUNCATE when overwrite=False"
+
+
+@pytest.mark.pandas
+@pytest.mark.unit
+class TestTempObjectNameUniqueness:
+    """Tests for SNOW-3481510: random_name_for_temp_object must use
+    cryptographically secure randomness to prevent collisions in forked
+    processes and high-frequency usage."""
+
+    def test_random_names_are_unique_across_many_calls(self):
+        """Generate a large batch of names and verify no collisions."""
+        from snowflake.connector._utils import (
+            TempObjectType,
+            random_name_for_temp_object,
+        )
+
+        names = [
+            random_name_for_temp_object(TempObjectType.STAGE) for _ in range(10_000)
+        ]
+        assert len(set(names)) == len(names), "Detected duplicate temp object names"
+
+    def test_random_names_unique_for_all_object_types(self):
+        """Verify uniqueness holds across different temp object types."""
+        from snowflake.connector._utils import (
+            TempObjectType,
+            random_name_for_temp_object,
+        )
+
+        names = []
+        for obj_type in [
+            TempObjectType.STAGE,
+            TempObjectType.FILE_FORMAT,
+            TempObjectType.TABLE,
+        ]:
+            names.extend(random_name_for_temp_object(obj_type) for _ in range(1_000))
+        assert len(set(names)) == len(names)
+
+    def test_random_name_format_preserved(self):
+        """Ensure the name format is still SNOWPARK_TEMP_<TYPE>_<ALPHANUMERIC>."""
+        import re
+
+        from snowflake.connector._utils import (
+            TempObjectType,
+            random_name_for_temp_object,
+        )
+
+        name = random_name_for_temp_object(TempObjectType.STAGE)
+        assert re.match(r"^SNOWPARK_TEMP_STAGE_[A-Z0-9]{10}$", name)

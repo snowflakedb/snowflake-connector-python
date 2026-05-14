@@ -142,7 +142,13 @@ from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPO
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
-from .util_text import construct_hostname, expand_tilde, parse_account, split_statements
+from .util_text import (
+    construct_hostname,
+    expand_tilde,
+    is_valid_account_identifier,
+    parse_account,
+    split_statements,
+)
 from .wif_util import AttestationProvider
 
 if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
@@ -699,6 +705,18 @@ class SnowflakeConnection:
         # Set up the file operation parser and stream downloader.
         self._file_operation_parser = FileOperationParser(self)
         self._stream_downloader = StreamDownloader(self)
+
+    def _validate_account(self, account_str):
+        if not is_valid_account_identifier(account_str):
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Invalid account identifier: only letters, digits, '_' and '-' allowed; no dots or slashes",
+                    "errno": ER_NO_ACCOUNT_NAME,
+                },
+            )
 
     # Deprecated
     @property
@@ -1595,6 +1613,7 @@ class SnowflakeConnection:
                     not in (
                         AttestationProvider.GCP,
                         AttestationProvider.AWS,
+                        AttestationProvider.AZURE,
                     )
                 ):
                     Error.errorhandler_wrapper(
@@ -1602,7 +1621,7 @@ class SnowflakeConnection:
                         None,
                         ProgrammingError,
                         {
-                            "msg": "workload_identity_impersonation_path is currently only supported for GCP and AWS.",
+                            "msg": "workload_identity_impersonation_path is currently only supported for GCP, AWS, and AZURE.",
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
@@ -1832,8 +1851,11 @@ class SnowflakeConnection:
                 ProgrammingError,
                 {"msg": "Account must be specified", "errno": ER_NO_ACCOUNT_NAME},
             )
-        if self._account and "." in self._account:
-            self._account = parse_account(self._account)
+
+        if self._account:
+            self._validate_account(self._account)
+            if "." in self._account:
+                self._account = parse_account(self._account)
 
         if not isinstance(self._backoff_policy, Callable) or not isinstance(
             self._backoff_policy(), Iterator

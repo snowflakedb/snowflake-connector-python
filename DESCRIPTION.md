@@ -8,6 +8,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - Upcoming Release
+  - Fixed sdist to only install the minicore binary matching the current platform (SNOW-3526469). Previous 4.x releases copied every platform's minicore `.so`/`.dylib`/`.dll` into the install prefix, breaking downstream packagers (e.g. Homebrew) whose audits reject foreign-arch binaries.
+  - Fixed a bug where `client_prefetch_threads=0` could fall back to the default thread count instead of following the existing lower-bound correction, and aligned async `client_prefetch_threads` validation with the sync path.
+
+- v4.5.0(May 12,2026)
+  - Fixed `write_pandas` temp stage name collisions (SNOW-3481510). The old PRNG could produce identical name sequences in forked processes (e.g. Notebook kernels), causing `CREATE TEMPORARY STAGE` to fail with "Object already exists".
   - Fixed a security bug in Okta SAML authentication where `_is_prefix_equal()` compared `url1`'s port against itself instead of `url2`'s port, allowing an attacker to redirect credentials to a different port on the same hostname. Also fixed the default port fallback to use `int` instead of `str` for correct comparison when one URL omits the port.
   - Fixed `executemany` with `paramstyle="pyformat"` to correctly locate the VALUES clause using a balanced-parentheses parser instead of a greedy regex. This fixes incorrect behaviour with nested function calls such as SQLAlchemy `@compiles VARIANT` patterns (e.g. `PARSE_JSON(%(col)s)`) and subquery-form INSERTs (SNOW-298756).
   - Added ECDSA key support (ES256, ES384, ES512) for key-pair authentication.
@@ -18,7 +23,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Updated SPCS token injection to gate on `SNOWFLAKE_RUNNING_INSIDE_SPCS` environment variable, trim whitespace, and remove configurable token path.
   - GCP WIF attestation now uses hostname `metadata.google.internal` instead of the IPv4 link-local address, so it works on IPv6-only GCP VMs.
   - Fixed a bug where `write_pandas()` with `auto_create_table=False` and `overwrite=True` would execute `CREATE TABLE IF NOT EXISTS`, which required unnecessary `OWNERSHIP` privilege on the table. Now only `TRUNCATE TABLE` is executed in this case. Note: users who relied on the table being implicitly created despite `auto_create_table=False` should set `auto_create_table=True` instead.
-  - Fixed a bug where `client_prefetch_threads=0` could fall back to the default thread count instead of following the existing lower-bound correction, and aligned async `client_prefetch_threads` validation with the sync path.
+  - Added validation of the `account` connection parameter so malformed identifiers (for example path-like values or labels outside letters, digits, `_`, and `-`) are rejected with `ProgrammingError` before login (SNOW-1902886).
+  - Added support for Azure Workload Identity Federation impersonation, allowing a managed identity to authenticate as a service principal.
 
 - v4.4.0(March 25,2026)
   - Bump the lower boundary of cryptography to 46.0.5 due to CVE-2026-26007.
