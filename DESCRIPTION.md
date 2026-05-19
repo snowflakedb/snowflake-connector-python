@@ -12,6 +12,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Consolidated keyring token cache to use a single service name with hashed account keys, reducing macOS Keychain password prompts. Legacy entries are auto-migrated on first read.
   - Added support for AWS outbound JWT token attestation for Workload Identity Federation (WIF). This can be enabled by setting the `SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN` environment variable to `true`. Note: This environment variable will be removed in a future release.
   - Updated SPCS token injection to gate on `SNOWFLAKE_RUNNING_INSIDE_SPCS` environment variable, trim whitespace, and remove configurable token path.
+  - Marked the Arrow iterator C extension (`snowflake.connector.nanoarrow_arrow_iterator`) as free-threading-compatible (`Py_MOD_GIL_NOT_USED`). On Python 3.14t (`--disable-gil`) interpreters, importing the connector no longer auto-reverts the process to GIL mode. The extension's runtime behaviour is unchanged on GIL-enabled builds. Bumped the build-time `cython` dependency to `>=3.1` for the `freethreading_compatible` directive.
   - Added support for Python 3.14t (free-threaded). Note: Python 3.14t CI testing excludes `win_arm64` (no `cryptography` wheels available) and `mitmproxy` proxy tests on all platforms (transitive dependencies `aioquic`/`pylsqpack` lack free-threaded-compatible wheels).
 
 - v4.4.0(March 25,2026)
