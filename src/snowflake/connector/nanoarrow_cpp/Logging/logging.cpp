@@ -28,9 +28,7 @@ Logger::Logger(const char *name) : m_name(name) {}
 
 void Logger::log(int level, const char *path_name, const char *func_name,
                  int line_num, const char *msg) {
-  if (m_pyLogger.get() == nullptr) {
-    setupPyLogger();
-  }
+  std::call_once(m_initOnceFlag, [this]() { setupPyLogger(); });
 
   PyObject *logger = m_pyLogger.get();
   py::UniqueRef keywords(PyDict_New());
@@ -49,8 +47,12 @@ void Logger::log(int level, const char *path_name, const char *func_name,
   PyDict_SetItemString(keywords.get(), "line_num", line_num_ref.get());
   PyDict_SetItemString(keywords.get(), "msg", msg_ref.get());
 
-  // call snow_logging.SnowLogger.log()
-  PyObject_Call(call_log.get(), Py_BuildValue("()"), keywords.get());
+  // call snow_logging.SnowLogger.log(). UniqueRef-wrap both the empty
+  // positional-args tuple and the return value so they are decref'd; the
+  // previous code leaked one reference per call on each.
+  py::UniqueRef empty_args(Py_BuildValue("()"));
+  py::UniqueRef result(
+      PyObject_Call(call_log.get(), empty_args.get(), keywords.get()));
 }
 
 void Logger::debug(const char *path_name, const char *func_name, int line_num,
