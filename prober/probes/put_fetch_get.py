@@ -496,6 +496,7 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
                     cur.execute(f"USE SCHEMA {schema_name}")
                     cur.execute(f"REMOVE @{stage_name}")
                     cur.execute(f"DROP TABLE {table_name}")
+                    cur.execute(f"DROP STAGE IF EXISTS {stage_name}")
             logger.error("Resources cleaned up successfully")
             print(
                 f"cloudprober_driver_python_cleanup_resources{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"

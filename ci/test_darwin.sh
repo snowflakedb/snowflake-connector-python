@@ -31,7 +31,7 @@ python3.12 -m venv venv
 python3.12 -m pip install -U tox>=4
 
 # Fetch wiremock
-curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output ${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar
+curl https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/api/maven/maven-remote/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output ${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar
 
 # Run tests
 cd $CONNECTOR_DIR
