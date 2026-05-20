@@ -165,10 +165,14 @@ class ArrowConverterContext:
     def DECFLOAT_to_numpy_float64(self, exponent: int, significand: bytes) -> float64:
         return numpy.float64(self.DECFLOAT_to_decimal(exponent, significand))
 
-    def INTERVAL_YEAR_MONTH_to_str(self, months: int) -> str:
-        return interval_year_month_to_string(months)
+    def INTERVAL_YEAR_MONTH_to_str(self, months: int, scale: int) -> str:
+        return interval_year_month_to_string(months, scale)
 
-    def INTERVAL_YEAR_MONTH_to_numpy_timedelta(self, months: int) -> timedelta64:
+    def INTERVAL_YEAR_MONTH_to_numpy_timedelta(
+        self, months: int, scale: int
+    ) -> timedelta64:
+        if scale == 1:  # interval year
+            return numpy.timedelta64(months // 12, "Y")
         return numpy.timedelta64(months, "M")
 
     def INTERVAL_DAY_TIME_int_to_numpy_timedelta(self, nanos: int) -> timedelta64:

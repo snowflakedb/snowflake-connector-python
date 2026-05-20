@@ -863,6 +863,7 @@ def test_json_cache_serialization_and_deserialization(tmpdir):
             assert key1 == key2 and value1 == value2
 
     def verify_exception(_, loaded_cache):
+        """All cached exceptions are deserialized as RevocationCheckError (no dynamic import)."""
         exc_1 = loaded_cache[(b"key1", b"key2", b"key3")].exception
         exc_2 = loaded_cache[(b"key4", b"key5", b"key6")].exception
         exc_3 = loaded_cache[(b"key7", b"key8", b"key9")].exception
@@ -871,12 +872,10 @@ def test_json_cache_serialization_and_deserialization(tmpdir):
             and exc_1.raw_msg == "error"
             and exc_1.errno == 1
         )
-        assert isinstance(exc_2, ValueError) and str(exc_2) == "value error"
-        assert (
-            isinstance(exc_3, RevocationCheckError)
-            and "while deserializing ocsp cache, please try cleaning up the OCSP cache under directory"
-            in exc_3.msg
-        )
+        assert isinstance(exc_2, RevocationCheckError)
+        assert exc_2.raw_msg == "value error"
+        assert isinstance(exc_3, RevocationCheckError)
+        assert exc_3.raw_msg == "json error: line 1 column 1 (char 0)"
 
     verify(verify_happy_path, copy.deepcopy(test_cache))
 

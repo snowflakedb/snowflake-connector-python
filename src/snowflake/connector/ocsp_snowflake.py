@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import codecs
-import importlib
 import json
 import os
 import platform
@@ -122,30 +121,30 @@ class OCSPResponseValidationResult(NamedTuple):
                 return
             exc_class = exception_dict.get("class")
             exc_module = exception_dict.get("module")
-            try:
-                if (
-                    exc_class == "RevocationCheckError"
-                    and exc_module == "snowflake.connector.errors"
-                ):
-                    return RevocationCheckError(
-                        msg=exception_dict["msg"],
-                        errno=exception_dict["errno"],
-                    )
-                else:
-                    module = importlib.import_module(exc_module)
-                    exc_cls = getattr(module, exc_class)
-                    return exc_cls(exception_dict["msg"])
-            except Exception as deserialize_exc:
-                logger.debug(
-                    f"hitting error {str(deserialize_exc)} while deserializing exception,"
-                    f" the original error error class and message are {exc_class} and {exception_dict['msg']}"
-                )
+
+            # For RevocationCheckError, deserialize directly
+            if (
+                exc_class == "RevocationCheckError"
+                and exc_module == "snowflake.connector.errors"
+            ):
                 return RevocationCheckError(
-                    msg=f"Got error {str(deserialize_exc)} while deserializing ocsp cache, please try "
-                    f"cleaning up the "
-                    f"OCSP cache under directory {OCSP_RESPONSE_VALIDATION_CACHE.file_path}",
-                    errno=ER_OCSP_RESPONSE_LOAD_FAILURE,
+                    msg=exception_dict["msg"],
+                    errno=exception_dict.get("errno", ER_OCSP_RESPONSE_LOAD_FAILURE),
                 )
+
+            # SECURITY: Do not dynamically import or instantiate classes from
+            # cache data.  All non-RevocationCheckError exceptions are wrapped
+            # in a RevocationCheckError to avoid arbitrary code execution via
+            # crafted cache files (CWE-470 / CWE-502).
+            logger.debug(
+                "Converting cached %s.%s exception to RevocationCheckError",
+                exc_module,
+                exc_class,
+            )
+            return RevocationCheckError(
+                msg=exception_dict.get("msg", "Cached OCSP exception"),
+                errno=exception_dict.get("errno", ER_OCSP_RESPONSE_LOAD_FAILURE),
+            )
 
         return OCSPResponseValidationResult(
             exception=deserialize_exception(json_obj.get("exception")),

@@ -25,8 +25,8 @@ static constexpr char INTERVAL_YEAR_MONTH_TO_STR[] =
 
 IntervalYearMonthConverter::IntervalYearMonthConverter(ArrowArrayView* array,
                                                        PyObject* context,
-                                                       bool useNumpy)
-    : m_array(array), m_context(context) {
+                                                       bool useNumpy, int scale)
+    : m_array(array), m_context(context), m_scale(scale) {
   m_method = useNumpy ? INTERVAL_YEAR_MONTH_TO_NUMPY_TIMEDELTA
                       : INTERVAL_YEAR_MONTH_TO_STR;
 }
@@ -36,7 +36,7 @@ PyObject* IntervalYearMonthConverter::toPyObject(int64_t rowIndex) const {
     Py_RETURN_NONE;
   }
   int64_t val = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
-  return PyObject_CallMethod(m_context, m_method, "L", val);
+  return PyObject_CallMethod(m_context, m_method, "Li", val, m_scale);
 }
 
 IntervalDayTimeConverterInt::IntervalDayTimeConverterInt(ArrowArrayView* array,

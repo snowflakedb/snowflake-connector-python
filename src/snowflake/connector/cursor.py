@@ -42,6 +42,7 @@ from . import compat
 from ._sql_util import get_file_transfer_type
 from ._utils import (
     REQUEST_ID_STATEMENT_PARAM_NAME,
+    _nanoarrow_loader,
     _snowflake_max_parallelism_for_file_transfer,
     _TrackedQueryCancellationTimer,
     is_uuid4,
@@ -78,6 +79,7 @@ from .options import installed_pandas
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
+from .util_text import extract_values_clause
 
 if TYPE_CHECKING:  # pragma: no cover
     from pandas import DataFrame
@@ -112,6 +114,7 @@ except ImportError as e:  # pragma: no cover
     logger.warning(
         f"Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: {e}",
     )
+    _nanoarrow_loader.set_load_error(e)
     CAN_USE_ARROW_RESULT_FORMAT = False
 
 STATEMENT_TYPE_ID_DML = 0x3000
@@ -346,9 +349,6 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
     INSERT_SQL_RE = re.compile(r"^insert\s+into", flags=re.IGNORECASE)
     COMMENT_SQL_RE = re.compile(r"/\*.*\*/")
-    INSERT_SQL_VALUES_RE = re.compile(
-        r".*VALUES\s*(\(.*\)).*", re.IGNORECASE | re.MULTILINE | re.DOTALL
-    )
     ALTER_SESSION_RE = re.compile(
         r"alter\s+session\s+set\s+(\w*?)\s*=\s*\'?([^\']+?)\'?\s*(?:;|$)",
         flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
@@ -1335,7 +1335,21 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             )
         return self
 
-    def fetch_arrow_batches(self) -> Iterator[Table]:
+    def fetch_arrow_batches(
+        self,
+        force_microsecond_precision: bool = False,
+    ) -> Iterator[Table]:
+        """Fetch Arrow Tables in batches.
+
+        Args:
+            force_microsecond_precision: When True, all timestamp columns are converted
+                to microsecond precision, ensuring consistent schema across all batches.
+                This is useful when your data contains timestamps outside the nanosecond
+                range (1677-2262), such as '9999-12-31' or '0001-01-01'. When False
+                (default), precision is determined per-batch based on the data, which
+                may cause pyarrow schema mismatch errors when combining batches.
+                Note: enabling this truncates sub-microsecond precision (scale 7-9).
+        """
         self.check_can_use_arrow_resultset()
         if self._prefetch_hook is not None:
             self._prefetch_hook()
@@ -1344,20 +1358,43 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         self._log_telemetry_job_data(
             TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.TRUE
         )
-        return self._result_set._fetch_arrow_batches()
+        return self._result_set._fetch_arrow_batches(
+            force_microsecond_precision=force_microsecond_precision
+        )
 
     @overload
-    def fetch_arrow_all(self, force_return_table: Literal[False]) -> Table | None: ...
+    def fetch_arrow_all(
+        self,
+        force_return_table: Literal[False] = ...,
+        force_microsecond_precision: bool = ...,
+    ) -> Table | None: ...
 
     @overload
-    def fetch_arrow_all(self, force_return_table: Literal[True]) -> Table: ...
+    def fetch_arrow_all(
+        self,
+        force_return_table: Literal[True],
+        force_microsecond_precision: bool = ...,
+    ) -> Table: ...
 
-    def fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
-        """
+    def fetch_arrow_all(
+        self,
+        force_return_table: bool = False,
+        force_microsecond_precision: bool = False,
+    ) -> Table | None:
+        """Fetch all results as a single Arrow Table.
+
         Args:
             force_return_table: Set to True so that when the query returns zero rows,
-                an empty pyarrow table will be returned with schema using the highest bit length for each column.
-                Default value is False in which case None is returned in case of zero rows.
+                an empty pyarrow table will be returned with schema using the highest
+                bit length for each column. Default value is False in which case None
+                is returned in case of zero rows.
+            force_microsecond_precision: When True, all timestamp columns are converted
+                to microsecond precision, ensuring consistent schema across all batches.
+                This is useful when your data contains timestamps outside the nanosecond
+                range (1677-2262), such as '9999-12-31' or '0001-01-01'. When False
+                (default), precision is determined per-batch based on the data, which
+                may cause pyarrow schema mismatch errors when combining batches.
+                Note: enabling this truncates sub-microsecond precision (scale 7-9).
         """
         self.check_can_use_arrow_resultset()
 
@@ -1366,7 +1403,10 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         if self._query_result_format != "arrow":
             raise NotSupportedError
         self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
-        return self._result_set._fetch_arrow_all(force_return_table=force_return_table)
+        return self._result_set._fetch_arrow_all(
+            force_return_table=force_return_table,
+            force_microsecond_precision=force_microsecond_precision,
+        )
 
     def fetch_pandas_batches(self, **kwargs: Any) -> Iterator[DataFrame]:
         """Fetches a single Arrow Table."""
@@ -1431,8 +1471,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                 #  accumulate results to mock the result from a single insert statement as formatted below
                 logger.debug("rewriting INSERT query")
                 command_wo_comments = re.sub(self.COMMENT_SQL_RE, "", command)
-                m = self.INSERT_SQL_VALUES_RE.match(command_wo_comments)
-                if not m:
+                fmt = extract_values_clause(command_wo_comments)
+                if fmt is None:
                     Error.errorhandler_wrapper(
                         self.connection,
                         self,
@@ -1442,8 +1482,6 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                             "errno": ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
                         },
                     )
-
-                fmt = m.group(1)
                 values = []
                 for param in seqparams:
                     logger.debug(f"parameter: {param}")
@@ -1653,7 +1691,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         if not self.connection._reuse_results:
             self._result_set = None
 
-    def __iter__(self) -> Iterator[dict] | Iterator[tuple]:
+    def __iter__(self) -> Iterator[FetchRow]:
         """Iteration over the result set."""
         while True:
             _next = self.fetchone()

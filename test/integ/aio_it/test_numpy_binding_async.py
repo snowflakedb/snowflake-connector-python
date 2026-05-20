@@ -62,7 +62,7 @@ async def test_numpy_datatype_binding(conn_cnx, db_parameters):
         },
     ]
     try:
-        async with conn_cnx(numpy=True) as cnx:
+        async with conn_cnx(numpy=True, paramstyle="pyformat") as cnx:
             await cnx.cursor().execute(
                 """
 CREATE OR REPLACE TABLE {name} (

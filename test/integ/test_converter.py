@@ -535,3 +535,66 @@ ALTER SESSION SET
         assert ret[9] == "2100-01-01 05:00:00.012000000"
         assert ret[10] == "1970-01-01 00:00:00.000000000 +0000"
         assert ret[11] == "1970-01-01 00:00:00.000000000"
+
+
+def test_binary_list_parameter_in_query(conn_cnx):
+    """Test that binary data in list parameters works correctly.
+
+    Regression test for GitHub Issue #2311.
+    When binary data (bytes) is passed in a list parameter for an IN clause,
+    the converter should properly hex-encode each item in the list.
+    Without the fix, this raises UnicodeDecodeError when bytes contain non-ASCII values.
+    """
+    import uuid
+
+    # Use UUIDs that generate non-ASCII bytes (bytes > 127)
+    business_uuid = uuid.UUID("4363f57d-c9ca-4e63-92c7-3e67786c8a30")
+    user_uuid1 = uuid.UUID("4363f57d-c9ca-4e63-92c7-3e67786c8a30")
+    user_uuid2 = uuid.UUID("f5abcdef-1234-5678-9abc-def012345678")
+
+    with conn_cnx() as conn:
+        cur = conn.cursor()
+        try:
+            # Create a temporary table for testing
+            cur.execute(
+                "CREATE OR REPLACE TEMPORARY TABLE test_binary_list_param "
+                "(business_uuid BINARY, user_uuid BINARY)"
+            )
+
+            # Insert test data
+            cur.execute(
+                "INSERT INTO test_binary_list_param VALUES (%(business_uuid)s, %(user_uuid)s)",
+                params={
+                    "business_uuid": business_uuid.bytes,
+                    "user_uuid": user_uuid1.bytes,
+                },
+            )
+
+            # Test single binary parameter (this should work)
+            results = cur.execute(
+                "SELECT * FROM test_binary_list_param WHERE business_uuid = %(business_uuid)s",
+                params={"business_uuid": business_uuid.bytes},
+            ).fetchall()
+            assert len(results) == 1
+
+            # Test binary in list parameter (this was failing with UnicodeDecodeError)
+            results = cur.execute(
+                "SELECT * FROM test_binary_list_param "
+                "WHERE business_uuid = %(business_uuid)s AND user_uuid IN (%(user_uuids)s)",
+                params={
+                    "business_uuid": business_uuid.bytes,
+                    "user_uuids": [user_uuid1.bytes],
+                },
+            ).fetchall()
+            assert len(results) == 1
+
+            # Test with multiple binary values in list
+            results = cur.execute(
+                "SELECT * FROM test_binary_list_param "
+                "WHERE user_uuid IN (%(user_uuids)s)",
+                params={"user_uuids": [user_uuid1.bytes, user_uuid2.bytes]},
+            ).fetchall()
+            assert len(results) == 1  # Only user_uuid1 exists in the table
+
+        finally:
+            cur.execute("DROP TABLE IF EXISTS test_binary_list_param")

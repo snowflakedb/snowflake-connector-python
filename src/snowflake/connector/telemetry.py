@@ -41,6 +41,7 @@ class TelemetryField(Enum):
     IMPORTED_PACKAGES = "client_imported_packages"
     # Core import
     CORE_IMPORT = "mini_core_import"
+    NANOARROW_IMPORT = "nanoarrow_import"
     # multi-statement usage
     MULTI_STATEMENT = "client_multi_statement_query"
     # Keys for telemetry data sent through either in-band or out-of-band telemetry

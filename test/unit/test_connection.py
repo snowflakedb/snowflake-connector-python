@@ -684,10 +684,8 @@ def test_workload_identity_provider_is_required_for_wif_authenticator(
     "provider_param",
     [
         # Strongly-typed values.
-        AttestationProvider.AZURE,
         AttestationProvider.OIDC,
         # String values.
-        "AZURE",
         "OIDC",
     ],
 )
@@ -709,7 +707,7 @@ def test_workload_identity_impersonation_path_errors_for_unsupported_providers(
                 ],
             )
         assert (
-            "workload_identity_impersonation_path is currently only supported for GCP and AWS."
+            "workload_identity_impersonation_path is currently only supported for GCP, AWS, and AZURE."
             in str(excinfo.value)
         )
 
@@ -980,3 +978,45 @@ def test_connections_registry_lifecycle(crl_mock, mock_post_requests):
         conn2.close()
         assert mock_registry.get_connection_count() == 0
         crl_mock.stop_periodic_cleanup.assert_called_once()
+
+
+@pytest.mark.skipolddriver
+def test_server_session_keep_alive_skips_async_check(mock_post_requests):
+    """Test that server_session_keep_alive=True skips _all_async_queries_finished check."""
+    conn = fake_connector(server_session_keep_alive=True)
+
+    # Mock the methods we want to verify are called/not called
+    conn._all_async_queries_finished = mock.MagicMock(return_value=True)
+    delete_session_mock = mock.MagicMock()
+    # rest attribute is deleted when closing the connection so accessing it in checks would fail
+    conn.rest.delete_session = delete_session_mock
+
+    # Close the connection
+    conn.close()
+
+    # Verify _all_async_queries_finished was NOT called
+    conn._all_async_queries_finished.assert_not_called()
+
+    # Verify delete_session was NOT called (due to server_session_keep_alive=True)
+    delete_session_mock.assert_not_called()
+
+
+@pytest.mark.skipolddriver
+def test_server_session_keep_alive_false_calls_async_check(mock_post_requests):
+    """Test that server_session_keep_alive=False calls _all_async_queries_finished check."""
+    conn = fake_connector(server_session_keep_alive=False)
+
+    # Mock the methods we want to verify are called
+    conn._all_async_queries_finished = mock.MagicMock(return_value=True)
+    delete_session_mock = mock.MagicMock()
+    # rest attribute is deleted when closing the connection so accessing it in checks would fail
+    conn.rest.delete_session = delete_session_mock
+
+    # Close the connection
+    conn.close()
+
+    # Verify _all_async_queries_finished WAS called
+    conn._all_async_queries_finished.assert_called_once()
+
+    # Verify delete_session WAS called (since async queries are finished and keep_alive=False)
+    delete_session_mock.assert_called_once()

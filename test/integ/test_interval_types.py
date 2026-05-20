@@ -45,6 +45,40 @@ def test_select_year_month_interval(conn_cnx, use_numpy, result_format):
 
 @pytest.mark.parametrize("use_numpy", [True, False])
 @pytest.mark.parametrize("result_format", ["json", "arrow"])
+@pytest.mark.parametrize("datatype", ["YEAR", "MONTH"])
+def test_select_year_month_interval_subtypes(
+    conn_cnx, use_numpy, result_format, datatype
+):
+    cases = ["0", "1", "-1", "999999999", "-999999999"]
+    if use_numpy:
+        expected = [numpy.timedelta64(int(c), datatype[0]) for c in cases]
+    else:
+        expected = ["+0", "+1", "-1", "+999999999", "-999999999"]
+
+    table = "test_year_month_interval_subtypes"
+    values = "(" + "),(".join([f"'{c}'" for c in cases]) + ")"
+    with conn_cnx(numpy=use_numpy) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"alter session set python_connector_query_result_format='{result_format}'"
+        )
+
+        cursor.execute("alter session set feature_interval_types=enabled")
+        cursor.execute(f"create or replace table {table} (c1 interval {datatype})")
+        cursor.execute(f"insert into {table} values {values}")
+        result = cursor.execute(f"select * from {table}").fetchall()
+        # Validate column metadata.
+        type_code = cursor._description[0].type_code
+        assert (
+            constants.FIELD_ID_TO_NAME[type_code] == "INTERVAL_YEAR_MONTH"
+        ), f"invalid column type: {type_code}"
+        # Validate column values.
+        result = [r[0] for r in result]
+        assert result == expected
+
+
+@pytest.mark.parametrize("use_numpy", [True, False])
+@pytest.mark.parametrize("result_format", ["json", "arrow"])
 def test_select_day_time_interval(conn_cnx, use_numpy, result_format):
     cases = [
         "0 0:0:0.0",

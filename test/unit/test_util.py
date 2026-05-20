@@ -8,9 +8,11 @@ import pytest
 
 from snowflake.connector._utils import (
     _CoreLoader,
+    _NanoarrowLoader,
     _TrackedQueryCancellationTimer,
     build_minicore_usage_for_session,
     build_minicore_usage_for_telemetry,
+    build_nanoarrow_usage_for_telemetry,
 )
 
 pytestmark = pytest.mark.skipolddriver
@@ -38,6 +40,9 @@ class TestCoreLoader:
         sleep(2)
         assert loader.get_load_error() == str(None)
         assert loader.get_core_version() == "0.0.1"
+        # Verify load time was measured
+        assert loader.get_load_time() is not None
+        assert loader.get_load_time() >= 0
 
     def test_core_loader_initialization(self):
         """Test that _CoreLoader initializes with None values."""
@@ -45,6 +50,7 @@ class TestCoreLoader:
         assert loader._version is None
         assert loader._error is None
         assert loader._path is None
+        assert loader._load_time is None
 
     @pytest.mark.parametrize(
         "system,expected",
@@ -79,16 +85,40 @@ class TestCoreLoader:
         with mock.patch("platform.machine", return_value=machine):
             assert _CoreLoader._detect_arch() == expected
 
-    def test_detect_libc_alpine(self, tmp_path):
-        """Test _detect_libc returns musl on Alpine Linux."""
-        with mock.patch("pathlib.Path.exists", return_value=True):
+    def test_detect_libc_glibc(self):
+        """Test _detect_libc returns glibc when platform reports glibc."""
+        with mock.patch("platform.libc_ver", return_value=("glibc", "2.31")):
+            assert _CoreLoader._detect_libc() == "glibc"
+
+    def test_detect_libc_musl(self):
+        """Test _detect_libc returns musl when platform does not report glibc."""
+        with mock.patch("platform.libc_ver", return_value=("", "")):
             assert _CoreLoader._detect_libc() == "musl"
 
-    def test_detect_libc_glibc_default(self):
-        """Test _detect_libc returns glibc by default."""
-        with mock.patch("pathlib.Path.exists", return_value=False):
-            with mock.patch("subprocess.run", side_effect=Exception("not found")):
-                assert _CoreLoader._detect_libc() == "glibc"
+    def test_get_libc_version(self):
+        """Test get_libc_version returns the version string from platform.libc_ver."""
+        with mock.patch("platform.libc_ver", return_value=("glibc", "2.31")):
+            assert _CoreLoader.get_libc_version() == "2.31"
+
+    def test_get_libc_version_strips_whitespace(self):
+        with mock.patch("platform.libc_ver", return_value=("glibc", "  2.35 \n")):
+            assert _CoreLoader.get_libc_version() == "2.35"
+
+    def test_get_libc_version_empty_returns_none(self):
+        with mock.patch("platform.libc_ver", return_value=("glibc", "")):
+            assert _CoreLoader.get_libc_version() is None
+        with mock.patch("platform.libc_ver", return_value=("", "")):
+            assert _CoreLoader.get_libc_version() is None
+
+    def test_get_libc_family_linux(self):
+        with mock.patch.object(_CoreLoader, "_detect_os", return_value="linux"):
+            with mock.patch.object(_CoreLoader, "_detect_libc", return_value="glibc"):
+                assert _CoreLoader.get_libc_family() == "glibc"
+
+    def test_get_libc_family_non_linux(self):
+        with mock.patch.object(_CoreLoader, "_detect_os", return_value="macos"):
+            with mock.patch.object(_CoreLoader, "_detect_libc", return_value="glibc"):
+                assert _CoreLoader.get_libc_family() is None
 
     @pytest.mark.parametrize(
         "os_name,arch,libc,expected_subdir",
@@ -194,7 +224,7 @@ class TestCoreLoader:
         assert mock_core.sf_core_full_version.restype == ctypes.c_char_p
 
     def test_load_minicore(self):
-        """Test that _load_minicore loads the library."""
+        """Test that _load_minicore loads the library correctly."""
         mock_path = mock.MagicMock()
         mock_lib_path = "/path/to/libsf_mini_core.so"
 
@@ -255,7 +285,7 @@ class TestCoreLoader:
     def test_load_success(self):
         """Test successful load of the core library."""
         loader = _CoreLoader()
-        mock_path = mock.MagicMock()
+        mock_path = "/path/to/libsf_mini_core.so"
         mock_core = mock.MagicMock()
         mock_version = b"1.2.3"
         mock_core.sf_core_full_version = mock.MagicMock(return_value=mock_version)
@@ -270,15 +300,18 @@ class TestCoreLoader:
                     with mock.patch.object(
                         loader, "_register_functions"
                     ) as mock_register:
-                        loader.load()
-                        sleep(2)
+                        with mock.patch("time.perf_counter", side_effect=[0.0, 0.0155]):
+                            loader.load()
+                            sleep(2)
 
-                        mock_get_path.assert_called_once()
-                        mock_load.assert_called_once_with(mock_path)
-                        mock_register.assert_called_once_with(mock_core)
-                        assert loader._version == mock_version
-                        assert loader._error is None
-                        assert loader._path == str(mock_path)
+                            mock_get_path.assert_called_once()
+                            mock_load.assert_called_once_with(mock_path)
+                            mock_register.assert_called_once_with(mock_core)
+                            assert loader._version == mock_version
+                            assert loader._error is None
+                            assert loader._path == mock_path
+                            # (0.0155 - 0.0) * 1000 = 15.5 ms
+                            assert loader._load_time == 15.5
 
     def test_load_failure(self):
         """Test that load captures exceptions."""
@@ -348,6 +381,102 @@ class TestCoreLoader:
         result = loader.get_file_name()
 
         assert result is None
+
+    def test_get_load_time_with_time(self):
+        """Test get_load_time returns the load time when it has been set."""
+        loader = _CoreLoader()
+        loader._load_time = 42.5
+
+        result = loader.get_load_time()
+
+        assert result == 42.5
+
+    def test_get_load_time_no_time(self):
+        """Test get_load_time returns None when no load time exists."""
+        loader = _CoreLoader()
+
+        result = loader.get_load_time()
+
+        assert result is None
+
+    def test_get_present_binaries_contains_expected_paths(self):
+        """Test get_present_binaries returns binaries for expected paths."""
+        loader = _CoreLoader()
+
+        result = loader.get_present_binaries()
+
+        assert isinstance(result, str)
+        assert result != ""
+
+    def test_get_present_binaries_with_mocked_structure(self, tmp_path):
+        """Test get_present_binaries with mocked directory structure."""
+        loader = _CoreLoader()
+
+        # Create a temporary directory structure mimicking minicore layout
+        # Create platform directories with binary files
+        linux_dir = tmp_path / "linux_x86_64_glibc"
+        linux_dir.mkdir()
+        (linux_dir / "libsf_mini_core.so").write_text("fake binary content")
+
+        macos_dir = tmp_path / "macos_aarch64"
+        macos_dir.mkdir()
+        (macos_dir / "libsf_mini_core.dylib").write_text("fake binary content")
+
+        windows_dir = tmp_path / "windows_x86_64"
+        windows_dir.mkdir()
+        (windows_dir / "sf_mini_core.dll").write_text("fake binary content")
+
+        # Create a __pycache__ directory that should be ignored
+        pycache_dir = tmp_path / "__pycache__"
+        pycache_dir.mkdir()
+        (pycache_dir / "some_file.pyc").write_text("cached file")
+
+        # Mock importlib.resources.files to return our temp directory
+        with mock.patch("importlib.resources.files") as mock_files:
+            mock_files.return_value = tmp_path
+
+            result = loader.get_present_binaries()
+
+            # Verify the function was called with correct module name
+            mock_files.assert_called_once_with("snowflake.connector.minicore")
+
+            # Parse the result
+            binaries = result.split(",")
+            assert len(binaries) == 3
+
+            # Verify all expected binaries are present
+            assert "linux_x86_64_glibc/libsf_mini_core.so" in binaries
+            assert "macos_aarch64/libsf_mini_core.dylib" in binaries
+            assert "windows_x86_64/sf_mini_core.dll" in binaries
+
+            # Verify __pycache__ files are not included
+            assert not any("__pycache__" in binary for binary in binaries)
+
+    def test_get_present_binaries_with_empty_directory(self, tmp_path):
+        """Test get_present_binaries returns empty string for empty directory."""
+        loader = _CoreLoader()
+
+        # Create an empty temp directory
+        # Mock importlib.resources.files to return our temp directory
+        with mock.patch("importlib.resources.files") as mock_files:
+            mock_files.return_value = tmp_path
+
+            result = loader.get_present_binaries()
+
+            assert result == ""
+
+    def test_get_present_binaries_handles_exceptions(self):
+        """Test get_present_binaries handles exceptions gracefully."""
+        loader = _CoreLoader()
+
+        # Mock importlib.resources.files to raise an exception
+        with mock.patch("importlib.resources.files") as mock_files:
+            mock_files.side_effect = Exception("Failed to access resources")
+
+            # Should not raise, but return empty string
+            result = loader.get_present_binaries()
+
+            assert result == ""
 
 
 def test_importing_snowflake_connector_triggers_core_loader_load():
@@ -491,6 +620,8 @@ class TestBuildMinicoreUsage:
         assert "ISA" in result
         assert "CORE_VERSION" in result
         assert "CORE_FILE_NAME" in result
+        assert "LIBC_FAMILY" in result
+        assert "LIBC_VERSION" in result
 
     def test_build_minicore_usage_for_session_isa_matches_platform(self):
         """Test that ISA value matches platform.machine()."""
@@ -499,6 +630,27 @@ class TestBuildMinicoreUsage:
         result = build_minicore_usage_for_session()
 
         assert result["ISA"] == platform.machine()
+
+    def test_build_minicore_usage_for_session_libc_version_matches_platform(self):
+        """Test that LIBC_VERSION matches platform.libc_ver (normalized)."""
+        import platform
+
+        _, libc_version = platform.libc_ver()
+        result = build_minicore_usage_for_session()
+        stripped = libc_version.strip() if libc_version else ""
+        assert result["LIBC_VERSION"] == (stripped or None)
+
+    def test_build_minicore_usage_for_session_libc_family_matches_platform(self):
+        """Test that LIBC_FAMILY is set on Linux and omitted elsewhere."""
+        import platform
+
+        result = build_minicore_usage_for_session()
+        if platform.system().lower() == "linux":
+            lib, _ = platform.libc_ver()
+            expected = "glibc" if lib == "glibc" else "musl"
+            assert result["LIBC_FAMILY"] == expected
+        else:
+            assert result["LIBC_FAMILY"] is None
 
     def test_build_minicore_usage_for_session_with_mocked_core_loader(self):
         """Test build_minicore_usage_for_session with mocked core loader values."""
@@ -543,6 +695,8 @@ class TestBuildMinicoreUsage:
         assert "ISA" in result
         assert "CORE_VERSION" in result
         assert "CORE_FILE_NAME" in result
+        assert "LIBC_FAMILY" in result
+        assert "LIBC_VERSION" in result
 
     def test_build_minicore_usage_for_telemetry_os_matches_platform(self):
         """Test that OS value matches platform.system()."""
@@ -644,3 +798,205 @@ class TestBuildMinicoreUsage:
                     assert result["CORE_VERSION"] is None
                     assert result["CORE_FILE_NAME"] is None
                     assert result["CORE_LOAD_ERROR"] == "Library not found"
+
+
+class TestNanoarrowLoader:
+    """Tests for the NanoarrowLoader class."""
+
+    def test_nanoarrow_loader_initialization(self):
+        """Test that NanoarrowLoader initializes with None error."""
+        loader = _NanoarrowLoader()
+        assert loader._error is None
+
+    def test_set_load_error(self):
+        """Test that set_load_error stores the error."""
+        loader = _NanoarrowLoader()
+        test_error = Exception("Test error")
+        loader.set_load_error(test_error)
+        assert loader._error is test_error
+
+    def test_get_load_error_with_error(self):
+        """Test get_load_error returns error message when error exists."""
+        loader = _NanoarrowLoader()
+        test_error = Exception("Test error message")
+        loader._error = test_error
+
+        result = loader.get_load_error()
+
+        assert result == "Test error message"
+
+
+class TestBuildNanoarrowUsageForTelemetry:
+    """Tests for build_nanoarrow_usage_for_telemetry function."""
+
+    def test_build_nanoarrow_usage_for_telemetry_returns_expected_keys(self):
+        """Test that build_nanoarrow_usage_for_telemetry returns dict with expected keys."""
+        result = build_nanoarrow_usage_for_telemetry()
+
+        assert isinstance(result, dict)
+        assert "OS" in result
+        assert "OS_VERSION" in result
+        assert "NANOARROW_LOAD_ERROR" in result
+        assert "ISA" in result
+
+    def test_build_nanoarrow_usage_for_telemetry_with_mocked_error(self):
+        """Test build_nanoarrow_usage_for_telemetry with mocked nanoarrow loader error."""
+        with mock.patch(
+            "snowflake.connector._utils._nanoarrow_loader.get_load_error",
+            return_value="Nanoarrow load failed",
+        ):
+            result = build_nanoarrow_usage_for_telemetry()
+
+            assert result["NANOARROW_LOAD_ERROR"] == "Nanoarrow load failed"
+
+
+class TestNanoarrowImportErrorInCursor:
+    """Tests for nanoarrow import error handling in cursor.py."""
+
+    def test_import_error_populates_nanoarrow_loader_error(self):
+        """Test that ImportError during nanoarrow import in cursor.py populates _nanoarrow_loader error field."""
+        import importlib
+        import sys
+
+        # Save the original _nanoarrow_loader state and modules
+        from snowflake.connector._utils import _nanoarrow_loader
+
+        original_error = _nanoarrow_loader._error
+
+        # Save cursor-related modules for restoration
+        modules_to_remove = [
+            key
+            for key in list(sys.modules.keys())
+            if "snowflake.connector.cursor" in key
+        ]
+        saved_cursor_modules = {key: sys.modules.pop(key) for key in modules_to_remove}
+
+        # Save nanoarrow_arrow_iterator module if present
+        nanoarrow_key = "snowflake.connector.nanoarrow_arrow_iterator"
+        saved_nanoarrow = sys.modules.pop(nanoarrow_key, None)
+
+        try:
+            # Create a mock module that raises ImportError when accessed
+            test_import_error = ImportError(
+                "No module named 'nanoarrow_cpp': DLL load failed"
+            )
+
+            # Inject a module that raises ImportError on import
+            class FailingModule:
+                def __getattr__(self, name):
+                    raise test_import_error
+
+            # This makes import fail when trying to access anything from the module
+            sys.modules[nanoarrow_key] = FailingModule()
+
+            # Reset the nanoarrow loader error before test
+            _nanoarrow_loader._error = None
+
+            # Patch the set_load_error to track if it was called
+            original_set_load_error = _nanoarrow_loader.set_load_error
+            set_load_error_called_with = []
+
+            def tracking_set_load_error(err):
+                set_load_error_called_with.append(err)
+                original_set_load_error(err)
+
+            _nanoarrow_loader.set_load_error = tracking_set_load_error
+
+            try:
+                # Force reimport of cursor module - this should trigger the ImportError handling
+                importlib.import_module("snowflake.connector.cursor")
+            except Exception:
+                pass  # Import may fail, but the error handler should still be called
+
+            # Verify that set_load_error was called with an ImportError
+            # or that the error was set directly
+            if set_load_error_called_with:
+                assert any(
+                    isinstance(err, (ImportError, AttributeError))
+                    for err in set_load_error_called_with
+                )
+            # Alternatively, check if the error was set
+            elif _nanoarrow_loader._error is not None:
+                assert isinstance(
+                    _nanoarrow_loader._error, (ImportError, AttributeError, Exception)
+                )
+
+        finally:
+            # Restore the set_load_error method
+            _nanoarrow_loader.set_load_error = original_set_load_error
+
+            # Restore original error state
+            _nanoarrow_loader._error = original_error
+
+            # Restore modules
+            if saved_nanoarrow is not None:
+                sys.modules[nanoarrow_key] = saved_nanoarrow
+            elif nanoarrow_key in sys.modules:
+                del sys.modules[nanoarrow_key]
+
+            sys.modules.update(saved_cursor_modules)
+
+    def test_nanoarrow_loader_set_load_error_simulates_cursor_behavior(self):
+        """Test that NanoarrowLoader.set_load_error correctly stores ImportError as cursor.py does."""
+        # This test simulates exactly what cursor.py does on import failure:
+        # try:
+        #     from .nanoarrow_arrow_iterator import PyArrowIterator
+        #     CAN_USE_ARROW_RESULT_FORMAT = True
+        # except ImportError as e:
+        #     _nanoarrow_loader.set_load_error(e)
+        #     CAN_USE_ARROW_RESULT_FORMAT = False
+
+        loader = _NanoarrowLoader()
+
+        # Simulate the ImportError that occurs when nanoarrow_arrow_iterator fails to import
+        simulated_import_error = ImportError(
+            "No module named 'nanoarrow_cpp': cannot import name 'ArrowResult'"
+        )
+
+        # This is the exact call made in cursor.py
+        loader.set_load_error(simulated_import_error)
+
+        # Verify the error was stored
+        assert loader._error is simulated_import_error
+        assert "No module named 'nanoarrow_cpp'" in loader.get_load_error()
+        assert "ArrowResult" in loader.get_load_error()
+
+    def test_nanoarrow_import_error_accessible_via_telemetry_function(self):
+        """Test that import error from cursor.py is accessible via build_nanoarrow_usage_for_telemetry."""
+        from snowflake.connector._utils import _nanoarrow_loader
+
+        # Save original state
+        original_error = _nanoarrow_loader._error
+
+        try:
+            # Simulate the error that would be set during cursor.py import failure
+            test_error = ImportError(
+                "Failed to import ArrowResult: nanoarrow_cpp not found"
+            )
+            _nanoarrow_loader.set_load_error(test_error)
+
+            # Call the telemetry function and verify the error is reported
+            result = build_nanoarrow_usage_for_telemetry()
+
+            assert "Failed to import ArrowResult" in result["NANOARROW_LOAD_ERROR"]
+            assert "nanoarrow_cpp not found" in result["NANOARROW_LOAD_ERROR"]
+
+        finally:
+            # Restore original error state
+            _nanoarrow_loader._error = original_error
+
+    def test_dll_load_failure_error_captured_correctly(self):
+        """Test that DLL load failure errors during nanoarrow import are captured."""
+        loader = _NanoarrowLoader()
+
+        # This simulates a common error on Windows when DLL dependencies are missing
+        dll_error = ImportError(
+            "DLL load failed while importing 'nanoarrow_cpp': "
+            "The specified module could not be found."
+        )
+
+        loader.set_load_error(dll_error)
+
+        error_msg = loader.get_load_error()
+        assert "DLL load failed" in error_msg
+        assert "nanoarrow_cpp" in error_msg

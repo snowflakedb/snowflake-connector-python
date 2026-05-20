@@ -43,6 +43,7 @@ from ._utils import (
     _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     build_minicore_usage_for_telemetry,
+    build_nanoarrow_usage_for_telemetry,
 )
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
@@ -141,7 +142,13 @@ from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPO
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
-from .util_text import construct_hostname, parse_account, split_statements
+from .util_text import (
+    construct_hostname,
+    expand_tilde,
+    is_valid_account_identifier,
+    parse_account,
+    split_statements,
+)
 from .wif_util import AttestationProvider
 
 if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
@@ -172,6 +179,9 @@ def _get_private_bytes_from_file(
 ) -> bytes:
     if private_key_file_pwd is not None and isinstance(private_key_file_pwd, str):
         private_key_file_pwd = private_key_file_pwd.encode("utf-8")
+
+    private_key_file = expand_tilde(private_key_file)
+
     with open(private_key_file, "rb") as key:
         private_key = serialization.load_pem_private_key(
             key.read(),
@@ -232,6 +242,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), bytes, str, RSAPrivateKey)),
+    "private_key_passphrase": (None, (type(None), bytes)),
     "private_key_file": (None, (type(None), str)),
     "private_key_file_pwd": (None, (type(None), str, bytes)),
     "token": (None, (type(None), str)),  # OAuth/JWT/PAT/OIDC Token
@@ -481,6 +492,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # Maximum CRL file size in bytes
+    "secondary_roles": (
+        None,
+        (type(None), str),
+    ),  # Secondary roles mode: ALL or NONE or no value
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -682,6 +697,7 @@ class SnowflakeConnection:
 
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
+        self._log_nanoarrow_import()
         self._log_minicore_import()
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
@@ -689,6 +705,18 @@ class SnowflakeConnection:
         # Set up the file operation parser and stream downloader.
         self._file_operation_parser = FileOperationParser(self)
         self._stream_downloader = StreamDownloader(self)
+
+    def _validate_account(self, account_str):
+        if not is_valid_account_identifier(account_str):
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Invalid account identifier: only letters, digits, '_' and '-' allowed; no dots or slashes",
+                    "errno": ER_NO_ACCOUNT_NAME,
+                },
+            )
 
     # Deprecated
     @property
@@ -1197,17 +1225,26 @@ class SnowflakeConnection:
             logger.debug("closed")
             if self.telemetry_enabled:
                 self._telemetry.close(retry=retry)
-            if (
-                self._all_async_queries_finished()
-                and not self._server_session_keep_alive
-            ):
-                logger.debug("No async queries seem to be running, deleting session")
-                self.rest.delete_session(retry=retry)
-            else:
-                logger.debug(
-                    "There are {} async queries still running, not deleting session".format(
-                        len(self._async_sfqids)
+
+            if not self._server_session_keep_alive:
+                if self._all_async_queries_finished():
+                    logger.debug(
+                        "No async queries seem to be running, deleting session"
                     )
+                    self.rest.delete_session(retry=retry)
+                else:
+                    logger.debug(
+                        "There are {} async queries still running, not deleting session".format(
+                            len(self._async_sfqids)
+                        )
+                    )
+            else:
+                logger.info(
+                    "Parameter server_session_keep_alive was set to True - skipping session logout. "
+                    "If there are any not-finished queries in the current session (session_id: %s) - "
+                    "they will continue to live in Snowflake and consume credits until they finish. "
+                    "To cancel them use Monitoring tab in Snowsight or plain SQL.",
+                    self.session_id,
                 )
             self.rest.close()
             self._rest = None
@@ -1463,6 +1500,7 @@ class SnowflakeConnection:
 
             elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
                 private_key = self._private_key
+                private_key_passphrase = self._private_key_passphrase
 
                 if self._private_key_file:
                     private_key = _get_private_bytes_from_file(
@@ -1472,6 +1510,7 @@ class SnowflakeConnection:
 
                 self.auth_class = AuthByKeyPair(
                     private_key=private_key,
+                    private_key_passphrase=private_key_passphrase,
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
@@ -1574,6 +1613,7 @@ class SnowflakeConnection:
                     not in (
                         AttestationProvider.GCP,
                         AttestationProvider.AWS,
+                        AttestationProvider.AZURE,
                     )
                 ):
                     Error.errorhandler_wrapper(
@@ -1581,7 +1621,7 @@ class SnowflakeConnection:
                         None,
                         ProgrammingError,
                         {
-                            "msg": "workload_identity_impersonation_path is currently only supported for GCP and AWS.",
+                            "msg": "workload_identity_impersonation_path is currently only supported for GCP, AWS, and AZURE.",
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
@@ -1811,8 +1851,11 @@ class SnowflakeConnection:
                 ProgrammingError,
                 {"msg": "Account must be specified", "errno": ER_NO_ACCOUNT_NAME},
             )
-        if self._account and "." in self._account:
-            self._account = parse_account(self._account)
+
+        if self._account:
+            self._validate_account(self._account)
+            if "." in self._account:
+                self._account = parse_account(self._account)
 
         if not isinstance(self._backoff_policy, Callable) or not isinstance(
             self._backoff_policy(), Iterator
@@ -2251,20 +2294,22 @@ class SnowflakeConnection:
         real_max = int(self.rest.master_validity_in_seconds / 4)
         real_min = int(real_max / 4)
 
-        # ensure the type is integer
-        self._client_session_keep_alive_heartbeat_frequency = int(
-            self.client_session_keep_alive_heartbeat_frequency
-        )
+        value = self.client_session_keep_alive_heartbeat_frequency
 
-        if self.client_session_keep_alive_heartbeat_frequency is None:
+        if value is None:
             # This is an unlikely scenario but covering it just in case.
             self._client_session_keep_alive_heartbeat_frequency = real_min
-        elif self.client_session_keep_alive_heartbeat_frequency > real_max:
-            self._client_session_keep_alive_heartbeat_frequency = real_max
-        elif self.client_session_keep_alive_heartbeat_frequency < real_min:
-            self._client_session_keep_alive_heartbeat_frequency = real_min
+            return real_min
 
-        return self.client_session_keep_alive_heartbeat_frequency
+        value = int(value)
+
+        if value > real_max:
+            value = real_max
+        elif value < real_min:
+            value = real_min
+
+        self._client_session_keep_alive_heartbeat_frequency = value
+        return value
 
     def _validate_client_prefetch_threads(self) -> int:
         if self.client_prefetch_threads <= 0:
@@ -2524,6 +2569,19 @@ class SnowflakeConnection:
                 from_dict={
                     TelemetryField.KEY_TYPE.value: TelemetryField.CORE_IMPORT.value,
                     TelemetryField.KEY_VALUE.value: build_minicore_usage_for_telemetry(),
+                },
+                timestamp=ts,
+                connection=self,
+            )
+        )
+
+    def _log_nanoarrow_import(self):
+        ts = get_time_millis()
+        self._log_telemetry(
+            TelemetryData.from_telemetry_data_dict(
+                from_dict={
+                    TelemetryField.KEY_TYPE.value: TelemetryField.NANOARROW_IMPORT.value,
+                    TelemetryField.KEY_VALUE.value: build_nanoarrow_usage_for_telemetry(),
                 },
                 timestamp=ts,
                 connection=self,

@@ -3,7 +3,7 @@
 
 Requirements:
     mitmproxy is installed automatically via the [development] extras in setup.cfg
-    (Python 3.10+ only - mitmproxy has dependency conflicts on Python 3.9)
+    (Python 3.12+ only - mitmproxy 12+ requires Python 3.12 and is needed for cryptography >=46)
 
 Important:
     When connecting through mitmproxy, you MUST set disable_ocsp_checks=True
@@ -26,8 +26,8 @@ except ImportError:
 
 @pytest.mark.skipolddriver
 @pytest.mark.skipif(
-    sys.version_info < (3, 10),
-    reason="mitmproxy not installed for Python 3.9 due to dependency conflicts",
+    sys.version_info < (3, 12),
+    reason="mitmproxy requires Python 3.12+ (mitmproxy 12+ needed for cryptography >=46)",
 )
 def test_put_with_https_proxy(conn_cnx, tmp_path, mitm_proxy, monkeypatch):
     test_file = tmp_path / "test_data.csv"
@@ -62,8 +62,8 @@ def test_put_with_https_proxy(conn_cnx, tmp_path, mitm_proxy, monkeypatch):
 
 @pytest.mark.skipolddriver
 @pytest.mark.skipif(
-    sys.version_info < (3, 10) or IS_WINDOWS,
-    reason="mitmproxy not installed for Python 3.9 due to dependency conflicts",
+    sys.version_info < (3, 12) or IS_WINDOWS,
+    reason="mitmproxy requires Python 3.12+ (mitmproxy 12+ needed for cryptography >=46)",
 )
 def test_put_with_https_proxy_and_no_proxy_regression(
     conn_cnx, tmp_path, mitm_proxy, monkeypatch

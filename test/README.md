@@ -21,7 +21,7 @@ We use `tox` version 4 to run test suites and other utilities.
 To run the most important tests, execute:
 
 ```shell
-tox -e "fix_lint,py37{,-pandas,-sso}"
+tox -e "fix_lint,py39{,-pandas,-sso}"
 ```
 
 **NOTE** Some integration tests may be sensitive to the cloud provider of the
@@ -37,10 +37,10 @@ is made.
 
 ### Running a single test
 
-Enter the tox environment you want (e.g. `py38`) and run `pytest` from there:
+Enter the tox environment you want (e.g. `py39`) and run `pytest` from there:
 
 ```shell
-. .tox/py38/bin/activate
+. .tox/py39/bin/activate
 pytest -v test/integ/test_connection.py::test_basic
 ```
 
@@ -55,7 +55,7 @@ either does the same as providing both of them.
 ## Test categories
 Chaining these categories is possible, but isn't encouraged.
 Note: running multiple categories in one `tox` run should be done like:
-`tox -e "fix_lint,py37-{,-sso},coverage"`
+`tox -e "fix_lint,py39-{,-sso},coverage"`
 
 * **pandas**: Tests specifically testing our optional dependency group "pandas".
 * **sso**: Tests specifically testing our optional dependency group "sso".

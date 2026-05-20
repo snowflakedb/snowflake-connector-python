@@ -1280,6 +1280,88 @@ def test_disable_query_context_cache(conn_cnx) -> None:
         assert conn.query_context_cache is None
 
 
+@pytest.mark.aws
+@pytest.mark.skipolddriver
+def test_qcc_tracks_multi_database_hybrid_tables(conn_cnx) -> None:
+    """Verify QCC grows as queries touch hybrid tables in different databases.
+
+    Each database contributes an additional entry to the QCC.  The test
+    mirrors the standard multi-database QCC integration test present in the
+    Go and Node.js drivers.
+
+    Steps:
+      1. Create 3 databases, each with a hybrid table of the same name.
+      2. Insert identical rows into each table via USE DATABASE + unqualified name.
+      3. After each database, assert QCC size grew (2 → 3 → 4).
+      4. Run cross-DB selects to confirm data correctness; QCC stays at 4.
+    """
+    suffix = random_string(5)
+    db_names = [f"qcc_test_db_{suffix}_{i}" for i in range(1, 4)]
+    table_name = f"ht_{random_string(8)}"
+
+    with conn_cnx() as conn:
+        cur = conn.cursor()
+        # Remember the original database so we can restore it in cleanup.
+        cur.execute("SELECT CURRENT_DATABASE()")
+        original_db = cur.fetchone()[0]
+
+        try:
+            # Pre-create all databases
+            for db in db_names:
+                cur.execute(f"CREATE DATABASE IF NOT EXISTS {db}")
+
+            # Phase 1: create tables and insert data, verify QCC growth
+            for db, expected_qcc_size in zip(db_names, [2, 3, 4]):
+                cur.execute(f"USE DATABASE {db}")
+                cur.execute(
+                    f"CREATE OR REPLACE HYBRID TABLE {table_name} "
+                    f"(a INT PRIMARY KEY, b INT)"
+                )
+                cur.execute(f"INSERT INTO {table_name} VALUES (1, 2), (2, 3), (3, 4)")
+
+                # Verify data was inserted into the correct database
+                cur.execute(f"SELECT * FROM {table_name} ORDER BY a")
+                rows = cur.fetchall()
+                assert rows == [
+                    (1, 2),
+                    (2, 3),
+                    (3, 4),
+                ], f"Data mismatch in {db}: {rows}"
+
+                actual = len(conn.query_context_cache)
+                assert actual == expected_qcc_size, (
+                    f"After operations on {db}: "
+                    f"expected QCC size {expected_qcc_size}, got {actual}"
+                )
+
+            # Phase 2: cross-DB selects — verify data correctness and
+            # QCC stays at 4
+            cur.execute(
+                f"SELECT * FROM {db_names[0]}.public.{table_name} x, "
+                f"{db_names[1]}.public.{table_name} y, "
+                f"{db_names[2]}.public.{table_name} z "
+                f"WHERE x.a = y.a AND y.a = z.a"
+            )
+            rows = cur.fetchall()
+            assert len(rows) == 3, f"Expected 3 rows from 3-way join, got {len(rows)}"
+
+            cur.execute(
+                f"SELECT * FROM {db_names[0]}.public.{table_name} x, "
+                f"{db_names[1]}.public.{table_name} y "
+                f"WHERE x.a = y.a"
+            )
+            rows = cur.fetchall()
+            assert len(rows) == 3, f"Expected 3 rows from 2-way join, got {len(rows)}"
+
+            assert (
+                len(conn.query_context_cache) == 4
+            ), "QCC should remain at 4 after cross-DB selects"
+        finally:
+            cur.execute(f"USE DATABASE {original_db}")
+            for db in db_names:
+                cur.execute(f"DROP DATABASE IF EXISTS {db}")
+
+
 @pytest.mark.skipolddriver
 @pytest.mark.parametrize("mode", ("file", "env"))
 @pytest.mark.parametrize("connection_name", ["default", "custom_connection_for_test"])
@@ -1787,7 +1869,7 @@ def test_disable_telemetry(conn_cnx, caplog):
             with conn.cursor() as cur:
                 cur.execute("select 1").fetchall()
             assert (
-                len(conn._telemetry._log_batch) == 4
+                len(conn._telemetry._log_batch) == 5
             )  # 4 events are import package, minicore import, fetch first, fetch last
     assert "POST /telemetry/send" in caplog.text
     caplog.clear()
@@ -1811,7 +1893,7 @@ def test_disable_telemetry(conn_cnx, caplog):
     # test disable telemetry in the client
     with caplog.at_level(logging.DEBUG):
         with conn_cnx() as conn:
-            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 2
+            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 3
             conn.telemetry_enabled = False
             with conn.cursor() as cur:
                 cur.execute("select 1").fetchall()

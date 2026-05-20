@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import gzip
 import json
 import time
 from base64 import b64decode
@@ -52,6 +53,25 @@ SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
 SSE_C_KEY = "x-amz-server-side-encryption-customer-key"
 SSE_C_AES = "AES256"
 
+_GZIP_MAGIC = b"\x1f\x8b"
+
+
+def _ensure_decompressed(response: Response) -> None:
+    """Decompress the response body if HTTP-level gzip decompression was skipped.
+
+    Cloud storage (S3/GCS/Azure) may serve result-set chunks as raw gzip blobs
+    without a ``Content-Encoding: gzip`` header, in which case urllib3's
+    transparent decompression never activates.  Detect this by inspecting the
+    cached *response.content* for the gzip magic number and decompress in-place.
+    """
+    content = response.content
+    if isinstance(content, bytes) and content[:2] == _GZIP_MAGIC:
+        logger.debug(
+            "Response body starts with gzip magic number but was not "
+            "decompressed by the HTTP stack; decompressing explicitly."
+        )
+        response._content = gzip.decompress(content)
+
 
 def _create_nanoarrow_iterator(
     data: bytes,
@@ -61,6 +81,7 @@ def _create_nanoarrow_iterator(
     number_to_decimal: bool,
     row_unit: IterUnit,
     check_error_on_every_column: bool = True,
+    force_microsecond_precision: bool = False,
 ):
     from .nanoarrow_arrow_iterator import PyArrowRowIterator, PyArrowTableIterator
 
@@ -84,6 +105,7 @@ def _create_nanoarrow_iterator(
             numpy,
             number_to_decimal,
             check_error_on_every_column,
+            force_microsecond_precision,
         )
     )
 
@@ -416,6 +438,8 @@ class ResultBatch(abc.ABC):
         self._metrics[DownloadMetrics.download.value] = (
             download_metric.get_timing_millis()
         )
+
+        _ensure_decompressed(response)
         return response
 
     @abc.abstractmethod
@@ -669,7 +693,10 @@ class ArrowResultBatch(ResultBatch):
         return f"ArrowResultChunk({self.id})"
 
     def _load(
-        self, response: Response, row_unit: IterUnit
+        self,
+        response: Response,
+        row_unit: IterUnit,
+        force_microsecond_precision: bool = False,
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         """Creates a ``PyArrowIterator`` from a response.
 
@@ -683,6 +710,7 @@ class ArrowResultBatch(ResultBatch):
             self._numpy,
             self._number_to_decimal,
             row_unit,
+            force_microsecond_precision=force_microsecond_precision,
         )
 
     def _from_data(
@@ -690,6 +718,7 @@ class ArrowResultBatch(ResultBatch):
         data: str | bytes,
         iter_unit: IterUnit,
         check_error_on_every_column: bool = True,
+        force_microsecond_precision: bool = False,
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         """Creates a ``PyArrowIterator`` files from a str.
 
@@ -710,6 +739,7 @@ class ArrowResultBatch(ResultBatch):
             self._number_to_decimal,
             iter_unit,
             check_error_on_every_column,
+            force_microsecond_precision=force_microsecond_precision,
         )
 
     @classmethod
@@ -741,7 +771,10 @@ class ArrowResultBatch(ResultBatch):
         return new_chunk
 
     def _create_iter(
-        self, iter_unit: IterUnit, connection: SnowflakeConnection | None = None
+        self,
+        iter_unit: IterUnit,
+        connection: SnowflakeConnection | None = None,
+        force_microsecond_precision: bool = False,
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]:
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
         if self._local:
@@ -754,6 +787,7 @@ class ArrowResultBatch(ResultBatch):
                         if connection
                         else None
                     ),
+                    force_microsecond_precision=force_microsecond_precision,
                 )
             except Exception:
                 if connection and getattr(connection, "_debug_arrow_chunk", False):
@@ -763,7 +797,11 @@ class ArrowResultBatch(ResultBatch):
         logger.debug(f"started loading result batch id: {self.id}")
         with TimerContextManager() as load_metric:
             try:
-                loaded_data = self._load(response, iter_unit)
+                loaded_data = self._load(
+                    response,
+                    iter_unit,
+                    force_microsecond_precision=force_microsecond_precision,
+                )
             except Exception:
                 if connection and getattr(connection, "_debug_arrow_chunk", False):
                     logger.debug(f"arrow data can not be parsed: {response}")
@@ -773,10 +811,16 @@ class ArrowResultBatch(ResultBatch):
         return loaded_data
 
     def _get_arrow_iter(
-        self, connection: SnowflakeConnection | None = None
+        self,
+        connection: SnowflakeConnection | None = None,
+        force_microsecond_precision: bool = False,
     ) -> Iterator[Table]:
         """Returns an iterator for this batch which yields a pyarrow Table"""
-        return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, connection=connection)
+        return self._create_iter(
+            iter_unit=IterUnit.TABLE_UNIT,
+            connection=connection,
+            force_microsecond_precision=force_microsecond_precision,
+        )
 
     def _create_empty_table(self) -> Table:
         """Returns empty Arrow table based on schema"""
@@ -789,27 +833,50 @@ class ArrowResultBatch(ResultBatch):
         ]
         return pa.schema(fields).empty_table()
 
-    def to_arrow(self, connection: SnowflakeConnection | None = None) -> Table:
+    def to_arrow(
+        self,
+        connection: SnowflakeConnection | None = None,
+        force_microsecond_precision: bool = False,
+    ) -> Table:
         """Returns this batch as a pyarrow Table"""
-        val = next(self._get_arrow_iter(connection=connection), None)
+        val = next(
+            self._get_arrow_iter(
+                connection=connection,
+                force_microsecond_precision=force_microsecond_precision,
+            ),
+            None,
+        )
         if val is not None:
             return val
         return self._create_empty_table()
 
     def to_pandas(
-        self, connection: SnowflakeConnection | None = None, **kwargs
+        self,
+        connection: SnowflakeConnection | None = None,
+        force_microsecond_precision: bool = False,
+        **kwargs,
     ) -> DataFrame:
         """Returns this batch as a pandas DataFrame"""
         self._check_can_use_pandas()
-        table = self.to_arrow(connection=connection)
+        table = self.to_arrow(
+            connection=connection,
+            force_microsecond_precision=force_microsecond_precision,
+        )
         return table.to_pandas(**kwargs)
 
     def _get_pandas_iter(
-        self, connection: SnowflakeConnection | None = None, **kwargs
+        self,
+        connection: SnowflakeConnection | None = None,
+        force_microsecond_precision: bool = False,
+        **kwargs,
     ) -> Iterator[DataFrame]:
         """An iterator for this batch which yields a pandas DataFrame"""
         iterator_data = []
-        dataframe = self.to_pandas(connection=connection, **kwargs)
+        dataframe = self.to_pandas(
+            connection=connection,
+            force_microsecond_precision=force_microsecond_precision,
+            **kwargs,
+        )
         if not dataframe.empty:
             iterator_data.append(dataframe)
         return iter(iterator_data)
@@ -824,12 +891,22 @@ class ArrowResultBatch(ResultBatch):
     ):
         """The interface used by ResultSet to create an iterator for this ResultBatch."""
         iter_unit: IterUnit = kwargs.pop("iter_unit", IterUnit.ROW_UNIT)
+        force_microsecond_precision: bool = kwargs.pop(
+            "force_microsecond_precision", False
+        )
         if iter_unit == IterUnit.TABLE_UNIT:
             structure = kwargs.pop("structure", "pandas")
             if structure == "pandas":
-                return self._get_pandas_iter(connection=connection, **kwargs)
+                return self._get_pandas_iter(
+                    connection=connection,
+                    force_microsecond_precision=force_microsecond_precision,
+                    **kwargs,
+                )
             else:
-                return self._get_arrow_iter(connection=connection)
+                return self._get_arrow_iter(
+                    connection=connection,
+                    force_microsecond_precision=force_microsecond_precision,
+                )
         else:
             return self._create_iter(iter_unit=iter_unit, connection=connection)
 
