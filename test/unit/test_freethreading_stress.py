@@ -203,9 +203,26 @@ PAYLOAD_STRING = _build(
 """
 
 
-def _run_stress(worker_body: str, *, timeout: int = 60) -> None:
-    """Run ``worker_body`` (a snippet that uses PAYLOAD_* and _run_safely)
-    in a fresh subprocess and assert clean exit.
+def _run_stress(
+    worker_body: str,
+    *,
+    timeout: int = 90,
+    attempts: int = 24,
+    parallel: int = 4,
+) -> None:
+    """Run ``worker_body`` in ``attempts`` fresh subprocesses; fail if
+    any one crashes or emits a GIL re-enable warning.
+
+    The C++ lazy-init races we target only have one window per process
+    (a static singleton is initialised once), so detection is
+    inherently probabilistic per attempt. We compound the probability
+    by:
+      * spawning ``attempts`` fresh subprocesses (cold C++ static
+        caches each time);
+      * running up to ``parallel`` of those subprocesses concurrently
+        so they share CPU pressure with each other - on a busy box the
+        OS scheduler interleaves them, widening the race window per
+        attempt.
     """
     script = (
         _SUBPROC_PRELUDE
@@ -214,32 +231,47 @@ def _run_stress(worker_body: str, *, timeout: int = 60) -> None:
         + textwrap.dedent(worker_body)
         + "\n_summarise_and_exit()\n"
     )
-    proc = subprocess.run(
-        [sys.executable, "-X", "dev", "-W", "always", "-c", script],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
+    cmd = [sys.executable, "-X", "dev", "-W", "always", "-c", script]
+    failures: list[str] = []
 
-    if proc.returncode != 0:
-        pytest.fail(
-            "Free-threading stress subprocess failed (exit "
-            f"{proc.returncode}).\n"
-            f"--- stderr ---\n{proc.stderr}\n"
-            f"--- stdout ---\n{proc.stdout}"
+    import concurrent.futures
+
+    def _attempt(idx: int) -> tuple[int, str | None]:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
         )
+        if proc.returncode != 0:
+            return idx, (
+                f"--- attempt {idx}/{attempts}: exit "
+                f"{proc.returncode} ---\n"
+                f"stderr:\n{proc.stderr}\n"
+                f"stdout:\n{proc.stdout}\n"
+            )
+        gil_warnings = [
+            line
+            for line in proc.stderr.splitlines()
+            if "global interpreter lock" in line.lower()
+        ]
+        if gil_warnings:
+            return idx, (
+                f"--- attempt {idx}/{attempts}: GIL warning ---\n"
+                f"{chr(10).join(gil_warnings)}\n"
+            )
+        return idx, None
 
-    gil_warnings = [
-        line
-        for line in proc.stderr.splitlines()
-        if "global interpreter lock" in line.lower()
-    ]
-    if gil_warnings:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as pool:
+        for _idx, err in pool.map(_attempt, range(1, attempts + 1)):
+            if err is not None:
+                failures.append(err)
+
+    if failures:
         pytest.fail(
-            "Free-threading stress subprocess emitted GIL re-enable "
-            f"warning(s):\n{chr(10).join(gil_warnings)}\n"
-            f"--- full stderr ---\n{proc.stderr}"
+            f"Free-threading stress: {len(failures)}/{attempts} "
+            f"subprocess attempt(s) failed.\n" + "\n".join(failures)
         )
 
 
