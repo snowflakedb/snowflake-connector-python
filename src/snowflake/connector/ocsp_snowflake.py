@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import codecs
+import importlib
 import json
 import os
 import platform
@@ -727,7 +728,7 @@ class OCSPCache:
             if OCSPCache.check_ocsp_response_cache_lock_dir(filename) and path.exists(
                 filename
             ):
-                with codecs.open(filename, "r", encoding="utf-8", errors="ignore") as f:
+                with open(filename, encoding="utf-8", errors="ignore") as f:
                     ocsp.decode_ocsp_response_cache(json.load(f))
                 # len(OCSP_RESPONSE_VALIDATION_CACHE) is thread-safe, however, we do not want to
                 # block for logging purpose, thus using len(OCSP_RESPONSE_VALIDATION_CACHE._cache) here.
@@ -802,7 +803,7 @@ class OCSPCache:
         logger.debug(f"writing OCSP response cache file to {filename}")
         file_cache_data = {}
         ocsp.encode_ocsp_response_cache(file_cache_data)
-        with codecs.open(filename, "w", encoding="utf-8", errors="ignore") as f:
+        with open(filename, "w", encoding="utf-8", errors="ignore") as f:
             json.dump(file_cache_data, f)
 
     @staticmethod
