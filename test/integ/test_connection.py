@@ -1869,8 +1869,10 @@ def test_disable_telemetry(conn_cnx, caplog):
             with conn.cursor() as cur:
                 cur.execute("select 1").fetchall()
             assert (
-                len(conn._telemetry._log_batch) == 5
-            )  # 4 events are import package, minicore import, fetch first, fetch last
+                len(conn._telemetry._log_batch) == 6
+            )  # 6 events: import package, nanoarrow import, minicore import,
+            # client_connection_identifier_shape (SNOW-3548350; remove with
+            # the emission, target 2026-11-30), fetch first, fetch last
     assert "POST /telemetry/send" in caplog.text
     caplog.clear()
 
@@ -1893,7 +1895,10 @@ def test_disable_telemetry(conn_cnx, caplog):
     # test disable telemetry in the client
     with caplog.at_level(logging.DEBUG):
         with conn_cnx() as conn:
-            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 3
+            # Bumped from 3 to 4 by SNOW-3351450 (one extra event:
+            # client_connection_identifier_shape). Revert to 3 with the
+            # emission removal (SNOW-3548350, target 2026-11-30).
+            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 4
             conn.telemetry_enabled = False
             with conn.cursor() as cur:
                 cur.execute("select 1").fetchall()
