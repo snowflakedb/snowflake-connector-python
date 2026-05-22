@@ -152,6 +152,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         scope: str,
         token_cache: TokenCache | None,
         refresh_token_enabled: bool,
+        is_snowflake_as_idp: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -167,7 +168,12 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         self._scope = scope
         if refresh_token_enabled:
             logger.debug("oauth refresh token is going to be used if needed")
-            self._scope += (" " if self._scope else "") + "offline_access"
+            # Snowflake's OAuth IdP issues refresh tokens based on the security
+            # integration's OAUTH_ISSUE_REFRESH_TOKENS setting, not via the
+            # offline_access scope. Appending it would cause "invalid_scope"
+            # errors. Only append for external IdPs (Okta, Azure AD, etc.).
+            if not is_snowflake_as_idp:
+                self._scope += (" " if self._scope else "") + "offline_access"
 
     @abstractmethod
     def _request_tokens(
@@ -268,6 +274,13 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
                 "OAuth access token is already available in cache, no need to authenticate."
             )
             return
+        if self._pop_cached_refresh_token():
+            logger.debug(
+                "OAuth refresh token is available in cache, try to use it to obtain a new access token"
+            )
+            self._do_refresh_token(conn=conn)
+            if self._access_token:
+                return
         access_token, refresh_token = self._request_tokens(
             conn=conn,
             authenticator=authenticator,

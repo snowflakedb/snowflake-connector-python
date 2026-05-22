@@ -5,13 +5,14 @@
 
 import unittest.mock as mock
 from test.helpers import apply_auth_class_update_body, create_mock_auth_body
-from unittest.mock import PropertyMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
 from snowflake.connector.auth import AuthByOauthCode
 from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.network import OAUTH_AUTHORIZATION_CODE
+from snowflake.connector.token_cache import TokenKey, TokenType
 
 
 @pytest.fixture()
@@ -111,6 +112,145 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(
                 account="acc",
                 user="user",
             )
+
+
+def test_auth_oauth_auth_code_offline_access_omitted_for_snowflake_idp():
+    """When Snowflake is the OAuth IdP, the offline_access scope must not be appended:
+    Snowflake issues refresh tokens via the security integration's
+    OAUTH_ISSUE_REFRESH_TOKENS setting, and adding offline_access causes the IdP to
+    return an invalid_scope error.
+    """
+    auth = AuthByOauthCode(
+        application="app",
+        client_id="",
+        client_secret="",
+        authentication_url="https://example.snowflakecomputing.com/oauth/authorize",
+        token_request_url="https://example.snowflakecomputing.com/oauth/token",
+        redirect_uri="http://127.0.0.1:8080",
+        scope="session:role:ENGINEER",
+        host="example.snowflakecomputing.com",
+        refresh_token_enabled=True,
+    )
+    assert auth._scope == "session:role:ENGINEER"
+
+
+def test_auth_oauth_auth_code_offline_access_appended_for_external_idp(
+    omit_oauth_urls_check,
+):
+    """For external IdPs (Okta, Azure AD, etc.) the connector must continue to append
+    offline_access so the IdP issues a refresh token alongside the access token.
+    """
+    auth = AuthByOauthCode(
+        application="app",
+        client_id="clientId",
+        client_secret="clientSecret",
+        authentication_url="https://idp.example.com/oauth/authorize",
+        token_request_url="https://idp.example.com/oauth/token",
+        redirect_uri="http://127.0.0.1:8080",
+        scope="session:role:ENGINEER",
+        host="example.snowflakecomputing.com",
+        refresh_token_enabled=True,
+    )
+    assert auth._scope == "session:role:ENGINEER offline_access"
+
+
+def test_auth_oauth_auth_code_prepare_uses_cached_refresh_token(omit_oauth_urls_check):
+    """When the access token cache misses but a refresh token is cached, prepare() should
+    exchange the refresh token for a new access token instead of launching the browser flow.
+    """
+    token_cache = MagicMock()
+    refresh_token_value = "cached-refresh-token"
+
+    def retrieve(key: TokenKey) -> str | None:
+        if key.tokenType == TokenType.OAUTH_REFRESH_TOKEN:
+            return refresh_token_value
+        return None
+
+    token_cache.retrieve.side_effect = retrieve
+
+    auth = AuthByOauthCode(
+        "app",
+        "clientId",
+        "clientSecret",
+        "https://idp.example.com/oauth/authorize",
+        "https://idp.example.com/oauth/token",
+        "http://127.0.0.1:8080",
+        "scope",
+        "host",
+        pkce_enabled=False,
+        token_cache=token_cache,
+        refresh_token_enabled=True,
+    )
+
+    refresh_response = MagicMock()
+    refresh_response.data = b'{"access_token": "new-access-token"}'
+
+    with patch(
+        "snowflake.connector.auth.AuthByOauthCode._get_refresh_token_response",
+        return_value=refresh_response,
+    ) as mock_refresh, patch(
+        "snowflake.connector.auth.AuthByOauthCode._request_tokens",
+    ) as mock_request_tokens:
+        auth.prepare(
+            conn=None,
+            authenticator=OAUTH_AUTHORIZATION_CODE,
+            service_name=None,
+            account="acc",
+            user="user",
+        )
+
+    mock_refresh.assert_called_once()
+    mock_request_tokens.assert_not_called()
+    assert auth._access_token == "new-access-token"
+
+
+def test_auth_oauth_auth_code_prepare_falls_back_to_browser_when_refresh_fails(
+    omit_oauth_urls_check,
+):
+    """When the cached refresh token exchange fails, prepare() should fall back to the
+    full browser-based token request flow.
+    """
+    token_cache = MagicMock()
+
+    def retrieve(key: TokenKey) -> str | None:
+        if key.tokenType == TokenType.OAUTH_REFRESH_TOKEN:
+            return "stale-refresh-token"
+        return None
+
+    token_cache.retrieve.side_effect = retrieve
+
+    auth = AuthByOauthCode(
+        "app",
+        "clientId",
+        "clientSecret",
+        "https://idp.example.com/oauth/authorize",
+        "https://idp.example.com/oauth/token",
+        "http://127.0.0.1:8080",
+        "scope",
+        "host",
+        pkce_enabled=False,
+        token_cache=token_cache,
+        refresh_token_enabled=True,
+    )
+
+    with patch(
+        "snowflake.connector.auth.AuthByOauthCode._get_refresh_token_response",
+        return_value=None,
+    ) as mock_refresh, patch(
+        "snowflake.connector.auth.AuthByOauthCode._request_tokens",
+        return_value=("browser-access-token", "browser-refresh-token"),
+    ) as mock_request_tokens:
+        auth.prepare(
+            conn=None,
+            authenticator=OAUTH_AUTHORIZATION_CODE,
+            service_name=None,
+            account="acc",
+            user="user",
+        )
+
+    mock_refresh.assert_called_once()
+    mock_request_tokens.assert_called_once()
+    assert auth._access_token == "browser-access-token"
 
 
 @pytest.mark.parametrize(
