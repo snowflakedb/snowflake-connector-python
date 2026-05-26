@@ -28,7 +28,7 @@ else
 fi
 curl ${WIREMOCK_BASE_URL}/org/wiremock/wiremock-standalone/${WIREMOCK_VERSION}/wiremock-standalone-${WIREMOCK_VERSION}.jar --output "${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar"
 
-python3 -m venv fips_env
+python3.11 -m venv fips_env
 source fips_env/bin/activate
 pip install -U setuptools pip
 
