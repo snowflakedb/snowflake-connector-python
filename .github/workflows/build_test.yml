@@ -323,7 +323,7 @@ jobs:
         shell: bash
 
   test-fips:
-    name: Test FIPS linux-3.10-${{ matrix.cloud-provider }}
+    name: Test FIPS linux-3.11-${{ matrix.cloud-provider }}
     needs: build
     runs-on: ubuntu-latest
     strategy:
@@ -349,7 +349,7 @@ jobs:
       - name: Download wheel(s)
         uses: actions/download-artifact@v4
         with:
-          name: manylinux_x86_64_py3.10
+          name: manylinux_x86_64_py3.11
           path: dist
       - name: Show wheels downloaded
         run: ls -lh dist
@@ -357,7 +357,7 @@ jobs:
       - name: Run tests
         run: ./ci/test_fips_docker.sh
         env:
-          PYTHON_VERSION: "3.10"
+          PYTHON_VERSION: "3.11"
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
@@ -366,7 +366,7 @@ jobs:
         if: always()
         with:
           include-hidden-files: true
-          name: coverage_linux-fips-3.10-${{ matrix.cloud-provider }}
+          name: coverage_linux-fips-3.11-${{ matrix.cloud-provider }}
           path: |
             .coverage
             coverage.xml
@@ -374,7 +374,7 @@ jobs:
         if: always()
         with:
           include-hidden-files: true
-          name: junit_linux-fips-3.10-${{ matrix.cloud-provider }}
+          name: junit_linux-fips-3.11-${{ matrix.cloud-provider }}
           path: |
             junit.*.xml
 
