@@ -18,4 +18,5 @@ RUN dnf clean all && \
     dnf install -y java-11-openjdk && \
     dnf clean all && \
     rm -rf /var/cache/dnf
-RUN python3.11 -m pip install --user --upgrade pip setuptools wheel
+RUN python3.11 -m ensurepip --upgrade && \
+    python3.11 -m pip install --user --upgrade pip setuptools wheel
