@@ -60,7 +60,7 @@ class Python(Enum):
     """Available Python versions."""
 
     PY310 = PythonVersion("3.10", test_on_pr=True)
-    PY311 = PythonVersion("3.11", test_on_pr=True)
+    PY311 = PythonVersion("3.11", test_on_pr=False)
     PY312 = PythonVersion("3.12", test_on_pr=False)
     PY313 = PythonVersion("3.13", test_on_pr=False)
     PY314 = PythonVersion("3.14", test_on_pr=True)

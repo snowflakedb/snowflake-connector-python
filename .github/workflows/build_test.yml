@@ -54,7 +54,9 @@ jobs:
             MATRIX=$(jq -c . < ./.github/workflows/generated_pr_matrix.json)
           fi
           echo "test_matrix=$MATRIX" >> "$GITHUB_OUTPUT"
-          echo "build_matrix=$(echo "$MATRIX" | jq -c '[group_by(.os_download_name, .["python-version"]) | .[] | first]')" >> "$GITHUB_OUTPUT"
+          # Always build manylinux_x86_64+py3.11 even when not in the PR test matrix:
+          # the FIPS test job depends on that wheel artifact.
+          echo "build_matrix=$(echo "$MATRIX" | jq -c '[group_by(.os_download_name, .["python-version"]) | .[] | first] + [{"os_image_name": "ubuntu-latest", "os_download_name": "manylinux_x86_64", "python-version": "3.11"}] | unique_by([.os_download_name, .["python-version"]])')" >> "$GITHUB_OUTPUT"
   lint:
     name: Check linting
     runs-on: ubuntu-latest
