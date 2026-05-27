@@ -11,8 +11,6 @@ RUN dnf install -y --allowerasing \
     libffi-devel \
     redhat-rpm-config \
     java-11-openjdk \
-    python3.9 \
-    python3.9-devel \
     python3.11 \
     python3.11-devel \
     python3.12 \
@@ -21,7 +19,7 @@ RUN dnf install -y --allowerasing \
     curl \
     && dnf clean all
 
-# Bootstrap pip for Python 3.11 and 3.12 (Python 3.9 already has pip)
+# Bootstrap pip for Python 3.11 and 3.12
 RUN python3.11 -m ensurepip --upgrade && \
     python3.11 -m pip install --upgrade pip setuptools wheel
 RUN python3.12 -m ensurepip --upgrade && \

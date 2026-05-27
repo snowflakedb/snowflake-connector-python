@@ -37,9 +37,7 @@ requirements:
     - cython
     - python {{ python }}
   run:
-    {% if py == 39 %}
-    - python >=3.9,<3.10.0a0
-    {% elif py == 310 %}
+    {% if py == 310 %}
     - python >=3.10,<3.11.0a0
     {% elif py == 311 %}
     - python >=3.11,<3.12.0a0
@@ -61,7 +59,6 @@ requirements:
     - packaging
     - charset-normalizer >=2,<4
     - idna >=3.7,<4
-    - urllib3 >=1.26.5,<2.0.0  # [py<310]
     - certifi >=2024.7.4
     - typing_extensions >=4.3,<5
     - filelock >=3.5,<4
