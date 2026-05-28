@@ -55,19 +55,7 @@ class AuthByOauthCredentials(AuthByPluginAsync, AuthByOauthCredentialsSync):
     async def reauthenticate(
         self, conn: SnowflakeConnection, **kwargs: Any
     ) -> dict[str, bool]:
-        """Override to use async connection properly."""
-        # Call the sync reset logic but handle the connection retry ourselves
-        self._reset_access_token()
-        if self._pop_cached_refresh_token():
-            logger.debug(
-                "OAuth refresh token is available, try to use it and get a new access token"
-            )
-            # this part is a little hacky - will need to refactor that in future.
-            # we treat conn as a sync connection here, but this method only reads data from the object - which should be fine.
-            self._do_refresh_token(conn=conn)
-        # Use async authenticate_with_retry
-        await conn.authenticate_with_retry(self)
-        return {"success": True}
+        return AuthByOauthCredentialsSync.reauthenticate(self, conn=conn, **kwargs)
 
     async def update_body(self, body: dict[Any, Any]) -> None:
         AuthByOauthCredentialsSync.update_body(self, body)

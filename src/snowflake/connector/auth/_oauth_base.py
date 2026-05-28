@@ -117,22 +117,21 @@ class _OAuthTokensMixin:
             logger.debug("storing access token to memory and cache")
             self._access_token = access_token
             if self._token_cache:
-                self._token_cache.store(
-                    self._get_access_token_cache_key(),
-                    access_token,
-                )
+                key = self._get_access_token_cache_key()
+                if key:
+                    self._token_cache.store(key, access_token)
 
         if self._refresh_token_enabled and refresh_token is not None:
             logger.debug("storing refresh token to memory and cache")
             self._refresh_token = refresh_token
             if self._token_cache:
-                self._token_cache.store(
-                    self._get_refresh_token_cache_key(),
-                    refresh_token,
-                )
+                key = self._get_refresh_token_cache_key()
+                if key:
+                    self._token_cache.store(key, refresh_token)
 
     def _reset_temporary_state(self) -> None:
         self._access_token = None
+        self._tokens_loaded_from_cache = False
         if self._refresh_token_enabled:
             self._refresh_token = None
         if self._token_cache:
@@ -276,7 +275,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         self._access_token = None
 
         # Try refresh using in-memory token (no keychain read)
-        if self._refresh_token_enabled and getattr(self, "_refresh_token", None):
+        if self._refresh_token_enabled and self._refresh_token:
             logger.debug("Attempting to exchange refresh token for new access token")
             self._do_refresh_token(conn=conn)
 
@@ -294,6 +293,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             service_name=conn.service_name,
             account=conn.account,
             user=conn.user,
+            password=None,
         )
         self._store_tokens(access_token, refresh_token)
 

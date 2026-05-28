@@ -372,3 +372,70 @@ class TestOAuthPrepareUsesCache:
 
             # Should call _request_tokens (cache was empty)
             mock_request_tokens.assert_called_once()
+
+
+class TestOAuthStoreTokensNullKeyGuard:
+    """Tests for _store_tokens() null key guard - prevents store(None, ...) when user unset."""
+
+    def test_store_tokens_no_error_when_cache_keys_not_set(
+        self, mock_token_cache, omit_oauth_urls_check
+    ):
+        """Verify _store_tokens() is safe when _update_cache_keys() has not been called."""
+        auth = AuthByOauthCode(
+            "app",
+            "clientId",
+            "clientSecret",
+            "https://test.snowflakecomputing.com/oauth/authorize",
+            "https://test.snowflakecomputing.com/oauth/token-request",
+            "http://localhost:8080",
+            "session:role:test",
+            "test.snowflakecomputing.com",
+            token_cache=mock_token_cache,
+            refresh_token_enabled=True,
+        )
+        # Deliberately NOT calling _update_cache_keys - _user is unset
+
+        # Should not raise, and should not call store() with a None key
+        auth._store_tokens("some_access_token", "some_refresh_token")
+
+        # In-memory tokens are updated
+        assert auth._access_token == "some_access_token"
+        assert auth._refresh_token == "some_refresh_token"
+        # Cache store must NOT be called because key would be None
+        mock_token_cache.store.assert_not_called()
+
+
+class TestOAuthResetTemporaryState:
+    """Tests that _reset_temporary_state() resets _tokens_loaded_from_cache."""
+
+    def test_reset_temporary_state_clears_loaded_flag(
+        self, mock_token_cache, omit_oauth_urls_check
+    ):
+        """Verify _reset_temporary_state() resets the one-time-load guard."""
+        mock_token_cache.retrieve.return_value = "cached_access_token"
+
+        auth = AuthByOauthCode(
+            "app",
+            "clientId",
+            "clientSecret",
+            "https://test.snowflakecomputing.com/oauth/authorize",
+            "https://test.snowflakecomputing.com/oauth/token-request",
+            "http://localhost:8080",
+            "session:role:test",
+            "test.snowflakecomputing.com",
+            token_cache=mock_token_cache,
+            refresh_token_enabled=False,
+        )
+
+        # First load - marks flag True
+        auth._load_tokens_from_cache("test_user")
+        assert auth._tokens_loaded_from_cache is True
+
+        # reset_secrets() calls _reset_temporary_state()
+        auth.reset_secrets()
+        assert auth._tokens_loaded_from_cache is False
+
+        # A subsequent load should hit the cache again
+        mock_token_cache.retrieve.reset_mock()
+        auth._load_tokens_from_cache("test_user")
+        mock_token_cache.retrieve.assert_called()
