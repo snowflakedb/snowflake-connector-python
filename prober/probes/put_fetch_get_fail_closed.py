@@ -3,6 +3,7 @@ import sys
 from probes.logging_config import initialize_logger
 from probes.login import connect
 from probes.put_fetch_get import (
+    cleanup_legacy_random_resources,
     compare_fetched_data,
     copy_into_table_from_stage,
     count_data_from_table,
@@ -63,13 +64,17 @@ def perform_put_fetch_get_fail_closed(
 
                 logger.error("Creating stage")
                 stage_name = create_data_stage(
-                    cur, "cloudprober_driver_python_create_stage_fail_closed"
+                    cur,
+                    "cloudprober_driver_python_create_stage_fail_closed",
+                    name_suffix="fail_closed",
                 )
                 logger.error(f"Stage {stage_name} created")
 
                 logger.error("Creating table")
                 table_name = create_data_table(
-                    cur, "cloudprober_driver_python_create_table_fail_closed"
+                    cur,
+                    "cloudprober_driver_python_create_table_fail_closed",
+                    name_suffix="fail_closed",
                 )
                 logger.error(f"Table {table_name} created")
 
@@ -135,6 +140,10 @@ def perform_put_fetch_get_fail_closed(
                     cur.execute(f"USE SCHEMA {schema_name}")
                     cur.execute(f"REMOVE @{stage_name}")
                     cur.execute(f"DROP TABLE {table_name}")
+                    cleanup_legacy_random_resources(
+                        cur,
+                        "cloudprober_driver_python_cleanup_legacy_resources_fail_closed",
+                    )
             logger.error("Resources cleaned up successfully")
             print(
                 f"cloudprober_driver_python_cleanup_resources_fail_closed{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"

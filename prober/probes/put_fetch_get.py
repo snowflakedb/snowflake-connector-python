@@ -1,6 +1,7 @@
 import csv
 import os
 import random
+import re
 import sys
 
 from faker import Faker
@@ -9,7 +10,6 @@ from probes.login import connect
 from probes.registry import prober_function
 
 import snowflake.connector
-from snowflake.connector.util_text import random_string
 
 # Initialize logger
 logger = initialize_logger(__name__)
@@ -55,20 +55,68 @@ def get_python_version() -> str:
     """
     Returns the Python version being used.
 
+    Prefers the value pinned by the deployment via the PROBER_PYTHON_VERSION
+    environment variable (set by entrypoint.sh from the testing matrix) so
+    that resource names and metric labels match the deployment matrix
+    exactly (e.g. "3.13.4"). Falls back to runtime introspection
+    (major.minor only) when the variable is not set.
+
     Returns:
-        str: The Python version in the format 'major.minor'.
+        str: The Python version string.
     """
-    return f"{sys.version_info.major}.{sys.version_info.minor}"
+    return (
+        os.environ.get("PROBER_PYTHON_VERSION")
+        or f"{sys.version_info.major}.{sys.version_info.minor}"
+    )
 
 
 def get_driver_version() -> str:
     """
     Returns the version of the Snowflake connector.
 
+    Prefers the value pinned by the deployment via the PROBER_DRIVER_VERSION
+    environment variable (set by entrypoint.sh from the testing matrix).
+    Falls back to the installed package version when the variable is not set.
+
     Returns:
-        str: The version of the Snowflake connector.
+        str: The connector version string.
     """
-    return snowflake.connector.__version__
+    return (
+        os.environ.get("PROBER_DRIVER_VERSION") or snowflake.connector.__version__
+    )
+
+
+def _sanitize_identifier_part(value: str) -> str:
+    """
+    Converts a free-form string (e.g. "3.15.0.dev0+abc") into a fragment that
+    is safe to embed in an unquoted Snowflake identifier.
+    """
+    return re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_").lower()
+
+
+def get_resource_suffix(name_suffix: str = "") -> str:
+    """
+    Builds a deterministic suffix from the Python and driver versions so that
+    each (language, driver_version[, probe_variant]) combination owns a stable
+    pool of Snowflake object names.
+
+    Using a deterministic name (instead of a random one) bounds the number of
+    stages/tables a prober can leak: if cleanup is skipped on crash, the next
+    run with the same versions reuses the same name and `CREATE OR REPLACE`
+    wipes the leftover state.
+
+    Args:
+        name_suffix: Optional discriminator (e.g. "fail_closed") to keep
+            different probe variants from colliding with each other when they
+            run against the same schema.
+    """
+    parts = [
+        f"py{_sanitize_identifier_part(get_python_version())}",
+        f"drv{_sanitize_identifier_part(get_driver_version())}",
+    ]
+    if name_suffix:
+        parts.append(_sanitize_identifier_part(name_suffix))
+    return "_".join(parts)
 
 
 def setup_schema(
@@ -158,15 +206,20 @@ def setup_warehouse(
 def create_data_table(
     cursor: snowflake.connector.cursor.SnowflakeCursor,
     metric_name: str = "cloudprober_driver_python_create_table",
+    name_suffix: str = "",
 ) -> str:
     """
     Creates a data table in Snowflake with the specified schema.
+
+    The table name is deterministic per (python_version, driver_version,
+    name_suffix) so that leaked tables from previously aborted runs are
+    overwritten via CREATE OR REPLACE on the next run instead of accumulating.
 
     Returns:
         str: The name of the created table.
     """
     try:
-        table_name = random_string(10, "test_data_")
+        table_name = f"test_data_{get_resource_suffix(name_suffix)}"
         create_table_query = f"""
         CREATE OR REPLACE TABLE {table_name} (
             id INT,
@@ -198,15 +251,20 @@ def create_data_table(
 def create_data_stage(
     cursor: snowflake.connector.cursor.SnowflakeCursor,
     metric_name: str = "cloudprober_driver_python_create_stage",
+    name_suffix: str = "",
 ) -> str:
     """
     Creates a stage in Snowflake for data upload.
+
+    The stage name is deterministic per (python_version, driver_version,
+    name_suffix) so that leaked stages from previously aborted runs are
+    overwritten via CREATE OR REPLACE on the next run instead of accumulating.
 
     Returns:
         str: The name of the created stage.
     """
     try:
-        stage_name = random_string(10, "test_data_stage_")
+        stage_name = f"test_data_stage_{get_resource_suffix(name_suffix)}"
         create_stage_query = f"CREATE OR REPLACE STAGE {stage_name};"
 
         cursor.execute(create_stage_query)
@@ -226,6 +284,79 @@ def create_data_stage(
         )
         logger.error(f"Error creating stage: {e}")
         sys.exit(1)
+
+
+# Random-suffix naming used by an earlier version of the probers:
+#   - stages: test_data_stage_<10 lowercase letters>
+#   - tables: test_data_<10 lowercase letters>
+# Anything still matching these patterns in the schema is guaranteed to be a
+# leftover from a crashed legacy run (the current naming scheme is
+# deterministic per python+driver version and always contains digits).
+_LEGACY_STAGE_NAME_RE = re.compile(r"^test_data_stage_[a-z]{10}$", re.IGNORECASE)
+_LEGACY_TABLE_NAME_RE = re.compile(r"^test_data_[a-z]{10}$", re.IGNORECASE)
+
+
+def _show_object_names(
+    cur: snowflake.connector.cursor.SnowflakeCursor, show_command: str
+) -> list:
+    """
+    Runs a Snowflake SHOW command and returns the list of object names,
+    looking up the "name" column position from the cursor description so we
+    don't depend on the column ordering of SHOW output.
+    """
+    cur.execute(show_command)
+    rows = cur.fetchall()
+    if not rows:
+        return []
+    name_idx = next(
+        i for i, col in enumerate(cur.description) if col[0].lower() == "name"
+    )
+    return [row[name_idx] for row in rows]
+
+
+def cleanup_legacy_random_resources(
+    cur: snowflake.connector.cursor.SnowflakeCursor,
+    metric_name: str = "cloudprober_driver_python_cleanup_legacy_resources",
+) -> None:
+    """
+    Drops stages and tables left behind by previous prober deployments that
+    used a random 10-character suffix. Safe to run repeatedly: it's a no-op
+    when nothing matches, and it never raises -- a failure here must not
+    affect the main probe outcome.
+    """
+    try:
+        leaked_stages = [
+            name
+            for name in _show_object_names(cur, "SHOW STAGES")
+            if _LEGACY_STAGE_NAME_RE.match(name)
+        ]
+        for stage in leaked_stages:
+            try:
+                cur.execute(f"DROP STAGE IF EXISTS {stage}")
+                logger.error(f"Dropped leaked legacy stage {stage}")
+            except Exception as drop_err:
+                logger.error(f"Failed to drop legacy stage {stage}: {drop_err}")
+
+        leaked_tables = [
+            name
+            for name in _show_object_names(cur, "SHOW TABLES")
+            if _LEGACY_TABLE_NAME_RE.match(name)
+        ]
+        for table in leaked_tables:
+            try:
+                cur.execute(f"DROP TABLE IF EXISTS {table}")
+                logger.error(f"Dropped leaked legacy table {table}")
+            except Exception as drop_err:
+                logger.error(f"Failed to drop legacy table {table}: {drop_err}")
+
+        print(
+            f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+        )
+    except Exception as e:
+        logger.error(f"Error during legacy resource cleanup: {e}")
+        print(
+            f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+        )
 
 
 def copy_into_table_from_stage(
@@ -496,7 +627,7 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
                     cur.execute(f"USE SCHEMA {schema_name}")
                     cur.execute(f"REMOVE @{stage_name}")
                     cur.execute(f"DROP TABLE {table_name}")
-                    cur.execute(f"DROP STAGE IF EXISTS {stage_name}")
+                    cleanup_legacy_random_resources(cur)
             logger.error("Resources cleaned up successfully")
             print(
                 f"cloudprober_driver_python_cleanup_resources{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
