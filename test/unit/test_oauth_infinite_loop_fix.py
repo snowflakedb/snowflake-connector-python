@@ -6,12 +6,11 @@
 """Unit tests for OAuth token caching infinite loop fix."""
 
 import unittest.mock as mock
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 from snowflake.connector.auth import AuthByOauthCode
-from snowflake.connector.auth._oauth_base import AuthByOAuthBase
 from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
 
