@@ -2,9 +2,7 @@ import csv
 import os
 import random
 import re
-import string
 import sys
-import time
 
 from faker import Faker
 from probes.logging_config import initialize_logger
@@ -297,21 +295,23 @@ def create_data_stage(
 # Both used `snowflake.connector.util_text.random_string` with the default
 # `choices=string.ascii_lowercase`, so the suffix character class is strictly
 # [a-z] with no digits, dashes, or underscores. Snowflake stores unquoted
-# identifiers in UPPERCASE, so INFORMATION_SCHEMA returns [A-Z] -- the regex
-# and prefix below match that form directly.
+# identifiers in UPPERCASE, so SHOW returns [A-Z] -- the regex below matches
+# that form directly.
 #
 # The current naming scheme always contains digits (from the version numbers,
 # e.g. "py3_13_4_drv3_15_0"), so a name matching `[A-Z]{7,10}` after the prefix
 # is unambiguously a legacy leftover and safe to drop.
 _LEGACY_STAGE_PREFIX = "TEST_DATA_STAGE_"
 _LEGACY_TABLE_PREFIX = "TEST_DATA_"
+_LEGACY_STAGE_REGEX = r"^TEST_DATA_STAGE_[A-Z]{7,10}$"
+_LEGACY_TABLE_REGEX = r"^TEST_DATA_[A-Z]{7,10}$"
 
-# Per-sub-bucket drop cap. Each invocation iterates 26 two-letter sub-buckets
-# (one primary letter, all 26 secondary letters), so the actual per-invocation
-# drop cap per object kind is roughly 26 * this value. Operators can raise
-# this for a dedicated cleanup window by setting
-# PROBER_LEGACY_CLEANUP_BATCH_SIZE in the environment.
+# Per-invocation drop cap per object kind. Operators can raise this for a
+# dedicated cleanup window by setting PROBER_LEGACY_CLEANUP_BATCH_SIZE in
+# the environment. Hard-capped at SHOW's 10 000-row limit -- raising it
+# higher than that wouldn't drop any more objects per call anyway.
 _DEFAULT_LEGACY_CLEANUP_BATCH_SIZE = 1000
+_SNOWFLAKE_SHOW_LIMIT = 10000
 
 
 def _legacy_cleanup_batch_size() -> int:
@@ -320,61 +320,60 @@ def _legacy_cleanup_batch_size() -> int:
         return _DEFAULT_LEGACY_CLEANUP_BATCH_SIZE
     try:
         value = int(raw)
-        return value if value > 0 else _DEFAULT_LEGACY_CLEANUP_BATCH_SIZE
     except ValueError:
         return _DEFAULT_LEGACY_CLEANUP_BATCH_SIZE
+    if value <= 0:
+        return _DEFAULT_LEGACY_CLEANUP_BATCH_SIZE
+    return min(value, _SNOWFLAKE_SHOW_LIMIT)
 
 
-def _drop_legacy_objects_in_sub_bucket(
+def _drop_legacy_objects_via_show(
     cur: snowflake.connector.cursor.SnowflakeCursor,
-    info_schema_view: str,
-    name_column: str,
-    catalog_column: str,
-    schema_column: str,
+    show_kind: str,
     drop_kind: str,
     name_prefix: str,
-    suffix_remaining_min: int,
-    suffix_remaining_max: int,
+    name_regex: str,
     batch_size: int,
 ) -> int:
     """
-    Server-side cleanup of one object kind within a single alphabetical
-    sub-bucket (e.g. all `TEST_DATA_STAGE_AB...` names).
+    Server-side, single-round-trip cleanup of one object kind via SHOW.
+
+    Why SHOW instead of INFORMATION_SCHEMA:
+      INFORMATION_SCHEMA views enforce an internal scan-size cap and will
+      raise `090030 Information schema query returned too much data` on
+      schemas with millions of objects -- and the cap is enforced before
+      LIMIT/WHERE can help. SHOW commands have a different, predictable
+      cap (10 000 rows, no error -- the result is just truncated), and
+      `STARTS WITH` pushes a literal-prefix filter down to the catalog,
+      so the result set is bounded regardless of total schema size.
 
     The scripting block:
-      1. Pushes a literal-prefix `LIKE` filter down to INFORMATION_SCHEMA so
-         Snowflake only scans names within this sub-bucket -- this is what
-         keeps the scan under the INFORMATION_SCHEMA row cap. Underscores in
-         the prefix are escaped via `ESCAPE '!'` so they're treated as
-         literals, not single-character wildcards.
-      2. Applies the precise `REGEXP_LIKE` filter for length + character
-         class so we only drop true legacy names.
-      3. Loops in-database and issues `DROP <kind> IF EXISTS` for each
+      1. Runs `SHOW <kind>s STARTS WITH '<prefix>' LIMIT 10000` to fetch
+         up to 10 000 candidate names that share the legacy prefix.
+      2. Pulls them via `RESULT_SCAN(LAST_QUERY_ID())` and applies the
+         precise `REGEXP_LIKE` for length + character class so we only
+         drop true legacy names (new deterministic names like
+         `TEST_DATA_STAGE_PY3_13_4_DRV3_15_0` share the prefix but contain
+         digits, so they're filtered out).
+      3. Loops server-side and issues `DROP <kind> IF EXISTS` for each
          match, returning the count.
 
-    With ~3M objects spread uniformly across 676 two-letter sub-buckets, each
-    sub-bucket holds roughly 4-5k objects -- comfortably under the
-    INFORMATION_SCHEMA scan limit that single-prefix queries can hit.
-
-    Raises on Snowflake-side failure so the caller can isolate per-sub-bucket
-    failures (e.g. one bucket still too large) from a global cleanup abort.
+    One network round-trip drops up to `batch_size` objects of this kind,
+    regardless of how many millions still live in the schema.
     """
-    escaped_prefix = name_prefix.replace("_", "!_")
-    name_regex = f"^{name_prefix}[A-Z]{{{suffix_remaining_min},{suffix_remaining_max}}}$"
+    show_limit = max(batch_size, 1)
     script = f"""
 EXECUTE IMMEDIATE $$
 DECLARE
     dropped INT DEFAULT 0;
-    rs RESULTSET DEFAULT (
-        SELECT {name_column} AS object_name
-        FROM INFORMATION_SCHEMA.{info_schema_view}
-        WHERE {catalog_column} = CURRENT_DATABASE()
-          AND {schema_column} = CURRENT_SCHEMA()
-          AND {name_column} LIKE '{escaped_prefix}%' ESCAPE '!'
-          AND REGEXP_LIKE({name_column}, '{name_regex}')
+BEGIN
+    SHOW {show_kind} STARTS WITH '{name_prefix}' LIMIT {show_limit};
+    LET rs RESULTSET := (
+        SELECT "name" AS object_name
+        FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()))
+        WHERE REGEXP_LIKE("name", '{name_regex}')
         LIMIT {batch_size}
     );
-BEGIN
     LET c1 CURSOR FOR rs;
     FOR row_var IN c1 DO
         EXECUTE IMMEDIATE 'DROP {drop_kind} IF EXISTS "' || row_var.object_name || '"';
@@ -388,16 +387,6 @@ $$
     return int(result[0]) if result and result[0] is not None else 0
 
 
-def _pick_primary_letter() -> str:
-    """
-    Round-robin a primary alphabet letter by minute, so successive probe
-    invocations sweep across the alphabet rather than always hammering 'A'.
-    Deterministic and stateless -- concurrent probes naturally distribute.
-    """
-    minute = int(time.time() // 60)
-    return string.ascii_uppercase[minute % 26]
-
-
 def cleanup_legacy_random_resources(
     cur: snowflake.connector.cursor.SnowflakeCursor,
     metric_name: str = "cloudprober_driver_python_cleanup_legacy_resources",
@@ -406,86 +395,43 @@ def cleanup_legacy_random_resources(
     Drops a bounded batch of stages and tables left behind by previous prober
     deployments that used a random 7-or-10 lowercase suffix.
 
-    Designed for very large backlogs (millions of objects) and Snowflake's
-    INFORMATION_SCHEMA scan-size cap:
+    Designed for multi-million-object backlogs:
+      - Uses SHOW + RESULT_SCAN (not INFORMATION_SCHEMA), which has a
+        predictable 10 000-row cap and never raises the "returned too much
+        data" error regardless of total schema size.
+      - Each invocation issues two scripting blocks (one for stages, one
+        for tables), each capped at PROBER_LEGACY_CLEANUP_BATCH_SIZE drops
+        (default 1000, max 10 000). Two network round-trips per probe run.
+      - Each drop happens server-side inside the scripting loop -- zero
+        per-drop round-trips.
+      - Repeated invocations drain the backlog incrementally; once empty,
+        the SHOW result set is empty and the loop is an instant no-op.
 
-      - Each invocation processes ONE round-robin primary letter and sweeps
-        its 26 two-letter sub-buckets ("AA".."AZ", then next minute "BA"..,
-        etc.). That gives a per-query scan size of ~backlog/676, which sits
-        well under Snowflake's INFORMATION_SCHEMA scan cap.
-      - The filter and the DROP loop both run server-side in a single
-        Snowflake Scripting block per sub-bucket (52 round-trips per probe
-        invocation: 26 sub-buckets x 2 object kinds).
-      - Per sub-bucket drop cap = PROBER_LEGACY_CLEANUP_BATCH_SIZE (default
-        1000), so per-invocation cap per kind is ~26 * that value.
-      - Repeated invocations drain the backlog incrementally; once a primary
-        letter is empty, its 26 sub-bucket queries return 0 rows and are
-        effectively cheap no-ops.
-      - Each sub-bucket is wrapped in try/except so a failure in one bucket
-        (e.g. still too dense to fit under the scan cap) is logged but does
-        not abort the rest of the sweep.
-
-    Best-effort: this function never raises -- a cleanup failure must not
-    flip the main probe outcome.
+    Best-effort: never raises -- a cleanup failure must not flip the main
+    probe outcome.
     """
     try:
         batch_size = _legacy_cleanup_batch_size()
-        primary = _pick_primary_letter()
-        stages_dropped = 0
-        tables_dropped = 0
-        sub_buckets_with_errors = 0
-
-        for secondary in string.ascii_uppercase:
-            two_letter = primary + secondary
-            stage_prefix = f"{_LEGACY_STAGE_PREFIX}{two_letter}"
-            table_prefix = f"{_LEGACY_TABLE_PREFIX}{two_letter}"
-
-            try:
-                stages_dropped += _drop_legacy_objects_in_sub_bucket(
-                    cur,
-                    info_schema_view="STAGES",
-                    name_column="stage_name",
-                    catalog_column="stage_catalog",
-                    schema_column="stage_schema",
-                    drop_kind="STAGE",
-                    name_prefix=stage_prefix,
-                    suffix_remaining_min=5,  # total 7-10 letters minus 2 already in prefix
-                    suffix_remaining_max=8,
-                    batch_size=batch_size,
-                )
-            except Exception as e:
-                sub_buckets_with_errors += 1
-                logger.error(
-                    f"Legacy STAGE cleanup sub-bucket {two_letter} failed: {e}"
-                )
-
-            try:
-                tables_dropped += _drop_legacy_objects_in_sub_bucket(
-                    cur,
-                    info_schema_view="TABLES",
-                    name_column="table_name",
-                    catalog_column="table_catalog",
-                    schema_column="table_schema",
-                    drop_kind="TABLE",
-                    name_prefix=table_prefix,
-                    suffix_remaining_min=5,
-                    suffix_remaining_max=8,
-                    batch_size=batch_size,
-                )
-            except Exception as e:
-                sub_buckets_with_errors += 1
-                logger.error(
-                    f"Legacy TABLE cleanup sub-bucket {two_letter} failed: {e}"
-                )
-
-        logger.error(
-            f"Legacy cleanup sweep (primary={primary}, batch_size={batch_size}): "
-            f"dropped {stages_dropped} stages, {tables_dropped} tables, "
-            f"{sub_buckets_with_errors} sub-bucket errors"
+        stages_dropped = _drop_legacy_objects_via_show(
+            cur,
+            show_kind="STAGES",
+            drop_kind="STAGE",
+            name_prefix=_LEGACY_STAGE_PREFIX,
+            name_regex=_LEGACY_STAGE_REGEX,
+            batch_size=batch_size,
         )
-        # Status is 0 (success) even with some sub-bucket errors: per-bucket
-        # failures are expected during the first passes over a multi-million
-        # backlog and don't represent a cleanup-system outage.
+        tables_dropped = _drop_legacy_objects_via_show(
+            cur,
+            show_kind="TABLES",
+            drop_kind="TABLE",
+            name_prefix=_LEGACY_TABLE_PREFIX,
+            name_regex=_LEGACY_TABLE_REGEX,
+            batch_size=batch_size,
+        )
+        logger.error(
+            f"Legacy cleanup batch (batch_size={batch_size}): "
+            f"dropped {stages_dropped} stages, {tables_dropped} tables"
+        )
         print(
             f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
         )
