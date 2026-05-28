@@ -2,7 +2,9 @@ import csv
 import os
 import random
 import re
+import string
 import sys
+import time
 
 from faker import Faker
 from probes.logging_config import initialize_logger
@@ -296,19 +298,19 @@ def create_data_stage(
 # `choices=string.ascii_lowercase`, so the suffix character class is strictly
 # [a-z] with no digits, dashes, or underscores. Snowflake stores unquoted
 # identifiers in UPPERCASE, so INFORMATION_SCHEMA returns [A-Z] -- the regex
-# below matches that form directly.
+# and prefix below match that form directly.
 #
 # The current naming scheme always contains digits (from the version numbers,
 # e.g. "py3_13_4_drv3_15_0"), so a name matching `[A-Z]{7,10}` after the prefix
 # is unambiguously a legacy leftover and safe to drop.
-_LEGACY_STAGE_REGEX = r"^TEST_DATA_STAGE_[A-Z]{7,10}$"
-_LEGACY_TABLE_REGEX = r"^TEST_DATA_[A-Z]{7,10}$"
+_LEGACY_STAGE_PREFIX = "TEST_DATA_STAGE_"
+_LEGACY_TABLE_PREFIX = "TEST_DATA_"
 
-# Per-invocation drop budget. Operators can raise this during a dedicated
-# cleanup window (e.g. to chew through millions of leaked objects) without
-# code changes by setting PROBER_LEGACY_CLEANUP_BATCH_SIZE in the environment.
-# Capped well below `SHOW`'s 10 000 default so the work stays fast and
-# predictable even for the largest backlog.
+# Per-sub-bucket drop cap. Each invocation iterates 26 two-letter sub-buckets
+# (one primary letter, all 26 secondary letters), so the actual per-invocation
+# drop cap per object kind is roughly 26 * this value. Operators can raise
+# this for a dedicated cleanup window by setting
+# PROBER_LEGACY_CLEANUP_BATCH_SIZE in the environment.
 _DEFAULT_LEGACY_CLEANUP_BATCH_SIZE = 1000
 
 
@@ -323,28 +325,42 @@ def _legacy_cleanup_batch_size() -> int:
         return _DEFAULT_LEGACY_CLEANUP_BATCH_SIZE
 
 
-def _drop_legacy_objects_in_batch(
+def _drop_legacy_objects_in_sub_bucket(
     cur: snowflake.connector.cursor.SnowflakeCursor,
     info_schema_view: str,
     name_column: str,
     catalog_column: str,
     schema_column: str,
     drop_kind: str,
-    name_regex: str,
+    name_prefix: str,
+    suffix_remaining_min: int,
+    suffix_remaining_max: int,
     batch_size: int,
 ) -> int:
     """
-    Server-side, single-round-trip cleanup of one object kind.
+    Server-side cleanup of one object kind within a single alphabetical
+    sub-bucket (e.g. all `TEST_DATA_STAGE_AB...` names).
 
-    Runs a Snowflake Scripting block that:
-      1. Selects up to `batch_size` object names from INFORMATION_SCHEMA
-         matching the legacy regex (filter pushed down to Snowflake).
-      2. Loops in-database and issues `DROP <kind> IF EXISTS` for each.
-      3. Returns the count of objects dropped in this batch.
+    The scripting block:
+      1. Pushes a literal-prefix `LIKE` filter down to INFORMATION_SCHEMA so
+         Snowflake only scans names within this sub-bucket -- this is what
+         keeps the scan under the INFORMATION_SCHEMA row cap. Underscores in
+         the prefix are escaped via `ESCAPE '!'` so they're treated as
+         literals, not single-character wildcards.
+      2. Applies the precise `REGEXP_LIKE` filter for length + character
+         class so we only drop true legacy names.
+      3. Loops in-database and issues `DROP <kind> IF EXISTS` for each
+         match, returning the count.
 
-    This avoids returning millions of names to the client and avoids one
-    network round-trip per drop -- critical when the leak is in the millions.
+    With ~3M objects spread uniformly across 676 two-letter sub-buckets, each
+    sub-bucket holds roughly 4-5k objects -- comfortably under the
+    INFORMATION_SCHEMA scan limit that single-prefix queries can hit.
+
+    Raises on Snowflake-side failure so the caller can isolate per-sub-bucket
+    failures (e.g. one bucket still too large) from a global cleanup abort.
     """
+    escaped_prefix = name_prefix.replace("_", "!_")
+    name_regex = f"^{name_prefix}[A-Z]{{{suffix_remaining_min},{suffix_remaining_max}}}$"
     script = f"""
 EXECUTE IMMEDIATE $$
 DECLARE
@@ -354,6 +370,7 @@ DECLARE
         FROM INFORMATION_SCHEMA.{info_schema_view}
         WHERE {catalog_column} = CURRENT_DATABASE()
           AND {schema_column} = CURRENT_SCHEMA()
+          AND {name_column} LIKE '{escaped_prefix}%' ESCAPE '!'
           AND REGEXP_LIKE({name_column}, '{name_regex}')
         LIMIT {batch_size}
     );
@@ -371,6 +388,16 @@ $$
     return int(result[0]) if result and result[0] is not None else 0
 
 
+def _pick_primary_letter() -> str:
+    """
+    Round-robin a primary alphabet letter by minute, so successive probe
+    invocations sweep across the alphabet rather than always hammering 'A'.
+    Deterministic and stateless -- concurrent probes naturally distribute.
+    """
+    minute = int(time.time() // 60)
+    return string.ascii_uppercase[minute % 26]
+
+
 def cleanup_legacy_random_resources(
     cur: snowflake.connector.cursor.SnowflakeCursor,
     metric_name: str = "cloudprober_driver_python_cleanup_legacy_resources",
@@ -379,44 +406,86 @@ def cleanup_legacy_random_resources(
     Drops a bounded batch of stages and tables left behind by previous prober
     deployments that used a random 7-or-10 lowercase suffix.
 
-    Designed for very large backlogs (millions of objects):
-      - The match filter and the DROP loop both run server-side in a single
-        Snowflake Scripting block per object kind (two round-trips total,
-        regardless of backlog size).
-      - Each invocation drops at most PROBER_LEGACY_CLEANUP_BATCH_SIZE
-        objects of each kind, so a single probe run is bounded in latency.
-      - Repeated invocations drain the backlog incrementally; once empty,
-        the queries are effectively no-ops.
+    Designed for very large backlogs (millions of objects) and Snowflake's
+    INFORMATION_SCHEMA scan-size cap:
 
-    Best-effort: never raises -- a cleanup failure must not flip the main
-    probe outcome.
+      - Each invocation processes ONE round-robin primary letter and sweeps
+        its 26 two-letter sub-buckets ("AA".."AZ", then next minute "BA"..,
+        etc.). That gives a per-query scan size of ~backlog/676, which sits
+        well under Snowflake's INFORMATION_SCHEMA scan cap.
+      - The filter and the DROP loop both run server-side in a single
+        Snowflake Scripting block per sub-bucket (52 round-trips per probe
+        invocation: 26 sub-buckets x 2 object kinds).
+      - Per sub-bucket drop cap = PROBER_LEGACY_CLEANUP_BATCH_SIZE (default
+        1000), so per-invocation cap per kind is ~26 * that value.
+      - Repeated invocations drain the backlog incrementally; once a primary
+        letter is empty, its 26 sub-bucket queries return 0 rows and are
+        effectively cheap no-ops.
+      - Each sub-bucket is wrapped in try/except so a failure in one bucket
+        (e.g. still too dense to fit under the scan cap) is logged but does
+        not abort the rest of the sweep.
+
+    Best-effort: this function never raises -- a cleanup failure must not
+    flip the main probe outcome.
     """
     try:
         batch_size = _legacy_cleanup_batch_size()
-        stages_dropped = _drop_legacy_objects_in_batch(
-            cur,
-            info_schema_view="STAGES",
-            name_column="stage_name",
-            catalog_column="stage_catalog",
-            schema_column="stage_schema",
-            drop_kind="STAGE",
-            name_regex=_LEGACY_STAGE_REGEX,
-            batch_size=batch_size,
-        )
-        tables_dropped = _drop_legacy_objects_in_batch(
-            cur,
-            info_schema_view="TABLES",
-            name_column="table_name",
-            catalog_column="table_catalog",
-            schema_column="table_schema",
-            drop_kind="TABLE",
-            name_regex=_LEGACY_TABLE_REGEX,
-            batch_size=batch_size,
-        )
+        primary = _pick_primary_letter()
+        stages_dropped = 0
+        tables_dropped = 0
+        sub_buckets_with_errors = 0
+
+        for secondary in string.ascii_uppercase:
+            two_letter = primary + secondary
+            stage_prefix = f"{_LEGACY_STAGE_PREFIX}{two_letter}"
+            table_prefix = f"{_LEGACY_TABLE_PREFIX}{two_letter}"
+
+            try:
+                stages_dropped += _drop_legacy_objects_in_sub_bucket(
+                    cur,
+                    info_schema_view="STAGES",
+                    name_column="stage_name",
+                    catalog_column="stage_catalog",
+                    schema_column="stage_schema",
+                    drop_kind="STAGE",
+                    name_prefix=stage_prefix,
+                    suffix_remaining_min=5,  # total 7-10 letters minus 2 already in prefix
+                    suffix_remaining_max=8,
+                    batch_size=batch_size,
+                )
+            except Exception as e:
+                sub_buckets_with_errors += 1
+                logger.error(
+                    f"Legacy STAGE cleanup sub-bucket {two_letter} failed: {e}"
+                )
+
+            try:
+                tables_dropped += _drop_legacy_objects_in_sub_bucket(
+                    cur,
+                    info_schema_view="TABLES",
+                    name_column="table_name",
+                    catalog_column="table_catalog",
+                    schema_column="table_schema",
+                    drop_kind="TABLE",
+                    name_prefix=table_prefix,
+                    suffix_remaining_min=5,
+                    suffix_remaining_max=8,
+                    batch_size=batch_size,
+                )
+            except Exception as e:
+                sub_buckets_with_errors += 1
+                logger.error(
+                    f"Legacy TABLE cleanup sub-bucket {two_letter} failed: {e}"
+                )
+
         logger.error(
-            f"Legacy cleanup batch: dropped {stages_dropped} stages and "
-            f"{tables_dropped} tables (batch_size={batch_size})"
+            f"Legacy cleanup sweep (primary={primary}, batch_size={batch_size}): "
+            f"dropped {stages_dropped} stages, {tables_dropped} tables, "
+            f"{sub_buckets_with_errors} sub-bucket errors"
         )
+        # Status is 0 (success) even with some sub-bucket errors: per-bucket
+        # failures are expected during the first passes over a multi-million
+        # backlog and don't represent a cleanup-system outage.
         print(
             f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
         )
