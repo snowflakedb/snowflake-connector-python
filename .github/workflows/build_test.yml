@@ -38,6 +38,7 @@ jobs:
     outputs:
       test_matrix: ${{ steps.test_matrix.outputs.test_matrix }}
       build_matrix: ${{ steps.test_matrix.outputs.build_matrix }}
+      lambda_matrix: ${{ steps.test_matrix.outputs.lambda_matrix }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -57,6 +58,7 @@ jobs:
           # Always build manylinux_x86_64+py3.11 even when not in the PR test matrix:
           # the FIPS test job depends on that wheel artifact.
           echo "build_matrix=$(echo "$MATRIX" | jq -c '[group_by(.os_download_name, .["python-version"]) | .[] | first] + [{"os_image_name": "ubuntu-latest", "os_download_name": "manylinux_x86_64", "python-version": "3.11"}] | unique_by([.os_download_name, .["python-version"]])')" >> "$GITHUB_OUTPUT"
+          echo "lambda_matrix=$(echo "$MATRIX" | jq -c '[.[] | select(.["cloud-provider"] == "aws")]')" >> "$GITHUB_OUTPUT"
   lint:
     name: Check linting
     runs-on: ubuntu-latest
@@ -387,10 +389,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.define-matrix.outputs.test_matrix) }}
-        exclude:
-          - cloud-provider: gcp
-          - cloud-provider: azure
+        include: ${{ fromJSON(needs.define-matrix.outputs.lambda_matrix) }}
     steps:
       - name: Set shortver
         run: echo "shortver=${longver//./}" >> $GITHUB_ENV
