@@ -213,7 +213,7 @@ def create_data_table(
 
     The table name is deterministic per (python_version, driver_version,
     name_suffix) so that leaked tables from previously aborted runs are
-    overwritten via CREATE OR REPLACE on the next run instead of accumulating.
+    overwritten via CREATE OR REPLACECREATE OR REPLACE on the next run instead of accumulating.
 
     Returns:
         str: The name of the created table.
@@ -286,32 +286,89 @@ def create_data_stage(
         sys.exit(1)
 
 
-# Random-suffix naming used by an earlier version of the probers:
-#   - stages: test_data_stage_<10 lowercase letters>
-#   - tables: test_data_<10 lowercase letters>
-# Anything still matching these patterns in the schema is guaranteed to be a
-# leftover from a crashed legacy run (the current naming scheme is
-# deterministic per python+driver version and always contains digits).
-_LEGACY_STAGE_NAME_RE = re.compile(r"^test_data_stage_[a-z]{10}$", re.IGNORECASE)
-_LEGACY_TABLE_NAME_RE = re.compile(r"^test_data_[a-z]{10}$", re.IGNORECASE)
+# Legacy random-suffix naming used by previous prober deployments.
+#
+# Two suffix lengths were used historically (verified from git history):
+#   - 7 lowercase ASCII letters  (earliest version)
+#   - 10 lowercase ASCII letters (later version)
+#
+# Both used `snowflake.connector.util_text.random_string` with the default
+# `choices=string.ascii_lowercase`, so the suffix character class is strictly
+# [a-z] with no digits, dashes, or underscores. Snowflake stores unquoted
+# identifiers in UPPERCASE, so INFORMATION_SCHEMA returns [A-Z] -- the regex
+# below matches that form directly.
+#
+# The current naming scheme always contains digits (from the version numbers,
+# e.g. "py3_13_4_drv3_15_0"), so a name matching `[A-Z]{7,10}` after the prefix
+# is unambiguously a legacy leftover and safe to drop.
+_LEGACY_STAGE_REGEX = r"^TEST_DATA_STAGE_[A-Z]{7,10}$"
+_LEGACY_TABLE_REGEX = r"^TEST_DATA_[A-Z]{7,10}$"
+
+# Per-invocation drop budget. Operators can raise this during a dedicated
+# cleanup window (e.g. to chew through millions of leaked objects) without
+# code changes by setting PROBER_LEGACY_CLEANUP_BATCH_SIZE in the environment.
+# Capped well below `SHOW`'s 10 000 default so the work stays fast and
+# predictable even for the largest backlog.
+_DEFAULT_LEGACY_CLEANUP_BATCH_SIZE = 1000
 
 
-def _show_object_names(
-    cur: snowflake.connector.cursor.SnowflakeCursor, show_command: str
-) -> list:
+def _legacy_cleanup_batch_size() -> int:
+    raw = os.environ.get("PROBER_LEGACY_CLEANUP_BATCH_SIZE")
+    if not raw:
+        return _DEFAULT_LEGACY_CLEANUP_BATCH_SIZE
+    try:
+        value = int(raw)
+        return value if value > 0 else _DEFAULT_LEGACY_CLEANUP_BATCH_SIZE
+    except ValueError:
+        return _DEFAULT_LEGACY_CLEANUP_BATCH_SIZE
+
+
+def _drop_legacy_objects_in_batch(
+    cur: snowflake.connector.cursor.SnowflakeCursor,
+    info_schema_view: str,
+    name_column: str,
+    catalog_column: str,
+    schema_column: str,
+    drop_kind: str,
+    name_regex: str,
+    batch_size: int,
+) -> int:
     """
-    Runs a Snowflake SHOW command and returns the list of object names,
-    looking up the "name" column position from the cursor description so we
-    don't depend on the column ordering of SHOW output.
+    Server-side, single-round-trip cleanup of one object kind.
+
+    Runs a Snowflake Scripting block that:
+      1. Selects up to `batch_size` object names from INFORMATION_SCHEMA
+         matching the legacy regex (filter pushed down to Snowflake).
+      2. Loops in-database and issues `DROP <kind> IF EXISTS` for each.
+      3. Returns the count of objects dropped in this batch.
+
+    This avoids returning millions of names to the client and avoids one
+    network round-trip per drop -- critical when the leak is in the millions.
     """
-    cur.execute(show_command)
-    rows = cur.fetchall()
-    if not rows:
-        return []
-    name_idx = next(
-        i for i, col in enumerate(cur.description) if col[0].lower() == "name"
-    )
-    return [row[name_idx] for row in rows]
+    script = f"""
+EXECUTE IMMEDIATE $$
+DECLARE
+    dropped INT DEFAULT 0;
+    rs RESULTSET DEFAULT (
+        SELECT {name_column} AS object_name
+        FROM INFORMATION_SCHEMA.{info_schema_view}
+        WHERE {catalog_column} = CURRENT_DATABASE()
+          AND {schema_column} = CURRENT_SCHEMA()
+          AND REGEXP_LIKE({name_column}, '{name_regex}')
+        LIMIT {batch_size}
+    );
+BEGIN
+    LET c1 CURSOR FOR rs;
+    FOR row_var IN c1 DO
+        EXECUTE IMMEDIATE 'DROP {drop_kind} IF EXISTS "' || row_var.object_name || '"';
+        dropped := dropped + 1;
+    END FOR;
+    RETURN dropped;
+END;
+$$
+"""
+    result = cur.execute(script).fetchone()
+    return int(result[0]) if result and result[0] is not None else 0
 
 
 def cleanup_legacy_random_resources(
@@ -319,36 +376,47 @@ def cleanup_legacy_random_resources(
     metric_name: str = "cloudprober_driver_python_cleanup_legacy_resources",
 ) -> None:
     """
-    Drops stages and tables left behind by previous prober deployments that
-    used a random 10-character suffix. Safe to run repeatedly: it's a no-op
-    when nothing matches, and it never raises -- a failure here must not
-    affect the main probe outcome.
+    Drops a bounded batch of stages and tables left behind by previous prober
+    deployments that used a random 7-or-10 lowercase suffix.
+
+    Designed for very large backlogs (millions of objects):
+      - The match filter and the DROP loop both run server-side in a single
+        Snowflake Scripting block per object kind (two round-trips total,
+        regardless of backlog size).
+      - Each invocation drops at most PROBER_LEGACY_CLEANUP_BATCH_SIZE
+        objects of each kind, so a single probe run is bounded in latency.
+      - Repeated invocations drain the backlog incrementally; once empty,
+        the queries are effectively no-ops.
+
+    Best-effort: never raises -- a cleanup failure must not flip the main
+    probe outcome.
     """
     try:
-        leaked_stages = [
-            name
-            for name in _show_object_names(cur, "SHOW STAGES")
-            if _LEGACY_STAGE_NAME_RE.match(name)
-        ]
-        for stage in leaked_stages:
-            try:
-                cur.execute(f"DROP STAGE IF EXISTS {stage}")
-                logger.error(f"Dropped leaked legacy stage {stage}")
-            except Exception as drop_err:
-                logger.error(f"Failed to drop legacy stage {stage}: {drop_err}")
-
-        leaked_tables = [
-            name
-            for name in _show_object_names(cur, "SHOW TABLES")
-            if _LEGACY_TABLE_NAME_RE.match(name)
-        ]
-        for table in leaked_tables:
-            try:
-                cur.execute(f"DROP TABLE IF EXISTS {table}")
-                logger.error(f"Dropped leaked legacy table {table}")
-            except Exception as drop_err:
-                logger.error(f"Failed to drop legacy table {table}: {drop_err}")
-
+        batch_size = _legacy_cleanup_batch_size()
+        stages_dropped = _drop_legacy_objects_in_batch(
+            cur,
+            info_schema_view="STAGES",
+            name_column="stage_name",
+            catalog_column="stage_catalog",
+            schema_column="stage_schema",
+            drop_kind="STAGE",
+            name_regex=_LEGACY_STAGE_REGEX,
+            batch_size=batch_size,
+        )
+        tables_dropped = _drop_legacy_objects_in_batch(
+            cur,
+            info_schema_view="TABLES",
+            name_column="table_name",
+            catalog_column="table_catalog",
+            schema_column="table_schema",
+            drop_kind="TABLE",
+            name_regex=_LEGACY_TABLE_REGEX,
+            batch_size=batch_size,
+        )
+        logger.error(
+            f"Legacy cleanup batch: dropped {stages_dropped} stages and "
+            f"{tables_dropped} tables (batch_size={batch_size})"
+        )
         print(
             f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
         )
