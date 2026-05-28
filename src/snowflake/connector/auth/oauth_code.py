@@ -92,6 +92,9 @@ class AuthByOauthCode(AuthByOAuthBase):
             scope=scope,
             token_cache=token_cache,
             refresh_token_enabled=refresh_token_enabled,
+            is_snowflake_as_idp=self._is_snowflake_as_idp(
+                authentication_url, token_request_url, host
+            ),
             **kwargs,
         )
         self._application = application
