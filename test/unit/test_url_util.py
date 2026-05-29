@@ -25,6 +25,22 @@ def test_url_validator():
     assert not is_valid_url("This is a random text")
     assert not is_valid_url("file://TestForFile")
 
+    # non-string input
+    assert not is_valid_url(None)
+    assert not is_valid_url(123)
+
+    # control characters / null bytes
+    assert not is_valid_url("https://\x00evil.com")
+    assert not is_valid_url("https://evil.com/path\x01")
+    assert not is_valid_url("https://evil.com\nnewline")
+
+    # embedded credentials are accepted (urlparse handles them safely)
+    assert is_valid_url("https://user:pass@host.snowflakecomputing.com")
+
+    # IPv4 and IPv6 literals
+    assert is_valid_url("https://192.168.1.1/path")
+    assert is_valid_url("https://[::1]:8080/path")
+
 
 def test_encoder():
     assert url_encode_str("Hello @World") == "Hello+%40World"
