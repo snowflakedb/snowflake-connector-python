@@ -306,12 +306,18 @@ _LEGACY_TABLE_PREFIX = "TEST_DATA_"
 _LEGACY_STAGE_REGEX = r"^TEST_DATA_STAGE_[A-Z]{7,10}$"
 _LEGACY_TABLE_REGEX = r"^TEST_DATA_[A-Z]{7,10}$"
 
-# Per-invocation drop cap per object kind. Operators can raise this for a
+# Per-batch drop cap per object kind. Operators can raise this for a
 # dedicated cleanup window by setting PROBER_LEGACY_CLEANUP_BATCH_SIZE in
 # the environment. Hard-capped at SHOW's 10 000-row limit -- raising it
 # higher than that wouldn't drop any more objects per call anyway.
 _DEFAULT_LEGACY_CLEANUP_BATCH_SIZE = 1000
 _SNOWFLAKE_SHOW_LIMIT = 10000
+
+# Maximum outer sweeps per probe execution. Mirrors the ODBC and JDBC
+# probers: up to 10 batches per kind, with early-exit when a sweep drops 0
+# objects (backlog drained), so per-probe latency stays bounded while a
+# large backlog drains an order of magnitude faster than with one batch.
+_LEGACY_CLEANUP_MAX_ITERATIONS = 10
 
 
 def _legacy_cleanup_batch_size() -> int:
@@ -392,45 +398,83 @@ def cleanup_legacy_random_resources(
     metric_name: str = "cloudprober_driver_python_cleanup_legacy_resources",
 ) -> None:
     """
-    Drops a bounded batch of stages and tables left behind by previous prober
+    Drops a bounded number of stages and tables left behind by previous prober
     deployments that used a random 7-or-10 lowercase suffix.
 
-    Designed for multi-million-object backlogs:
+    Designed for multi-million-object backlogs, and aligned with the ODBC and
+    JDBC probers' cleanup design:
       - Uses SHOW + RESULT_SCAN (not INFORMATION_SCHEMA), which has a
         predictable 10 000-row cap and never raises the "returned too much
         data" error regardless of total schema size.
-      - Each invocation issues two scripting blocks (one for stages, one
-        for tables), each capped at PROBER_LEGACY_CLEANUP_BATCH_SIZE drops
-        (default 1000, max 10 000). Two network round-trips per probe run.
-      - Each drop happens server-side inside the scripting loop -- zero
-        per-drop round-trips.
-      - Repeated invocations drain the backlog incrementally; once empty,
-        the SHOW result set is empty and the loop is an instant no-op.
+      - Outer loop runs up to _LEGACY_CLEANUP_MAX_ITERATIONS (10) sweeps
+        per probe execution, each sweep issuing two server-side scripting
+        blocks (one for stages, one for tables). Each block drops up to
+        PROBER_LEGACY_CLEANUP_BATCH_SIZE objects of its kind server-side.
+        Early-exit on the first iteration that drops 0 of both kinds means
+        the work is bounded: zero objects left to drop -> exactly one no-op
+        sweep, not ten.
+      - Per-kind drops happen server-side inside the scripting loop -- zero
+        per-drop network round-trips. Per probe execution we issue at most
+        2 x 10 = 20 round-trips (one per kind per iteration), regardless
+        of how large the backlog is, dropping up to 10 x BATCH_SIZE x 2
+        objects (default 20 000) per execution.
+      - Each per-batch failure is caught and logged so a transient error in
+        one sweep doesn't abort the remaining iterations.
 
     Best-effort: never raises -- a cleanup failure must not flip the main
     probe outcome.
     """
     try:
         batch_size = _legacy_cleanup_batch_size()
-        stages_dropped = _drop_legacy_objects_via_show(
-            cur,
-            show_kind="STAGES",
-            drop_kind="STAGE",
-            name_prefix=_LEGACY_STAGE_PREFIX,
-            name_regex=_LEGACY_STAGE_REGEX,
-            batch_size=batch_size,
-        )
-        tables_dropped = _drop_legacy_objects_via_show(
-            cur,
-            show_kind="TABLES",
-            drop_kind="TABLE",
-            name_prefix=_LEGACY_TABLE_PREFIX,
-            name_regex=_LEGACY_TABLE_REGEX,
-            batch_size=batch_size,
-        )
+        total_stages_dropped = 0
+        total_tables_dropped = 0
+        iterations_run = 0
+
+        for iteration in range(_LEGACY_CLEANUP_MAX_ITERATIONS):
+            iter_stages = 0
+            iter_tables = 0
+
+            try:
+                iter_stages = _drop_legacy_objects_via_show(
+                    cur,
+                    show_kind="STAGES",
+                    drop_kind="STAGE",
+                    name_prefix=_LEGACY_STAGE_PREFIX,
+                    name_regex=_LEGACY_STAGE_REGEX,
+                    batch_size=batch_size,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Legacy STAGE cleanup batch failed (iteration {iteration + 1}): {e}"
+                )
+
+            try:
+                iter_tables = _drop_legacy_objects_via_show(
+                    cur,
+                    show_kind="TABLES",
+                    drop_kind="TABLE",
+                    name_prefix=_LEGACY_TABLE_PREFIX,
+                    name_regex=_LEGACY_TABLE_REGEX,
+                    batch_size=batch_size,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Legacy TABLE cleanup batch failed (iteration {iteration + 1}): {e}"
+                )
+
+            total_stages_dropped += iter_stages
+            total_tables_dropped += iter_tables
+            iterations_run += 1
+
+            if iter_stages == 0 and iter_tables == 0:
+                # Backlog drained (or both batches errored) -- no point
+                # spending more iterations this run.
+                break
+
         logger.error(
-            f"Legacy cleanup batch (batch_size={batch_size}): "
-            f"dropped {stages_dropped} stages, {tables_dropped} tables"
+            f"Legacy cleanup sweep (batch_size={batch_size}, "
+            f"iterations={iterations_run}/{_LEGACY_CLEANUP_MAX_ITERATIONS}): "
+            f"dropped {total_stages_dropped} stages, {total_tables_dropped} tables"
         )
         print(
             f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
