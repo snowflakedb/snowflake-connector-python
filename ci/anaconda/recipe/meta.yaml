@@ -1,6 +1,7 @@
 {% set name = "snowflake-connector-python" %}
 {% set version = os.environ.get('SNOWFLAKE_CONNECTOR_PYTHON_VERSION', 0) %}
 {% set build_number = os.environ.get('PUBLIC_CONNECTOR_BUILD_NUMBER', 0) %}
+{% set freethreading = os.environ.get('FREETHREADING', '0') == '1' %}
 
 package:
   name: {{ name|lower }}
@@ -11,7 +12,11 @@ source:
 
 build:
   number: {{ build_number }}
-  string: "py{{ py }}_{{ build_number }}"
+  string: "py{{ py }}{% if freethreading %}t{% endif %}_{{ build_number }}"
+  {% if freethreading %}
+  track_features:
+    - py_freethreading
+  {% endif %}
   script:
     - export SF_NO_COPY_ARROW_LIB=1              # [unix]
     - export SF_ARROW_LIBDIR="${PREFIX}/lib"     # [unix]
@@ -35,7 +40,12 @@ requirements:
     - setuptools >=40.6.0
     - wheel
     - cython
+    {% if freethreading %}
+    - python {{ python }}.* *_cp314t
+    - python_abi {{ python }}.* *_cp314t
+    {% else %}
     - python {{ python }}
+    {% endif %}
   run:
     {% if py == 39 %}
     - python >=3.9,<3.10.0a0
