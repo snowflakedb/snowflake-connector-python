@@ -10,9 +10,7 @@ Logger* DateConverter::logger = new Logger("snowflake.connector.DateConverter");
 
 py::UniqueRef& DateConverter::initPyDatetimeDate() {
   static py::UniqueRef pyDatetimeDate;
-  // call_once serializes the lazy import for free-threaded builds (3.13t /
-  // 3.14t). C++11 "magic statics" only protect the constructor of
-  // pyDatetimeDate, not the subsequent import-and-assign below.
+  // Serializes the lazy import for free-threaded builds
   static std::once_flag onceFlag;
   std::call_once(onceFlag, []() {
     py::UniqueRef pyDatetimeModule;

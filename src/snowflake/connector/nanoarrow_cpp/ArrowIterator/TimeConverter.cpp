@@ -24,9 +24,7 @@ PyObject* TimeConverter::toPyObject(int64_t rowIndex) const {
 
 py::UniqueRef& TimeConverter::m_pyDatetimeTime() {
   static py::UniqueRef pyDatetimeTime;
-  // call_once serializes the lazy import for free-threaded builds (3.13t /
-  // 3.14t). PyUniqueLock (PyGILState_Ensure) does not provide mutual
-  // exclusion on those builds, only thread-state attachment.
+  // Serializes the lazy import for free-threaded builds
   static std::once_flag onceFlag;
   std::call_once(onceFlag, []() {
     py::PyUniqueLock lock;

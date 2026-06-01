@@ -1,33 +1,14 @@
 #!/usr/bin/env python
 """Regression tests for free-threaded (no-GIL) CPython support.
 
-These tests guard the contract added in commit b75ab69e (Cython
-``freethreading_compatible`` directive) and the C++ ``std::call_once``
-fixes in commit ea1da38d: importing the connector on a free-threaded
-interpreter must not re-enable the GIL, and must not regress the
-GIL-enabled build either.
+Guards the Cython ``freethreading_compatible`` directive and the C++
+``std::call_once`` lazy-init fixes: importing the connector on a
+free-threaded interpreter must not re-enable the GIL, and must not
+regress the GIL-enabled build.
 
-The three tests below give a positive-and-negative acknowledgement that
-the wiring works end-to-end:
-
-    1. Universal (3.13+): no GIL re-enable warning is emitted by any of
-       the connector's compiled extensions during import. Runs on both
-       ``python3.14`` (where the warning never fires anyway, so the
-       assertion is trivially true) and ``python3.14t`` (where it
-       catches an accidental Py_MOD_GIL_USED slot).
-
-    2. 3.14t-only: after import, ``sys._is_gil_enabled()`` is still
-       ``False``. Catches both the explicit re-enable above and any
-       subtle path that flips the GIL back on at import time.
-
-    3. 3.14-only: after import, ``sys._is_gil_enabled()`` is still
-       ``True``. Catches the symmetric regression where the
-       ``freethreading_compatible`` directive accidentally breaks the
-       GIL-enabled build.
-
-Together (1) + (2) prove the directive does what it should on a
-free-threaded interpreter; (1) + (3) prove it is a no-op on the
-GIL-enabled interpreter.
+Tests run in a subprocess so import-time side-effects are observable
+from a clean state -- pytest may have already imported the connector
+before any test function runs.
 """
 from __future__ import annotations
 
@@ -41,15 +22,11 @@ _HAS_GIL_INTROSPECTION = hasattr(sys, "_is_gil_enabled")
 
 
 def _run_in_subprocess(script: str) -> subprocess.CompletedProcess[str]:
-    """Run ``script`` in a fresh interpreter so the connector's import-time
-    behaviour is observable from a clean state.
+    """Run ``script`` in a fresh interpreter for a deterministic first-import measurement.
 
-    We can't just ``import snowflake.connector`` in-process: pytest itself
-    almost certainly already imported it (via plugins, conftest, or other
-    tests), so any GIL re-enable warning would have fired before the test
-    function even ran, and ``sys.modules`` would already contain the
-    compiled extension. A fresh subprocess gives us a deterministic
-    "first import" measurement every time.
+    In-process import is unusable: pytest has already imported the connector,
+    so ``sys.modules`` caching hides GIL-state changes and warning deduplication
+    suppresses any RuntimeWarning.
     """
     return subprocess.run(
         [sys.executable, "-W", "always", "-c", textwrap.dedent(script)],
@@ -64,20 +41,11 @@ def _run_in_subprocess(script: str) -> subprocess.CompletedProcess[str]:
     reason="sys._is_gil_enabled() requires Python 3.13+",
 )
 def test_connector_import_does_not_emit_gil_reenable_warning() -> None:
-    """Importing the connector must not trigger CPython's defensive GIL
-    re-enable warning.
+    """Importing the connector must not emit a RuntimeWarning about the GIL.
 
-    On a free-threaded interpreter, C extensions that declare
-    ``Py_MOD_GIL_USED`` cause CPython to silently re-enable the GIL at
-    import time and emit a ``RuntimeWarning``. This test asserts that no
-    such warning is emitted -- i.e. every compiled extension the
-    connector ships declares ``Py_MOD_GIL_NOT_USED`` (in our case via
-    Cython's ``freethreading_compatible`` directive).
-
-    The check is also run on GIL-enabled builds, where the warning never
-    fires; the assertion is trivially true there, but the test still
-    exercises the import path so a packaging regression that fails to
-    install the .so at all would surface as an import error.
+    C extensions declaring ``Py_MOD_GIL_USED`` cause CPython to re-enable the
+    GIL at import time and emit such a warning. On GIL-enabled builds the
+    warning never fires, but the test still exercises the import path.
     """
     proc = _run_in_subprocess(
         """
@@ -116,11 +84,10 @@ def test_connector_import_does_not_emit_gil_reenable_warning() -> None:
     "(e.g. `python3.14t` or `python3.14 -X gil=0`)",
 )
 def test_connector_import_leaves_gil_disabled_on_freethreaded_build() -> None:
-    """Negative ack: on a free-threaded build, the GIL stays disabled after
-    importing the connector. Stronger than the warning check because it
-    also catches subtle paths that might flip the GIL back on (e.g. a
-    transitive C dependency that re-enables it at module init time
-    without emitting a warning).
+    """On a free-threaded build, the GIL must remain disabled after import.
+
+    Stronger than the warning check: catches paths that re-enable the GIL
+    without emitting a RuntimeWarning.
     """
     proc = _run_in_subprocess(
         """
@@ -145,11 +112,10 @@ def test_connector_import_leaves_gil_disabled_on_freethreaded_build() -> None:
     reason="requires a GIL-enabled interpreter (e.g. python3.14, " "not python3.14t)",
 )
 def test_connector_import_on_gil_build_leaves_gil_enabled() -> None:
-    """Positive ack: on a regular GIL-enabled 3.13+ build, importing the
-    connector still works and the GIL stays enabled. Catches the
-    symmetric regression where the ``freethreading_compatible`` directive
-    accidentally breaks the GIL build, or where a hand-written extension
-    flips the GIL off unexpectedly.
+    """On a GIL-enabled build, importing the connector must not disable the GIL.
+
+    Catches the symmetric regression where ``freethreading_compatible``
+    accidentally affects a non-free-threaded interpreter.
     """
     proc = _run_in_subprocess(
         """

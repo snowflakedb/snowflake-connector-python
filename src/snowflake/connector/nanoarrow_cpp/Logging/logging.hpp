@@ -31,11 +31,8 @@ class Logger {
 
  private:
   py::UniqueRef m_pyLogger;
-  // Serializes the one-time lazy initialization of m_pyLogger inside log().
-  // Without this, on Python 3.13t/3.14t (--disable-gil) two threads racing
-  // the first call to log() could both observe m_pyLogger.empty() and both
-  // invoke setupPyLogger(), torn-writing the pointer and leaking one of the
-  // PyLogger objects.
+  // Guards once-only init of m_pyLogger; on free-threaded builds (3.13t+)
+  // two racing threads can double-invoke setupPyLogger() and leak a PyLogger.
   std::once_flag m_initOnceFlag;
   const char *const m_name;
   static constexpr int CRITICAL = 50;
