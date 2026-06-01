@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -55,7 +56,15 @@ class AuthByOauthCredentials(AuthByPluginAsync, AuthByOauthCredentialsSync):
     async def reauthenticate(
         self, conn: SnowflakeConnection, **kwargs: Any
     ) -> dict[str, bool]:
-        return AuthByOauthCredentialsSync.reauthenticate(self, conn=conn, **kwargs)
+        # The sync reauthenticate path POSTs to the IdP via urllib3, which
+        # would stall the asyncio event loop. Run it in a worker thread.
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: AuthByOauthCredentialsSync.reauthenticate(
+                self, conn=conn, **kwargs
+            ),
+        )
 
     async def update_body(self, body: dict[Any, Any]) -> None:
         AuthByOauthCredentialsSync.update_body(self, body)

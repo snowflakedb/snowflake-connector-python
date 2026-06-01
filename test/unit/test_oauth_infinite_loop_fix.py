@@ -13,6 +13,8 @@ import pytest
 from snowflake.connector.auth import AuthByOauthCode
 from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
+pytestmark = pytest.mark.skipolddriver
+
 
 @pytest.fixture()
 def mock_connection():
@@ -180,7 +182,8 @@ class TestOAuthReauthenticateNoLoop:
     def test_reauthenticate_calls_request_tokens_directly(
         self, mock_connection, mock_token_cache, omit_oauth_urls_check
     ):
-        """Verify reauthenticate() calls _request_tokens() directly, NOT prepare()."""
+        """Verify reauthenticate() calls _request_tokens() directly, NOT prepare()
+        and never goes through conn.authenticate_with_retry (which is what caused the loop)."""
         auth = AuthByOauthCode(
             "app",
             "clientId",
@@ -205,7 +208,55 @@ class TestOAuthReauthenticateNoLoop:
                 # Should call _request_tokens, NOT prepare()
                 mock_request_tokens.assert_called_once()
                 mock_prepare.assert_not_called()
+                # Must NOT recurse via conn.authenticate_with_retry - that was the bug
+                mock_connection.authenticate_with_retry.assert_not_called()
                 assert result == {"success": True}
+
+    def test_reauthenticate_does_not_recurse_through_authenticate_with_retry(
+        self, mock_connection, mock_token_cache, omit_oauth_urls_check
+    ):
+        """Regression test: simulate the recursion path and verify it terminates.
+
+        The original bug was: reauthenticate -> conn.authenticate_with_retry ->
+        _authenticate -> prepare -> (cache miss) -> _request_tokens. If reauthenticate
+        ever calls authenticate_with_retry again, we recurse forever. This test wires
+        the mock so any such call would loop, then asserts the loop never starts."""
+        auth = AuthByOauthCode(
+            "app",
+            "clientId",
+            "clientSecret",
+            "https://test.snowflakecomputing.com/oauth/authorize",
+            "https://test.snowflakecomputing.com/oauth/token-request",
+            "http://localhost:8080",
+            "session:role:test",
+            "test.snowflakecomputing.com",
+            token_cache=mock_token_cache,
+            refresh_token_enabled=False,
+        )
+        auth._update_cache_keys("test_user")
+
+        # If reauthenticate ever calls conn.authenticate_with_retry, simulate the
+        # framework re-entering reauthenticate - which would have looped pre-fix.
+        recursion_depth = {"count": 0}
+
+        def fake_authenticate_with_retry(*_args, **_kwargs):
+            recursion_depth["count"] += 1
+            if recursion_depth["count"] > 5:
+                raise RuntimeError("Infinite loop detected in reauthenticate")
+            return auth.reauthenticate(conn=mock_connection)
+
+        mock_connection.authenticate_with_retry.side_effect = (
+            fake_authenticate_with_retry
+        )
+
+        with patch.object(
+            auth, "_request_tokens", return_value=("new_access", "new_refresh")
+        ):
+            result = auth.reauthenticate(conn=mock_connection)
+
+        # The recursion guard must never have fired
+        assert recursion_depth["count"] == 0
+        assert result == {"success": True}
 
     def test_reauthenticate_uses_cached_refresh_token(
         self, mock_connection, mock_token_cache, omit_oauth_urls_check
@@ -243,6 +294,37 @@ class TestOAuthReauthenticateNoLoop:
             # Should NOT read from cache again
             mock_token_cache.retrieve.assert_not_called()
             assert result == {"success": True}
+
+    def test_reauthenticate_fails_when_request_tokens_returns_none(
+        self, mock_connection, mock_token_cache, omit_oauth_urls_check
+    ):
+        """Verify reauthenticate() does not return success with a None access token."""
+        auth = AuthByOauthCode(
+            "app",
+            "clientId",
+            "clientSecret",
+            "https://test.snowflakecomputing.com/oauth/authorize",
+            "https://test.snowflakecomputing.com/oauth/token-request",
+            "http://localhost:8080",
+            "session:role:test",
+            "test.snowflakecomputing.com",
+            token_cache=mock_token_cache,
+            refresh_token_enabled=False,
+        )
+        auth._update_cache_keys("test_user")
+
+        # Make _handle_failure observable - the production code routes the failure
+        # through Error.errorhandler_wrapper which can either raise or call back
+        # depending on the connection config. Patching it lets us assert the
+        # failure path was entered without depending on raise/return semantics.
+        with patch.object(auth, "_request_tokens", return_value=(None, None)):
+            with patch.object(auth, "_handle_failure") as mock_handle_failure:
+                result = auth.reauthenticate(conn=mock_connection)
+
+                mock_handle_failure.assert_called_once()
+                assert result == {"success": False}
+                # Must not have stored a None access token in the cache
+                mock_token_cache.store.assert_not_called()
 
 
 class TestOAuthOfflineAccessScope:
@@ -303,6 +385,55 @@ class TestOAuthOfflineAccessScope:
         # Should NOT have offline_access when disabled
         assert "offline_access" not in auth._scope
         assert auth._scope == "session:role:test"
+
+    def test_is_snowflake_as_idp_rejects_host_substring_spoof(
+        self, omit_oauth_urls_check
+    ):
+        """Verify _is_snowflake_as_idp uses parsed hostname, not substring match.
+
+        A URL like "https://acme.snowflakecomputing.com.attacker.example/oauth"
+        contains the host as a substring but parses to a different hostname.
+        Substring match would treat this as Snowflake-as-IdP and (a) skip the
+        offline_access scope, (b) be a security smell. Hostname comparison rejects
+        it correctly.
+        """
+        auth = AuthByOauthCode(
+            "app",
+            "clientId",
+            "clientSecret",
+            "https://acme.snowflakecomputing.com.attacker.example/oauth/authorize",
+            "https://acme.snowflakecomputing.com.attacker.example/oauth/token",
+            "http://localhost:8080",
+            "session:role:test",
+            "acme.snowflakecomputing.com",
+            refresh_token_enabled=True,
+        )
+
+        # The spoof URL must NOT be classified as Snowflake-as-IdP, so
+        # offline_access must be appended (external IdP behavior).
+        assert "offline_access" in auth._scope
+        assert auth._scope == "session:role:test offline_access"
+
+    def test_is_snowflake_as_idp_only_one_url_matches(self, omit_oauth_urls_check):
+        """Verify both authentication_url and token_request_url must match the host.
+
+        If only one of them points at Snowflake and the other points elsewhere,
+        the IdP is effectively external and offline_access should be appended.
+        """
+        auth = AuthByOauthCode(
+            "app",
+            "clientId",
+            "clientSecret",
+            "https://test.snowflakecomputing.com/oauth/authorize",
+            "https://okta.example.com/oauth/token",
+            "http://localhost:8080",
+            "session:role:test",
+            "test.snowflakecomputing.com",
+            refresh_token_enabled=True,
+        )
+
+        # Mixed URLs - treat as external IdP, must append offline_access
+        assert "offline_access" in auth._scope
 
 
 class TestOAuthPrepareUsesCache:

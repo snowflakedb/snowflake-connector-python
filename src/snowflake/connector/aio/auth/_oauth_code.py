@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -72,7 +73,14 @@ class AuthByOauthCode(AuthByPluginAsync, AuthByOauthCodeSync):
     async def reauthenticate(
         self, conn: SnowflakeConnection, **kwargs: Any
     ) -> dict[str, bool]:
-        return AuthByOauthCodeSync.reauthenticate(self, conn=conn, **kwargs)
+        # The sync reauthenticate path opens a browser, blocks on the local
+        # callback socket, and POSTs to the IdP via urllib3 - all of which
+        # would stall the asyncio event loop. Run it in a worker thread.
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: AuthByOauthCodeSync.reauthenticate(self, conn=conn, **kwargs),
+        )
 
     async def update_body(self, body: dict[Any, Any]) -> None:
         AuthByOauthCodeSync.update_body(self, body)

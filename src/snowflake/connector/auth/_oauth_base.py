@@ -295,6 +295,15 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             user=conn.user,
             password=None,
         )
+        if access_token is None:
+            self._handle_failure(
+                conn=conn,
+                ret={
+                    "code": ER_FAILED_TO_REQUEST,
+                    "message": "Failed to obtain a new OAuth access token during reauthentication",
+                },
+            )
+            return {"success": False}
         self._store_tokens(access_token, refresh_token)
 
         return {"success": True}

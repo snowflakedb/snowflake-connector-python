@@ -422,9 +422,18 @@ You can close this window now and go back where you started from.
     def _is_snowflake_as_idp(
         authentication_url: str, token_request_url: str, host: str
     ) -> bool:
-        return (authentication_url == "" or host in authentication_url) and (
-            token_request_url == "" or host in token_request_url
-        )
+        # Compare parsed URL hostnames (not substring) so that URLs like
+        # "https://<host>.attacker.example/..." are not treated as Snowflake.
+        def _matches_host(url: str) -> bool:
+            if url == "":
+                return True
+            try:
+                parsed_host = urllib.parse.urlparse(url).hostname
+            except ValueError:
+                return False
+            return parsed_host is not None and parsed_host == host
+
+        return _matches_host(authentication_url) and _matches_host(token_request_url)
 
     def _eligible_for_default_client_credentials(
         self,
