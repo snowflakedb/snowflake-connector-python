@@ -15,7 +15,7 @@ def is_valid_url(url: str) -> bool:
     """Confirms if the provided URL is a valid HTTP/HTTPS URL."""
     if not isinstance(url, str):
         return False
-    if any(c < "\x20" for c in url):
+    if any(c <= "\x20" for c in url):
         return False
     try:
         parsed = urllib.parse.urlparse(url)
