@@ -54,9 +54,9 @@ class _OAuthTokensMixin:
         if self._refresh_token_enabled:
             self._refresh_token = None
         self._token_cache = token_cache
+        self._idp_host = idp_host
         if self._token_cache:
             logger.debug("token cache is going to be used if needed")
-            self._idp_host = idp_host
             self._access_token_key: TokenKey | None = None
             if self._refresh_token_enabled:
                 self._refresh_token_key: TokenKey | None = None
@@ -190,7 +190,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         """
         host = (self._idp_host or "").lower()
         if host.endswith(".snowflakecomputing.com") or host.endswith(
-                ".snowflakecomputing.cn"
+            ".snowflakecomputing.cn"
         ):
             return False
         if "refresh_token" in (self._scope or "").split():

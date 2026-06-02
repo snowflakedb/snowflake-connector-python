@@ -12,8 +12,8 @@ class _DummyOAuth(AuthByOAuthBase):
     def _request_tokens(self, **kwargs):  # pragma: no cover - not exercised
         raise NotImplementedError
 
-    def reset_secrets(self) -> None:  # pragma: no cover
-        pass
+    def _get_oauth_type_id(self) -> str:  # pragma: no cover
+        return "dummy"
 
 
 @pytest.mark.parametrize(
