@@ -353,10 +353,23 @@ class AuthByWebBrowser(AuthByPlugin):
             msg = f"""
 <!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <link rel="icon" href="data:,">
-<title>SAML Response for Snowflake</title></head>
+<title>SAML Response for Snowflake</title>
+<script type="text/javascript">
+function closeWindow()
+{{
+ window.open('', '_parent', '');
+ window.close();
+}}
+
+window.onload = function ()
+{{
+ setTimeout(closeWindow, 5000);
+}}
+</script></head>
 <body>
 Your identity was confirmed and propagated to Snowflake {self._application}.
-You can close this window now and go back where you started from.
+This window is set to close automatically in 5s or you can close this window manually.
+You can go back where you started from.
 </body></html>"""
         content.append(f"Content-Length: {len(msg)}")
         content.append("")
