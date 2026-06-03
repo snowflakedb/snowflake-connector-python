@@ -1,5 +1,8 @@
 import json
+import types
+import uuid
 from random import shuffle
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -450,3 +453,144 @@ def test_eviction_order():
     qcc._remove_qce(qcc._last())
 
     assert len(qcc) == 0
+
+
+@pytest.mark.parametrize("success", [True, False], ids=["success", "failure"])
+def test_qcc_updated_regardless_of_query_success(success):
+    """Verify cmd_query() merges queryContext from the server response even when the query fails.
+
+    Regression test for SNOW-3010877: the client must merge queryContext whenever
+    the server sends a valid, parseable response, regardless of query status.
+    This ensures session consistency for hybrid tables across GS nodes.
+    """
+    from snowflake.connector.connection import SnowflakeConnection
+
+    # Setup: mock connection with real QCC and real QCC methods (not lambda copies).
+    # Only the REST layer is mocked — the full cmd_query → set_query_context → QCC
+    # chain uses real production code.
+    conn = MagicMock()
+    conn._disable_query_context_cache = False
+    conn.is_query_context_cache_disabled = False
+    conn.query_context_cache = QueryContextCache(5)
+    conn.query_context_cache_size = 5
+
+    # Bind the REAL get/set_query_context methods from SnowflakeConnection.
+    # This ensures the test breaks if those methods are changed in ways that
+    # affect QCC merging — no frozen lambda copies.
+    conn.get_query_context = types.MethodType(
+        SnowflakeConnection.get_query_context, conn
+    )
+    conn.set_query_context = types.MethodType(
+        SnowflakeConnection.set_query_context, conn
+    )
+
+    # Pre-populate QCC with an initial entry
+    conn.query_context_cache.insert(1, 100, 1, "initial")
+    conn.query_context_cache._sync_priority_map()
+    assert len(conn.query_context_cache) == 1
+
+    # Mock server response — includes queryContext regardless of success/failure
+    expected_code = "0" if success else "1234"
+    expected_message = "" if success else "Query failed"
+    new_qc_entry = {"id": 2, "timestamp": 200, "priority": 2, "context": "from_server"}
+    conn.rest.request.return_value = {
+        "success": success,
+        "code": expected_code,
+        "message": expected_message,
+        "data": {
+            "queryId": "test-query-id",
+            "queryContext": {"entries": [new_qc_entry]},
+        },
+    }
+
+    # Act: call cmd_query directly (unbound method on mock self)
+    ret = SnowflakeConnection.cmd_query(conn, "SELECT 1", 1, uuid.uuid4())
+
+    # Assert: every assertion runs unconditionally for every parametrization
+    assert ret["success"] == success
+    assert ret["code"] == expected_code, "Response code must be preserved"
+    assert ret["message"] == expected_message, "Response message must be preserved"
+    assert (
+        len(conn.query_context_cache) == 2
+    ), f"QCC should contain 2 entries (initial + from_server) when success={success}"
+    entry_ids = {e.id for e in conn.query_context_cache._get_elements()}
+    assert 1 in entry_ids, "Original entry should still be present"
+    assert 2 in entry_ids, "New entry from server response should have been merged"
+
+
+def test_qcc_not_shrunk_after_failed_query_with_hybrid_table():
+    """SNOW-3010877: QCC must not shrink when a query on a hybrid table fails.
+
+    Simulates the hybrid table scenario: a successful INSERT populates
+    the QCC with 2 entries (main + DPO), then a duplicate-key INSERT
+    fails but the server still sends queryContext in the error response.
+    The connector must merge it so the cache does not shrink.
+    """
+    from snowflake.connector.connection import SnowflakeConnection
+
+    conn = MagicMock()
+    conn._disable_query_context_cache = False
+    conn.is_query_context_cache_disabled = False
+    conn.query_context_cache = QueryContextCache(5)
+    conn.query_context_cache_size = 5
+
+    conn.get_query_context = types.MethodType(
+        SnowflakeConnection.get_query_context, conn
+    )
+    conn.set_query_context = types.MethodType(
+        SnowflakeConnection.set_query_context, conn
+    )
+
+    # Q1 — successful insert: server returns queryContext with 2 entries
+    conn.rest.request.return_value = {
+        "success": True,
+        "data": {
+            "queryId": "success-query-id",
+            "queryContext": {
+                "entries": [
+                    {"id": 0, "timestamp": 100, "priority": 0, "context": "main_ctx"},
+                    {"id": 1, "timestamp": 100, "priority": 1, "context": "ht_dpo_ctx"},
+                ]
+            },
+        },
+    }
+    SnowflakeConnection.cmd_query(
+        conn, "INSERT INTO ht VALUES ('k1','v1')", 1, uuid.uuid4()
+    )
+    qcc_after_success = len(conn.query_context_cache)
+    assert qcc_after_success == 2, "QCC should have 2 entries after successful query"
+
+    # Q2 — duplicate key insert fails, but server still sends queryContext
+    conn.rest.request.return_value = {
+        "success": False,
+        "code": "100072",
+        "message": "Duplicate key value violates unique constraint",
+        "data": {
+            "queryId": "failed-query-id",
+            "queryContext": {
+                "entries": [
+                    {
+                        "id": 0,
+                        "timestamp": 200,
+                        "priority": 0,
+                        "context": "main_ctx_v2",
+                    },
+                    {
+                        "id": 1,
+                        "timestamp": 200,
+                        "priority": 1,
+                        "context": "ht_dpo_ctx_v2",
+                    },
+                ]
+            },
+        },
+    }
+    SnowflakeConnection.cmd_query(
+        conn, "INSERT INTO ht VALUES ('k1','v1')", 2, uuid.uuid4()
+    )
+
+    qcc_after_failure = len(conn.query_context_cache)
+    assert qcc_after_failure >= qcc_after_success, (
+        f"QCC should not shrink after a failed query: "
+        f"before={qcc_after_success}, after={qcc_after_failure}"
+    )

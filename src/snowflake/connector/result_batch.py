@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import gzip
 import json
 import time
 from base64 import b64decode
@@ -51,6 +52,25 @@ FIELD_TYPE_TO_PA_TYPE: list[Callable[[ResultMetadataV2], DataType]] = []
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
 SSE_C_KEY = "x-amz-server-side-encryption-customer-key"
 SSE_C_AES = "AES256"
+
+_GZIP_MAGIC = b"\x1f\x8b"
+
+
+def _ensure_decompressed(response: Response) -> None:
+    """Decompress the response body if HTTP-level gzip decompression was skipped.
+
+    Cloud storage (S3/GCS/Azure) may serve result-set chunks as raw gzip blobs
+    without a ``Content-Encoding: gzip`` header, in which case urllib3's
+    transparent decompression never activates.  Detect this by inspecting the
+    cached *response.content* for the gzip magic number and decompress in-place.
+    """
+    content = response.content
+    if isinstance(content, bytes) and content[:2] == _GZIP_MAGIC:
+        logger.debug(
+            "Response body starts with gzip magic number but was not "
+            "decompressed by the HTTP stack; decompressing explicitly."
+        )
+        response._content = gzip.decompress(content)
 
 
 def _create_nanoarrow_iterator(
@@ -418,6 +438,8 @@ class ResultBatch(abc.ABC):
         self._metrics[DownloadMetrics.download.value] = (
             download_metric.get_timing_millis()
         )
+
+        _ensure_decompressed(response)
         return response
 
     @abc.abstractmethod

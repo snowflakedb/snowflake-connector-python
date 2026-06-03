@@ -66,8 +66,8 @@ class TestSecondaryRolesParameterAsync:
             ("NONE", "NONE"),
             ("none", "NONE"),
             ("None", "NONE"),
-            ("DEFAULT", "DEFAULT"),
-            ("default", "DEFAULT"),
+            ("IMPLICIT", "IMPLICIT"),
+            ("implicit", "IMPLICIT"),
         ],
     )
     @pytest.mark.anyio

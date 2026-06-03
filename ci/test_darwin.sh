@@ -1,11 +1,11 @@
-#!/bin/bash -e
+#!/bin/bash -e -l
 #
 # Test Snowflake Connector on a Darwin Jenkins slave
 # NOTES:
-#   - Versions to be tested should be passed in as the first argument, e.g: "3.9 3.10". If omitted 3.9-3.13 will be assumed.
+#   - Versions to be tested should be passed in as the first argument, e.g: "3.10 3.11". If omitted 3.10-3.14 will be assumed.
 #   - This script uses .. to download the newest wheel files from S3
 
-PYTHON_VERSIONS="${1:-3.9 3.10 3.11 3.12 3.13}"
+PYTHON_VERSIONS="${1:-3.10 3.11 3.12 3.13 3.14}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 PARAMETERS_DIR="${CONNECTOR_DIR}/.github/workflows/parameters/public"
@@ -31,7 +31,7 @@ python3.12 -m venv venv
 python3.12 -m pip install -U tox>=4
 
 # Fetch wiremock
-curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output ${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar
+curl https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/api/maven/maven-remote/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output ${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar
 
 # Run tests
 cd $CONNECTOR_DIR

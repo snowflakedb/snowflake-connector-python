@@ -10,8 +10,7 @@ import threading
 import time
 from enum import Enum
 from inspect import stack
-from pathlib import Path
-from random import choice
+from secrets import choice
 from threading import Timer
 from uuid import UUID
 
@@ -110,30 +109,29 @@ def get_application_path() -> str:
         return "unknown"
 
 
-_SPCS_TOKEN_ENV_VAR_NAME = "SF_SPCS_TOKEN_PATH"
-_SPCS_TOKEN_DEFAULT_PATH = "/snowflake/session/spcs_token"
+_SPCS_ENV_VAR = "SNOWFLAKE_RUNNING_INSIDE_SPCS"
+_SPCS_TOKEN_PATH = "/snowflake/session/spcs_token"
 
 
 def get_spcs_token() -> str | None:
-    """Return the SPCS token read from the configured path, or None.
+    """Return the SPCS token if running inside an SPCS container, or None.
 
-    The path is determined by the SF_SPCS_TOKEN_PATH environment variable,
-    falling back to ``/snowflake/session/spcs_token`` when unset.
+    The token is only read when the SNOWFLAKE_RUNNING_INSIDE_SPCS environment
+    variable is set.  The file at /snowflake/session/spcs_token is read as
+    UTF-8 text and leading/trailing whitespace is stripped.
 
-    Any I/O errors or missing/empty files are treated as \"no token\" and
-    will not cause authentication to fail.
+    Any read failure is logged as a warning and None is returned.
     """
-    path = os.getenv(_SPCS_TOKEN_ENV_VAR_NAME) or _SPCS_TOKEN_DEFAULT_PATH
+    if not os.environ.get(_SPCS_ENV_VAR):
+        return None
     try:
-        if not os.path.isfile(path):
-            return None
-        with open(path, encoding="utf-8") as f:
+        with open(_SPCS_TOKEN_PATH, encoding="utf-8") as f:
             token = f.read().strip()
         if not token:
             return None
         return token
-    except Exception as exc:  # pragma: no cover - best-effort logging only
-        logger.debug("Failed to read SPCS token from %s: %s", path, exc)
+    except Exception as exc:
+        logger.warning("Failed to read SPCS token from %s: %s", _SPCS_TOKEN_PATH, exc)
         return None
 
 
@@ -186,28 +184,33 @@ class _CoreLoader:
             return "unknown"
 
     @staticmethod
+    def _libc_ver() -> tuple[str, str]:
+        """Return (libc_name, libc_version) from the platform."""
+        return platform.libc_ver()
+
+    @staticmethod
     def _detect_libc() -> str:
         """Detect libc type on Linux (glibc vs musl)."""
-        # Check if we're on Alpine/musl
-        if Path("/etc/alpine-release").exists():
-            return "musl"
+        lib, _ = _CoreLoader._libc_ver()
+        if lib == "glibc":
+            return "glibc"
+        return "musl"
 
-        # Check for musl by looking at the libc library
-        try:
-            import subprocess
+    @staticmethod
+    def get_libc_version() -> str | None:
+        """Return libc version from :func:`platform.libc_ver`, or None if unknown."""
+        _, version = _CoreLoader._libc_ver()
+        if not version:
+            return None
+        stripped = version.strip()
+        return stripped or None
 
-            result = subprocess.run(
-                ["ldd", "--version"],
-                capture_output=True,
-                text=True,
-            )
-            if "musl" in result.stdout.lower() or "musl" in result.stderr.lower():
-                return "musl"
-        except Exception:
-            pass
-
-        # Default to glibc
-        return "glibc"
+    @staticmethod
+    def get_libc_family() -> str | None:
+        """Return libc family for Linux (glibc or musl), otherwise None."""
+        if _CoreLoader._detect_os() != "linux":
+            return None
+        return _CoreLoader._detect_libc()
 
     @staticmethod
     def _get_platform_subdir() -> str:
@@ -347,6 +350,8 @@ def build_minicore_usage_for_session() -> dict[str, str | None]:
         "ISA": ISA,
         "CORE_VERSION": _core_loader.get_core_version(),
         "CORE_FILE_NAME": _core_loader.get_file_name(),
+        "LIBC_FAMILY": _CoreLoader.get_libc_family(),
+        "LIBC_VERSION": _CoreLoader.get_libc_version(),
     }
 
 

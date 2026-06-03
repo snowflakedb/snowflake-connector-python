@@ -66,8 +66,8 @@ class TestSecondaryRolesParameter:
             ("NONE", "NONE"),
             ("none", "NONE"),
             ("None", "NONE"),
-            ("DEFAULT", "DEFAULT"),
-            ("default", "DEFAULT"),
+            ("IMPLICIT", "IMPLICIT"),
+            ("implicit", "IMPLICIT"),
         ],
     )
     def test_secondary_roles_included_in_auth_body(

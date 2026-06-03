@@ -1729,12 +1729,14 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
             fetch_next_fn = getattr(iterate_obj, fetch_method)
             # first fetch doesn't raise error
             fetch_next_fn()
+            # Python 3.14 changed datetime.fromtimestamp() ValueError from
+            # "year 10000 is out of range" to "year must be in 1..9999, not 10000"
             with pytest.raises(
                 InterfaceError,
                 match=(
                     "date value out of range"
                     if IS_WINDOWS
-                    else "year 10000 is out of range"
+                    else "(year 10000 is out of range|year must be in 1\\.\\.9999, not 10000)"
                 ),
             ):
                 fetch_next_fn()
@@ -1751,9 +1753,11 @@ def test_out_of_range_year_followed_by_correct_year(conn_cnx, result_format):
     ) as con:
         with con.cursor() as cur:
             cur.execute("select TO_DATE('10000-01-01'), TO_DATE('9999-01-01')")
+            # Python 3.14 changed datetime ValueError from "out of range"
+            # to "year must be in 1..9999, not 10000"
             with pytest.raises(
                 InterfaceError,
-                match="out of range",
+                match="(out of range|year must be in 1\\.\\.9999, not 10000)",
             ):
                 cur.fetchall()
 

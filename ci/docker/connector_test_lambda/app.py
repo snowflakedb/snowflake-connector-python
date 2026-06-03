@@ -7,7 +7,9 @@ from subprocess import PIPE, Popen
 
 LOGGER = logging.getLogger(__name__)
 REPO_PATH = "/home/user/snowflake-connector-python"
-PY_SHORT_VER = f"{sys.version_info[0]}{sys.version_info[1]}"  # 39, 310, 311, 312, 313
+PY_SHORT_VER = (
+    f"{sys.version_info[0]}{sys.version_info[1]}"  # 39, 310, 311, 312, 313, 314
+)
 ARCH = "x86"  # x86, aarch64
 
 

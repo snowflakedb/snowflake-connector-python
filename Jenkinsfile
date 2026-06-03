@@ -4,7 +4,7 @@ import groovy.json.JsonOutput
 
 
 timestamps {
-  node('parallelizable-c7') {
+  node('parallelizable-snowos') {
     stage('checkout') {
       scmInfo = checkout scm
       println("${scmInfo}")
@@ -48,22 +48,13 @@ timestamps {
       parallel(
       'Test': {
         stage('Test') {
-            try {
-            def commit_hash = "main" // default which we want to override
-            def bptp_tag = "bptp-stable"
-            def response = authenticatedGithubCall("https://api.github.com/repos/snowflakedb/snowflake/git/ref/tags/${bptp_tag}")
-            commit_hash = response.object.sha
-            // Append the bptp-stable commit sha to params
-            params += [string(name: 'svn_revision', value: commit_hash)]
-            } catch(Exception e) {
-            println("Exception computing commit hash from: ${response}")
-            }
           parallel (
             'Test Python 39': { build job: 'RT-PyConnector39-PC',parameters: params},
             'Test Python 310': { build job: 'RT-PyConnector310-PC',parameters: params},
             'Test Python 311': { build job: 'RT-PyConnector311-PC',parameters: params},
             'Test Python 312': { build job: 'RT-PyConnector312-PC',parameters: params},
             'Test Python 313': { build job: 'RT-PyConnector313-PC',parameters: params},
+            'Test Python 314': { build job: 'RT-PyConnector314-PC',parameters: params},
             'Test Python 39 OldDriver': { build job: 'RT-PyConnector39-OldDriver-PC',parameters: params},
             'Test Python 39 FIPS': { build job: 'RT-FIPS-PyConnector39',parameters: params},
             )
@@ -122,7 +113,7 @@ timestamps {
 
 
 pipeline {
-  agent { label 'regular-memory-node' }
+  agent { label 'regular-memory-node-snowos' }
   options { timestamps() }
   environment {
     COMMIT_SHA_LONG = sh(returnStdout: true, script: "echo \$(git rev-parse " + "HEAD)").trim()

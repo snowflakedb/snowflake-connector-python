@@ -7,6 +7,41 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v4.6.0(May 28,2026)
+  - Dropped support for Python 3.9. The minimum supported version is now Python 3.10.
+  - Fixed sdist to only install the minicore binary matching the current platform (SNOW-3526469). Previous 4.x releases copied every platform's minicore `.so`/`.dylib`/`.dll` into the install prefix, breaking downstream packagers (e.g. Homebrew) whose audits reject foreign-arch binaries.
+  - Added one in-band telemetry record per successful login describing which connection-identifier fields the user supplied (`account_provided`, `account_with_region`, `account_org_provided`, `region_provided`, `host_provided`). No hostname or account value is included. This is gated by the existing server-side `CLIENT_TELEMETRY_ENABLED` parameter and can additionally be disabled locally by setting `SF_TELEMETRY_DISABLE_CONNECTION_SHAPE=true`. The telemetry collection is time-boxed and will be removed in a future release.
+  - Bumped up vendored `urllib3` to `2.7.0`
+
+- v4.5.0(May 12,2026)
+  - Fixed `write_pandas` temp stage name collisions (SNOW-3481510). The old PRNG could produce identical name sequences in forked processes (e.g. Notebook kernels), causing `CREATE TEMPORARY STAGE` to fail with "Object already exists".
+  - Replaced third-party download URLs in CI scripts and Dockerfiles with Snowflake Artifactory to improve supply-chain security.
+  - Fixed a security bug in Okta SAML authentication where `_is_prefix_equal()` compared `url1`'s port against itself instead of `url2`'s port, allowing an attacker to redirect credentials to a different port on the same hostname. Also fixed the default port fallback to use `int` instead of `str` for correct comparison when one URL omits the port.
+  - Fixed `executemany` with `paramstyle="pyformat"` to correctly locate the VALUES clause using a balanced-parentheses parser instead of a greedy regex. This fixes incorrect behaviour with nested function calls such as SQLAlchemy `@compiles VARIANT` patterns (e.g. `PARSE_JSON(%(col)s)`) and subquery-form INSERTs (SNOW-298756).
+  - Added ECDSA key support (ES256, ES384, ES512) for key-pair authentication.
+  - Added HTTP 307/308 redirect status codes to the retryable set as defense-in-depth, with redirect-aware logging in both sync and async paths.
+  - Consolidated keyring token cache to use a single service name with hashed account keys, reducing macOS Keychain password prompts. Legacy entries are auto-migrated on first read.
+  - Added support for AWS outbound JWT token attestation for Workload Identity Federation (WIF). This can be enabled by setting the `SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN` environment variable to `true`. Note: This environment variable will be removed in a future release.
+  - Removed dynamic class deserialization from the OCSP response validation cache to prevent arbitrary code execution via crafted cache files (SNOW-2439940). The `SNOWFLAKE_ENABLE_CUSTOM_REVOCATION_ERRORS` environment variable is now a no-op.
+  - Updated SPCS token injection to gate on `SNOWFLAKE_RUNNING_INSIDE_SPCS` environment variable, trim whitespace, and remove configurable token path.
+  - GCP WIF attestation now uses hostname `metadata.google.internal` instead of the IPv4 link-local address, so it works on IPv6-only GCP VMs.
+  - Fixed a bug where `write_pandas()` with `auto_create_table=False` and `overwrite=True` would execute `CREATE TABLE IF NOT EXISTS`, which required unnecessary `OWNERSHIP` privilege on the table. Now only `TRUNCATE TABLE` is executed in this case. Note: users who relied on the table being implicitly created despite `auto_create_table=False` should set `auto_create_table=True` instead.
+  - Added validation of the `account` connection parameter so malformed identifiers (for example path-like values or labels outside letters, digits, `_`, and `-`) are rejected with `ProgrammingError` before login (SNOW-1902886).
+  - Added support for Azure Workload Identity Federation impersonation, allowing a managed identity to authenticate as a service principal.
+
+- v4.4.0(March 25,2026)
+  - Bump the lower boundary of cryptography to 46.0.5 due to CVE-2026-26007.
+  - Added support for Python 3.14.
+  - Removed pyOpenSSL upper bound dependency constraint to allow installation of pyOpenSSL 26.0.0+, which includes a fix for GHSA-vp96-hxj8-p424.
+  - Fixed Azure IMDS `Metadata` header to use lowercase `"true"` instead of `"True"`, which caused 400 errors during Azure Workload Identity Federation authentication.
+  - Fixed default `crl_download_max_size` to be 20MB instead of 200MB, as the previous value was set too high and could cause out-of-memory issues.
+  - Fixed a bug where Azure GET commands would incorrectly set the file status to UPLOADED instead of preserving the DOWNLOADED status during metadata retrieval.
+  - Renamed the environment variable for skipping config file permission warnings from `SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE` to `SF_SKIP_TOKEN_FILE_PERMISSIONS_VERIFICATION`. The old variable is still supported but emits a deprecation warning.
+  - Fixed `unsafe_skip_file_permissions_check` flag not being respected when reading `connections.toml`.
+  - Fixed JSONDecodeError in result_batch._load() when fetching large result sets
+  - Fixed validation ordering for `client_session_keep_alive_heartbeat_frequency`.
+
+
 - v4.3.0(February 12,2026)
   - Ensured proper list conversion - the converter runs to_snowflake on all list elements.
   - Made the parameter `server_session_keep_alive` in `SnowflakeConnection` skip checking for pending async queries, providing faster connection close times especially when many async queries are executed.
@@ -61,6 +96,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.18.0(October 03,2025)
   - Added support for pandas conversion for Day-time and Year-Month Interval types
+* Fixed the return type of iterating over a cursor
 
 - v3.17.4(September 22,2025)
   - Added support for intermediate certificates as roots when they are stored in the trust store

@@ -1,3 +1,3 @@
 # Update this for the versions
-# Don't change the forth version number from None
-VERSION = (4, 3, 0, None)
+# Don't change the fourth version number from None
+VERSION = (4, 6, 0, None)

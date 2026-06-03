@@ -38,6 +38,11 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from . import errors
+from ._connection_identifier_shape import (
+    ConnectionIdentifierShape,
+    build_shape_telemetry_message,
+    record_input_shape,
+)
 from ._query_context_cache import QueryContextCache
 from ._utils import (
     _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
@@ -142,7 +147,13 @@ from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPO
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
-from .util_text import construct_hostname, expand_tilde, parse_account, split_statements
+from .util_text import (
+    construct_hostname,
+    expand_tilde,
+    is_valid_account_identifier,
+    parse_account,
+    split_statements,
+)
 from .wif_util import AttestationProvider
 
 if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
@@ -154,6 +165,13 @@ DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
 MAX_CLIENT_FETCH_THREADS = 1024
 DEFAULT_BACKOFF_POLICY = exponential_backoff()
+
+# Local kill switch for the client_connection_identifier_shape in-band
+# telemetry event (case-insensitive "true" disables emission). Sibling
+# drivers use the same env-var name for the same purpose.
+# TODO(SNOW-3548350): remove together with the telemetry emission
+# (target: 2026-11-30).
+_DISABLE_CONNECTION_SHAPE_ENV = "SF_TELEMETRY_DISABLE_CONNECTION_SHAPE"
 
 
 def DefaultConverterClass() -> type:
@@ -693,12 +711,25 @@ class SnowflakeConnection:
         self._log_telemetry_imported_packages()
         self._log_nanoarrow_import()
         self._log_minicore_import()
+        self._log_connection_identifier_shape()
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
         # Set up the file operation parser and stream downloader.
         self._file_operation_parser = FileOperationParser(self)
         self._stream_downloader = StreamDownloader(self)
+
+    def _validate_account(self, account_str):
+        if not is_valid_account_identifier(account_str):
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Invalid account identifier: only letters, digits, '_' and '-' allowed; no dots or slashes",
+                    "errno": ER_NO_ACCOUNT_NAME,
+                },
+            )
 
     # Deprecated
     @property
@@ -1595,6 +1626,7 @@ class SnowflakeConnection:
                     not in (
                         AttestationProvider.GCP,
                         AttestationProvider.AWS,
+                        AttestationProvider.AZURE,
                     )
                 ):
                     Error.errorhandler_wrapper(
@@ -1602,7 +1634,7 @@ class SnowflakeConnection:
                         None,
                         ProgrammingError,
                         {
-                            "msg": "workload_identity_impersonation_path is currently only supported for GCP and AWS.",
+                            "msg": "workload_identity_impersonation_path is currently only supported for GCP, AWS, and AZURE.",
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
@@ -1636,6 +1668,18 @@ class SnowflakeConnection:
     def __config(self, **kwargs):
         """Sets up parameters in the connection object."""
         logger.debug("__config")
+        # Capture connection-identifier shape from the raw user-supplied kwargs
+        # before any normalization (the setattr loop below, construct_hostname
+        # at "account" handling, or parse_account further down) runs.
+        # Idempotent: only set on the first __config call so the original
+        # user intent isn't overwritten by a later reconfigure with derived
+        # values. Consumed by _log_connection_identifier_shape.
+        # TODO(SNOW-3548350): remove with the telemetry emission
+        # (target: 2026-11-30).
+        if getattr(self, "_connection_identifier_shape", None) is None:
+            self._connection_identifier_shape: ConnectionIdentifierShape = (
+                record_input_shape(kwargs)
+            )
         # Handle special cases first
         if "sequence_counter" in kwargs:
             self.sequence_counter = kwargs["sequence_counter"]
@@ -1832,8 +1876,11 @@ class SnowflakeConnection:
                 ProgrammingError,
                 {"msg": "Account must be specified", "errno": ER_NO_ACCOUNT_NAME},
             )
-        if self._account and "." in self._account:
-            self._account = parse_account(self._account)
+
+        if self._account:
+            self._validate_account(self._account)
+            if "." in self._account:
+                self._account = parse_account(self._account)
 
         if not isinstance(self._backoff_policy, Callable) or not isinstance(
             self._backoff_policy(), Iterator
@@ -2272,20 +2319,22 @@ class SnowflakeConnection:
         real_max = int(self.rest.master_validity_in_seconds / 4)
         real_min = int(real_max / 4)
 
-        # ensure the type is integer
-        self._client_session_keep_alive_heartbeat_frequency = int(
-            self.client_session_keep_alive_heartbeat_frequency
-        )
+        value = self.client_session_keep_alive_heartbeat_frequency
 
-        if self.client_session_keep_alive_heartbeat_frequency is None:
+        if value is None:
             # This is an unlikely scenario but covering it just in case.
             self._client_session_keep_alive_heartbeat_frequency = real_min
-        elif self.client_session_keep_alive_heartbeat_frequency > real_max:
-            self._client_session_keep_alive_heartbeat_frequency = real_max
-        elif self.client_session_keep_alive_heartbeat_frequency < real_min:
-            self._client_session_keep_alive_heartbeat_frequency = real_min
+            return real_min
 
-        return self.client_session_keep_alive_heartbeat_frequency
+        value = int(value)
+
+        if value > real_max:
+            value = real_max
+        elif value < real_min:
+            value = real_min
+
+        self._client_session_keep_alive_heartbeat_frequency = value
+        return value
 
     def _validate_client_prefetch_threads(self) -> int:
         if self.client_prefetch_threads <= 0:
@@ -2559,6 +2608,47 @@ class SnowflakeConnection:
                     TelemetryField.KEY_TYPE.value: TelemetryField.NANOARROW_IMPORT.value,
                     TelemetryField.KEY_VALUE.value: build_nanoarrow_usage_for_telemetry(),
                 },
+                timestamp=ts,
+                connection=self,
+            )
+        )
+
+    def _log_connection_identifier_shape(self):
+        """Emit a single client_connection_identifier_shape in-band telemetry
+        record describing which connection-identifier fields the user supplied.
+
+        Honors a local environment kill switch
+        ``SF_TELEMETRY_DISABLE_CONNECTION_SHAPE`` (case-insensitive ``"true"``)
+        and the post-login ``CLIENT_TELEMETRY_ENABLED`` server parameter (via
+        ``self.telemetry_enabled`` consulted inside ``_log_telemetry``).
+
+        TODO(SNOW-3548350): remove together with the supporting
+        ``ConnectionIdentifierShape`` capture (target: 2026-11-30).
+        """
+        # Mirrors gosnowflake's ``strings.EqualFold(os.Getenv(...), "true")``:
+        # case-insensitive ``"true"`` only, with NO surrounding-whitespace
+        # tolerance. Keeping the comparison strict here means a shell
+        # accidentally exporting ``" true "`` (with stray whitespace) leaves
+        # the emission enabled instead of silently disabling it, matching the
+        # Go / Node.js / JDBC siblings byte-for-byte.
+        if os.environ.get(_DISABLE_CONNECTION_SHAPE_ENV, "").lower() == "true":
+            logger.debug(
+                "connection-identifier-shape telemetry disabled via %s",
+                _DISABLE_CONNECTION_SHAPE_ENV,
+            )
+            return
+        shape: ConnectionIdentifierShape | None = getattr(
+            self, "_connection_identifier_shape", None
+        )
+        if shape is None:
+            logger.debug(
+                "connection-identifier-shape telemetry skipped: shape not captured"
+            )
+            return
+        ts = get_time_millis()
+        self._log_telemetry(
+            TelemetryData.from_telemetry_data_dict(
+                from_dict=build_shape_telemetry_message(shape),
                 timestamp=ts,
                 connection=self,
             )
