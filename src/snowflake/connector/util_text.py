@@ -306,6 +306,8 @@ def _concatenate_statements(
 
 def construct_hostname(region: str | None, account: str) -> str:
     """Constructs hostname from region and account."""
+    # RFC 952: underscores are not valid in hostnames
+    account = account.replace("_", "-")
 
     def _is_china_region(r: str) -> bool:
         # This is consistent with the Go driver:
