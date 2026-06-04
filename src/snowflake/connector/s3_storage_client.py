@@ -329,7 +329,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         if query_parts is None:
             query_parts = {}
 
-        for redirect_count in range(MAX_S3_REDIRECTS):
+        for _ in range(MAX_S3_REDIRECTS):
             response = self._send_single_request_with_authentication(
                 url=url,
                 verb=verb,
@@ -345,44 +345,49 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             if response.status_code not in ALL_REDIRECT_STATUS_CODES:
                 return response
 
-            # Handle redirect
-            if response.status_code in METHOD_CHANGING_REDIRECTS:
-                if verb not in ("GET", "HEAD"):
-                    raise OperationalError(
-                        msg=f"S3 returned {response.status_code} for {verb} request. "
-                        f"Expected 307/308 for method-preserving redirect.",
-                        errno=253003,
-                    )
-
-            location = response.headers.get("Location")
-            if not location:
-                raise OperationalError(
-                    msg=f"S3 returned {response.status_code} without Location header",
-                    errno=253003,
-                )
-
-            bucket_region = response.headers.get("x-amz-bucket-region")
-            if not bucket_region:
-                raise OperationalError(
-                    msg=f"S3 returned {response.status_code} without x-amz-bucket-region header",
-                    errno=253003,
-                )
-
-            logger.debug(
-                "S3 redirect: %d from %s to %s (region: %s)",
-                response.status_code,
-                url,
-                location,
-                bucket_region,
-            )
-
-            url = location
-            self.region_name = bucket_region
+            url = self._handle_s3_redirect(response, verb, url)
 
         raise OperationalError(
             msg=f"Too many S3 redirects (max {MAX_S3_REDIRECTS})",
             errno=253003,
         )
+
+    def _handle_s3_redirect(
+        self, response: requests.Response, verb: str, original_url: str
+    ) -> str:
+        """Handle S3 redirect response, update region, and return new URL."""
+        if response.status_code in METHOD_CHANGING_REDIRECTS:
+            if verb not in ("GET", "HEAD"):
+                raise OperationalError(
+                    msg=f"S3 returned {response.status_code} for {verb} request. "
+                    f"Expected 307/308 for method-preserving redirect.",
+                    errno=253003,
+                )
+
+        location = response.headers.get("Location")
+        if not location:
+            raise OperationalError(
+                msg=f"S3 returned {response.status_code} without Location header",
+                errno=253003,
+            )
+
+        bucket_region = response.headers.get("x-amz-bucket-region")
+        if not bucket_region:
+            raise OperationalError(
+                msg=f"S3 returned {response.status_code} without x-amz-bucket-region header",
+                errno=253003,
+            )
+
+        logger.debug(
+            "S3 redirect: %d from %s to %s (region: %s)",
+            response.status_code,
+            original_url,
+            location,
+            bucket_region,
+        )
+
+        self.region_name = bucket_region
+        return location
 
     def _send_single_request_with_authentication(
         self,
