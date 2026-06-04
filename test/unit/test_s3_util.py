@@ -18,7 +18,7 @@ from ..helpers import verify_log_tuple
 
 try:
     from snowflake.connector.constants import megabyte
-    from snowflake.connector.errors import RequestExceedMaxRetryError
+    from snowflake.connector.errors import OperationalError, RequestExceedMaxRetryError
     from snowflake.connector.file_transfer_agent import (
         SnowflakeFileMeta,
         StorageCredential,
@@ -38,6 +38,7 @@ except ImportError:
     SnowflakeFileMeta = dict
     SnowflakeS3RestClient = None
     RequestExceedMaxRetryError = None
+    OperationalError = None
     StorageCredential = None
     megabytes = 1024 * 1024
     DEFAULT_MAX_RETRY = 5
@@ -495,3 +496,297 @@ def test_accelerate_in_china_endpoint():
         8 * megabyte,
     )
     assert not rest_client.transfer_accelerate_config()
+
+
+def test_s3_redirect_307_success_with_resign():
+    """Tests that 307 redirect is handled by re-signing with new region."""
+    meta_info = {
+        "name": "data1.txt.gz",
+        "stage_location_type": "S3",
+        "no_sleeping_time": True,
+        "put_callback": None,
+        "put_callback_output_stream": None,
+        SHA256_DIGEST: "123456789abcdef",
+        "dst_file_name": "data1.txt.gz",
+        "src_file_name": path.join(THIS_DIR, "../data", "put_get_1.txt"),
+        "overwrite": True,
+    }
+    meta = SnowflakeFileMeta(**meta_info)
+    creds = {"AWS_SECRET_KEY": "secret", "AWS_KEY_ID": "keyid", "AWS_TOKEN": "token"}
+    rest_client = SnowflakeS3RestClient(
+        meta,
+        StorageCredential(
+            creds,
+            MagicMock(autospec=SnowflakeConnection),
+            "PUT file:/tmp/file.txt @~",
+        ),
+        {
+            "locationType": "AWS",
+            "location": "bucket/path",
+            "creds": creds,
+            "region": "us-east-1",
+            "endPoint": None,
+        },
+        8 * megabyte,
+    )
+
+    redirect_resp = MagicMock(autospec=Response, status_code=307)
+    redirect_resp.headers = {
+        "Location": "https://bucket.s3.us-west-2.amazonaws.com/path/file.txt",
+        "x-amz-bucket-region": "us-west-2",
+    }
+    success_resp = MagicMock(autospec=Response, status_code=200)
+    success_resp.headers = {"Content-Length": "100"}
+
+    from snowflake.connector.storage_client import METHODS
+
+    call_count = [0]
+
+    def mock_head(*args, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return redirect_resp
+        return success_resp
+
+    with mock.patch.dict(METHODS, HEAD=mock_head):
+        result = rest_client.get_file_header("file.txt")
+        assert call_count[0] == 2
+        assert rest_client.region_name == "us-west-2"
+
+
+def test_s3_redirect_missing_location_header():
+    """Tests that 307 redirect without Location header raises OperationalError."""
+    meta_info = {
+        "name": "data1.txt.gz",
+        "stage_location_type": "S3",
+        "no_sleeping_time": True,
+        "put_callback": None,
+        "put_callback_output_stream": None,
+        SHA256_DIGEST: "123456789abcdef",
+        "dst_file_name": "data1.txt.gz",
+        "src_file_name": path.join(THIS_DIR, "../data", "put_get_1.txt"),
+        "overwrite": True,
+    }
+    meta = SnowflakeFileMeta(**meta_info)
+    creds = {"AWS_SECRET_KEY": "secret", "AWS_KEY_ID": "keyid", "AWS_TOKEN": "token"}
+    rest_client = SnowflakeS3RestClient(
+        meta,
+        StorageCredential(
+            creds,
+            MagicMock(autospec=SnowflakeConnection),
+            "PUT file:/tmp/file.txt @~",
+        ),
+        {
+            "locationType": "AWS",
+            "location": "bucket/path",
+            "creds": creds,
+            "region": "us-east-1",
+            "endPoint": None,
+        },
+        8 * megabyte,
+    )
+
+    redirect_resp = MagicMock(autospec=Response, status_code=307)
+    redirect_resp.headers = {"x-amz-bucket-region": "us-west-2"}  # No Location
+
+    from snowflake.connector.storage_client import METHODS
+
+    with mock.patch.dict(METHODS, HEAD=MagicMock(return_value=redirect_resp)):
+        with pytest.raises(OperationalError, match="without Location header"):
+            rest_client.get_file_header("file.txt")
+
+
+def test_s3_redirect_missing_region_header():
+    """Tests that 307 redirect without x-amz-bucket-region header raises OperationalError."""
+    meta_info = {
+        "name": "data1.txt.gz",
+        "stage_location_type": "S3",
+        "no_sleeping_time": True,
+        "put_callback": None,
+        "put_callback_output_stream": None,
+        SHA256_DIGEST: "123456789abcdef",
+        "dst_file_name": "data1.txt.gz",
+        "src_file_name": path.join(THIS_DIR, "../data", "put_get_1.txt"),
+        "overwrite": True,
+    }
+    meta = SnowflakeFileMeta(**meta_info)
+    creds = {"AWS_SECRET_KEY": "secret", "AWS_KEY_ID": "keyid", "AWS_TOKEN": "token"}
+    rest_client = SnowflakeS3RestClient(
+        meta,
+        StorageCredential(
+            creds,
+            MagicMock(autospec=SnowflakeConnection),
+            "PUT file:/tmp/file.txt @~",
+        ),
+        {
+            "locationType": "AWS",
+            "location": "bucket/path",
+            "creds": creds,
+            "region": "us-east-1",
+            "endPoint": None,
+        },
+        8 * megabyte,
+    )
+
+    redirect_resp = MagicMock(autospec=Response, status_code=307)
+    redirect_resp.headers = {
+        "Location": "https://bucket.s3.us-west-2.amazonaws.com/path/file.txt"
+    }  # No x-amz-bucket-region
+
+    from snowflake.connector.storage_client import METHODS
+
+    with mock.patch.dict(METHODS, HEAD=MagicMock(return_value=redirect_resp)):
+        with pytest.raises(OperationalError, match="without x-amz-bucket-region"):
+            rest_client.get_file_header("file.txt")
+
+
+def test_s3_redirect_301_fails_for_put():
+    """Tests that 301 redirect fails fast for PUT requests."""
+    meta_info = {
+        "name": "data1.txt.gz",
+        "stage_location_type": "S3",
+        "no_sleeping_time": True,
+        "put_callback": None,
+        "put_callback_output_stream": None,
+        SHA256_DIGEST: "123456789abcdef",
+        "dst_file_name": "data1.txt.gz",
+        "src_file_name": path.join(THIS_DIR, "../data", "put_get_1.txt"),
+        "overwrite": True,
+    }
+    meta = SnowflakeFileMeta(**meta_info)
+    creds = {"AWS_SECRET_KEY": "secret", "AWS_KEY_ID": "keyid", "AWS_TOKEN": "token"}
+    rest_client = SnowflakeS3RestClient(
+        meta,
+        StorageCredential(
+            creds,
+            MagicMock(autospec=SnowflakeConnection),
+            "PUT file:/tmp/file.txt @~",
+        ),
+        {
+            "locationType": "AWS",
+            "location": "bucket/path",
+            "creds": creds,
+            "region": "us-east-1",
+            "endPoint": None,
+        },
+        8 * megabyte,
+    )
+
+    redirect_resp = MagicMock(autospec=Response, status_code=301)
+    redirect_resp.headers = {
+        "Location": "https://bucket.s3.us-west-2.amazonaws.com/path/file.txt",
+        "x-amz-bucket-region": "us-west-2",
+    }
+
+    from snowflake.connector.storage_client import METHODS
+
+    with mock.patch.dict(METHODS, PUT=MagicMock(return_value=redirect_resp)):
+        with mock.patch(
+            "snowflake.connector.storage_client.SnowflakeStorageClient.preprocess"
+        ):
+            rest_client.prepare_upload()
+        with pytest.raises(
+            OperationalError, match="Expected 307/308 for method-preserving redirect"
+        ):
+            rest_client.upload_chunk(0)
+
+
+def test_s3_redirect_301_allowed_for_head():
+    """Tests that 301 redirect is allowed for HEAD requests."""
+    meta_info = {
+        "name": "data1.txt.gz",
+        "stage_location_type": "S3",
+        "no_sleeping_time": True,
+        "put_callback": None,
+        "put_callback_output_stream": None,
+        SHA256_DIGEST: "123456789abcdef",
+        "dst_file_name": "data1.txt.gz",
+        "src_file_name": path.join(THIS_DIR, "../data", "put_get_1.txt"),
+        "overwrite": True,
+    }
+    meta = SnowflakeFileMeta(**meta_info)
+    creds = {"AWS_SECRET_KEY": "secret", "AWS_KEY_ID": "keyid", "AWS_TOKEN": "token"}
+    rest_client = SnowflakeS3RestClient(
+        meta,
+        StorageCredential(
+            creds,
+            MagicMock(autospec=SnowflakeConnection),
+            "PUT file:/tmp/file.txt @~",
+        ),
+        {
+            "locationType": "AWS",
+            "location": "bucket/path",
+            "creds": creds,
+            "region": "us-east-1",
+            "endPoint": None,
+        },
+        8 * megabyte,
+    )
+
+    redirect_resp = MagicMock(autospec=Response, status_code=301)
+    redirect_resp.headers = {
+        "Location": "https://bucket.s3.us-west-2.amazonaws.com/path/file.txt",
+        "x-amz-bucket-region": "us-west-2",
+    }
+    success_resp = MagicMock(autospec=Response, status_code=200)
+    success_resp.headers = {"Content-Length": "100"}
+
+    from snowflake.connector.storage_client import METHODS
+
+    call_count = [0]
+
+    def mock_head(*args, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return redirect_resp
+        return success_resp
+
+    with mock.patch.dict(METHODS, HEAD=mock_head):
+        result = rest_client.get_file_header("file.txt")
+        assert call_count[0] == 2
+        assert rest_client.region_name == "us-west-2"
+
+
+def test_s3_redirect_max_redirects_exceeded():
+    """Tests that too many redirects raises OperationalError."""
+    meta_info = {
+        "name": "data1.txt.gz",
+        "stage_location_type": "S3",
+        "no_sleeping_time": True,
+        "put_callback": None,
+        "put_callback_output_stream": None,
+        SHA256_DIGEST: "123456789abcdef",
+        "dst_file_name": "data1.txt.gz",
+        "src_file_name": path.join(THIS_DIR, "../data", "put_get_1.txt"),
+        "overwrite": True,
+    }
+    meta = SnowflakeFileMeta(**meta_info)
+    creds = {"AWS_SECRET_KEY": "secret", "AWS_KEY_ID": "keyid", "AWS_TOKEN": "token"}
+    rest_client = SnowflakeS3RestClient(
+        meta,
+        StorageCredential(
+            creds,
+            MagicMock(autospec=SnowflakeConnection),
+            "PUT file:/tmp/file.txt @~",
+        ),
+        {
+            "locationType": "AWS",
+            "location": "bucket/path",
+            "creds": creds,
+            "region": "us-east-1",
+            "endPoint": None,
+        },
+        8 * megabyte,
+    )
+
+    redirect_resp = MagicMock(autospec=Response, status_code=307)
+    redirect_resp.headers = {
+        "Location": "https://bucket.s3.us-west-2.amazonaws.com/path/file.txt",
+        "x-amz-bucket-region": "us-west-2",
+    }
+
+    from snowflake.connector.storage_client import METHODS
+
+    with mock.patch.dict(METHODS, HEAD=MagicMock(return_value=redirect_resp)):
+        with pytest.raises(OperationalError, match="Too many S3 redirects"):
+            rest_client.get_file_header("file.txt")
