@@ -31,11 +31,24 @@ class _DummyOAuth(AuthByOAuthBase):
             "",
             "offline_access",
         ),
+        # Snowflake custom OAuth without refresh_token in scope: host check alone
+        # skips offline_access (invalid_scope regression from #2885)
+        (
+            "https://abc123.snowflakecomputing.com/oauth/token-request",
+            "session:role:ANALYST",
+            "session:role:ANALYST",
+        ),
         # Snowflake custom OAuth: offline_access is NOT appended (regression test)
         (
             "https://abc123.snowflakecomputing.com/oauth/token-request",
             "refresh_token session:role:ANALYST",
             "refresh_token session:role:ANALYST",
+        ),
+        # Snowflake .cn region without refresh_token in scope: also skipped
+        (
+            "https://abc123.snowflakecomputing.cn/oauth/token-request",
+            "session:role:ANALYST",
+            "session:role:ANALYST",
         ),
         # Snowflake .cn region: also skipped
         (
