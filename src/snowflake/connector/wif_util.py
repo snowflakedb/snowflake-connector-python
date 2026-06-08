@@ -9,7 +9,7 @@ from enum import Enum, unique
 
 import jwt
 
-from .options import boto3, botocore, installed_boto
+from .options import boto3, botocore, installed_boto, azure_identity, installed_azure_identity
 
 if installed_boto:
     SigV4Auth = botocore.auth.SigV4Auth
@@ -344,6 +344,24 @@ def create_gcp_attestation(
     )
 
 
+def get_azure_mi_token_via_aks(resource: str) -> str:
+    """Gets an Azure MI token on AKS using WorkloadIdentityCredential.
+
+    Reads AZURE_CLIENT_ID, AZURE_TENANT_ID, and AZURE_FEDERATED_TOKEN_FILE from the environment,
+    which are injected automatically by the AKS workload identity webhook.
+    """
+    if not installed_azure_identity:
+        raise MissingDependencyError("azure-identity")
+    try:
+        credential = azure_identity.WorkloadIdentityCredential()
+        return credential.get_token(f"{resource}/.default").token
+    except Exception as e:
+        raise ProgrammingError(
+            msg=f"Error fetching Azure MI token via WorkloadIdentityCredential: {e}. Ensure the application is running on AKS with workload identity configured.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+
+
 def get_azure_sp_token_via_impersonation(
     mi_token: str,
     sp_client_id: str,
@@ -409,55 +427,66 @@ def create_azure_attestation(
         if impersonation_path
         else snowflake_entra_resource
     )
-    headers = {"Metadata": "true"}
-    url_without_query_string = "http://169.254.169.254/metadata/identity/oauth2/token"
-    query_params = f"api-version=2018-02-01&resource={resource}"
 
-    # Check if running in Azure Functions environment
-    identity_endpoint = os.environ.get("IDENTITY_ENDPOINT")
-    identity_header = os.environ.get("IDENTITY_HEADER")
-    is_azure_functions = identity_endpoint is not None
+    # AKS Workload Identity path: all three env vars are injected by the AKS webhook
+    is_aks = all([
+        os.environ.get("AZURE_CLIENT_ID"),
+        os.environ.get("AZURE_TENANT_ID"),
+        os.environ.get("AZURE_FEDERATED_TOKEN_FILE"),
+    ])
+    if is_aks:
+        jwt_str = get_azure_mi_token_via_aks(resource)
+    else:
+        headers = {"Metadata": "true"}
+        url_without_query_string = "http://169.254.169.254/metadata/identity/oauth2/token"
+        query_params = f"api-version=2018-02-01&resource={resource}"
 
-    if is_azure_functions:
-        if not identity_header:
+        # Check if running in Azure Functions environment
+        identity_endpoint = os.environ.get("IDENTITY_ENDPOINT")
+        identity_header = os.environ.get("IDENTITY_HEADER")
+        is_azure_functions = identity_endpoint is not None
+
+        if is_azure_functions:
+            if not identity_header:
+                raise ProgrammingError(
+                    msg="Managed identity is not enabled on this Azure function.",
+                    errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+                )
+
+            # Azure Functions uses a different endpoint, headers and API version.
+            url_without_query_string = identity_endpoint
+            headers = {"X-IDENTITY-HEADER": identity_header}
+            query_params = f"api-version=2019-08-01&resource={resource}"
+
+        # Allow configuring an explicit client ID, which may be used in Azure Functions,
+        # if there are user-assigned identities, or multiple managed identities available.
+        managed_identity_client_id = os.environ.get("MANAGED_IDENTITY_CLIENT_ID")
+        if managed_identity_client_id:
+            query_params += f"&client_id={managed_identity_client_id}"
+
+        response_text = None
+        try:
+            res = session_manager.request(
+                method="GET",
+                url=f"{url_without_query_string}?{query_params}",
+                headers=headers,
+            )
+            response_text = res.text
+            response_data = res.json()
+            res.raise_for_status()
+        except Exception as e:
             raise ProgrammingError(
-                msg="Managed identity is not enabled on this Azure function.",
+                msg=f"Error fetching Azure metadata: {e}. Response: {response_text}. Ensure the application is running on Azure.",
                 errno=ER_WIF_CREDENTIALS_NOT_FOUND,
             )
 
-        # Azure Functions uses a different endpoint, headers and API version.
-        url_without_query_string = identity_endpoint
-        headers = {"X-IDENTITY-HEADER": identity_header}
-        query_params = f"api-version=2019-08-01&resource={resource}"
+        jwt_str = response_data.get("access_token")
+        if not jwt_str:
+            raise ProgrammingError(
+                msg="No access token found in Azure metadata service response.",
+                errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+            )
 
-    # Allow configuring an explicit client ID, which may be used in Azure Functions,
-    # if there are user-assigned identities, or multiple managed identities available.
-    managed_identity_client_id = os.environ.get("MANAGED_IDENTITY_CLIENT_ID")
-    if managed_identity_client_id:
-        query_params += f"&client_id={managed_identity_client_id}"
-
-    response_text = None
-    try:
-        res = session_manager.request(
-            method="GET",
-            url=f"{url_without_query_string}?{query_params}",
-            headers=headers,
-        )
-        response_text = res.text
-        response_data = res.json()
-        res.raise_for_status()
-    except Exception as e:
-        raise ProgrammingError(
-            msg=f"Error fetching Azure metadata: {e}. Response: {response_text}. Ensure the application is running on Azure.",
-            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-        )
-
-    jwt_str = response_data.get("access_token")
-    if not jwt_str:
-        raise ProgrammingError(
-            msg="No access token found in Azure metadata service response.",
-            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-        )
     if impersonation_path:
         jwt_str = get_azure_sp_token_via_impersonation(
             jwt_str, impersonation_path[0], snowflake_entra_resource, session_manager

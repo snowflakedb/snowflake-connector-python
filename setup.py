@@ -50,6 +50,9 @@ SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS = (
 SNOWFLAKE_NO_BOTO = (
     os.environ.get("SNOWFLAKE_NO_BOTO", "false").lower() in _POSITIVE_VALUES
 )
+SNOWFLAKE_NO_AZURE = (
+    os.environ.get("SNOWFLAKE_NO_AZURE", "false").lower() in _POSITIVE_VALUES
+)
 
 try:
     from Cython.Build import cythonize
@@ -193,6 +196,9 @@ class SetDefaultInstallationExtras(egg_info):
         if not SNOWFLAKE_NO_BOTO:
             boto_extras = self.distribution.extras_require.get("boto", [])
             self.distribution.install_requires += boto_extras
+        if not SNOWFLAKE_NO_AZURE:
+            azure_extras = self.distribution.extras_require.get("azure", [])
+            self.distribution.install_requires += azure_extras
 
 
 def _minicore_native_subdir():
