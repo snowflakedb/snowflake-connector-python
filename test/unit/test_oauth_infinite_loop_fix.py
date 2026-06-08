@@ -183,7 +183,8 @@ class TestOAuthReauthenticateNoLoop:
         self, mock_connection, mock_token_cache, omit_oauth_urls_check
     ):
         """Verify reauthenticate() calls _request_tokens() directly, NOT prepare()
-        and never goes through conn.authenticate_with_retry (which is what caused the loop)."""
+        and never goes through conn.authenticate_with_retry (which is what caused the loop).
+        """
         auth = AuthByOauthCode(
             "app",
             "clientId",
