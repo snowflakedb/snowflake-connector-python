@@ -72,6 +72,12 @@ class MissingAioBoto3(MissingOptionalDependency):
     _dep_name = "aioboto3"
 
 
+class MissingAzureIdentity(MissingOptionalDependency):
+    """The class is specifically for azure-identity optional dependency."""
+
+    _dep_name = "azure-identity"
+
+
 ModuleLikeObject = Union[ModuleType, MissingOptionalDependency]
 
 
@@ -172,8 +178,21 @@ def _import_or_missing_aioboto_option() -> (
         return MissingAioBotocore(), MissingAioBoto3(), False
 
 
+def _import_or_missing_azure_identity_option() -> (
+    tuple[ModuleLikeObject, ModuleLikeObject, bool]
+):
+    """This function tries importing azure.identity and azure.identity.aio."""
+    try:
+        azure_identity = importlib.import_module("azure.identity")
+        azure_identity_aio = importlib.import_module("azure.identity.aio")
+        return azure_identity, azure_identity_aio, True
+    except ImportError:
+        return MissingAzureIdentity(), MissingAzureIdentity(), False
+
+
 # Create actual constants to be imported from this file
 pandas, pyarrow, installed_pandas = _import_or_missing_pandas_option()
 keyring, installed_keyring = _import_or_missing_keyring_option()
 botocore, boto3, installed_boto = _import_or_missing_boto_option()
 aiobotocore, aioboto3, installed_aioboto = _import_or_missing_aioboto_option()
+azure_identity, azure_identity_aio, installed_azure_identity = _import_or_missing_azure_identity_option()
