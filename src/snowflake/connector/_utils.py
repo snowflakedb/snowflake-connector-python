@@ -10,7 +10,7 @@ import threading
 import time
 from enum import Enum
 from inspect import stack
-from random import choice
+from secrets import choice
 from threading import Timer
 from uuid import UUID
 
@@ -184,12 +184,33 @@ class _CoreLoader:
             return "unknown"
 
     @staticmethod
+    def _libc_ver() -> tuple[str, str]:
+        """Return (libc_name, libc_version) from the platform."""
+        return platform.libc_ver()
+
+    @staticmethod
     def _detect_libc() -> str:
         """Detect libc type on Linux (glibc vs musl)."""
-        lib, _ = platform.libc_ver()
+        lib, _ = _CoreLoader._libc_ver()
         if lib == "glibc":
             return "glibc"
         return "musl"
+
+    @staticmethod
+    def get_libc_version() -> str | None:
+        """Return libc version from :func:`platform.libc_ver`, or None if unknown."""
+        _, version = _CoreLoader._libc_ver()
+        if not version:
+            return None
+        stripped = version.strip()
+        return stripped or None
+
+    @staticmethod
+    def get_libc_family() -> str | None:
+        """Return libc family for Linux (glibc or musl), otherwise None."""
+        if _CoreLoader._detect_os() != "linux":
+            return None
+        return _CoreLoader._detect_libc()
 
     @staticmethod
     def _get_platform_subdir() -> str:
@@ -329,6 +350,8 @@ def build_minicore_usage_for_session() -> dict[str, str | None]:
         "ISA": ISA,
         "CORE_VERSION": _core_loader.get_core_version(),
         "CORE_FILE_NAME": _core_loader.get_file_name(),
+        "LIBC_FAMILY": _CoreLoader.get_libc_family(),
+        "LIBC_VERSION": _CoreLoader.get_libc_version(),
     }
 
 

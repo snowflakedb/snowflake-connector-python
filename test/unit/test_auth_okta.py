@@ -20,6 +20,154 @@ except ImportError:
     from snowflake.connector.auth_okta import AuthByOkta
 
 
+@pytest.mark.parametrize(
+    "url1,url2,expected",
+    [
+        # same prefix, no explicit port
+        ("https://company.okta.com/path", "https://company.okta.com/other", True),
+        # same prefix, explicit matching port
+        (
+            "https://company.okta.com:443/path",
+            "https://company.okta.com:443/other",
+            True,
+        ),
+        # implicit 443 matches explicit 443
+        ("https://company.okta.com/path", "https://company.okta.com:443/other", True),
+        ("https://company.okta.com:443/path", "https://company.okta.com/other", True),
+        # different hostname
+        ("https://company.okta.com/path", "https://evil.okta.com/path", False),
+        # different scheme
+        ("https://company.okta.com/path", "http://company.okta.com/path", False),
+        # different port — the core case this bug was about
+        ("https://company.okta.com/path", "https://company.okta.com:8443/path", False),
+        (
+            "https://company.okta.com:443/path",
+            "https://company.okta.com:8443/path",
+            False,
+        ),
+        ("https://company.okta.com:8443/path", "https://company.okta.com/path", False),
+        (
+            "https://company.okta.com:8443/path",
+            "https://company.okta.com:443/path",
+            False,
+        ),
+        # http scheme, different ports
+        ("http://host/a", "http://host:8080/a", False),
+    ],
+)
+def test_is_prefix_equal(url1, url2, expected):
+    """Verify _is_prefix_equal correctly compares scheme, host, AND port of both URLs."""
+    from snowflake.connector.auth.okta import _is_prefix_equal
+
+    assert _is_prefix_equal(url1, url2) is expected
+
+
+def test_step2_rejects_token_url_with_different_port():
+    """_step2 must reject a tokenUrl whose port differs from the authenticator.
+
+    This is the primary credential-theft vector: a rogue Snowflake server returns
+    a tokenUrl on the same Okta hostname but on an attacker-controlled port.
+    """
+    authenticator = "https://company.okta.com/"
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    service_name = ""
+
+    ref_sso_url = "https://company.okta.com/sso"
+    ref_token_url = "https://company.okta.com:8443/api/v1/authn"
+    rest = _init_rest(ref_sso_url, ref_token_url)
+
+    auth = AuthByOkta(application)
+    headers, sso_url, token_url = auth._step1(
+        rest._connection, authenticator, service_name, account, user
+    )
+    auth._step2(rest._connection, authenticator, sso_url, token_url)
+    assert (
+        rest._connection.errorhandler.called
+    ), "_step2 should reject tokenUrl with a different port"
+
+
+def test_step2_rejects_sso_url_with_different_port():
+    """_step2 must reject an ssoUrl whose port differs from the authenticator."""
+    authenticator = "https://company.okta.com/"
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    service_name = ""
+
+    ref_sso_url = "https://company.okta.com:8443/app/snowflake/sso"
+    ref_token_url = "https://company.okta.com/api/v1/authn"
+    rest = _init_rest(ref_sso_url, ref_token_url)
+
+    auth = AuthByOkta(application)
+    headers, sso_url, token_url = auth._step1(
+        rest._connection, authenticator, service_name, account, user
+    )
+    auth._step2(rest._connection, authenticator, sso_url, token_url)
+    assert (
+        rest._connection.errorhandler.called
+    ), "_step2 should reject ssoUrl with a different port"
+
+
+def test_step5_rejects_post_back_url_with_different_port():
+    """_step5 must reject a SAML post-back URL whose port differs from Snowflake's."""
+    application = "testapplication"
+    account = "testaccount"
+
+    ref_sso_url = "https://testsso.snowflake.net/sso"
+    ref_token_url = "https://testsso.snowflake.net/token"
+    rest = _init_rest(ref_sso_url, ref_token_url)
+
+    auth = AuthByOkta(application)
+
+    rest._protocol = "https"
+    rest._host = f"{account}.snowflakecomputing.com"
+    rest._port = 443
+
+    response_html = (
+        "<html><body>"
+        '<form action="https://testaccount.snowflakecomputing.com:8443/post_back"></form>'
+        "</body></html>"
+    )
+    auth._step5(rest._connection, response_html)
+    assert (
+        rest._connection.errorhandler.called
+    ), "_step5 should reject post_back_url with a different port"
+
+
+def test_step5_accepts_implicit_port_matching_explicit_port():
+    """Implicit https port (no :443 in URL) must match explicit :443 in full_url.
+
+    _step5 constructs full_url with an explicit port (e.g. :443) from
+    conn._rest._port. The post-back URL from the SAML response typically
+    omits the port for standard https. These must compare as equal —
+    regression test for the int-vs-string port default mismatch.
+    """
+    application = "testapplication"
+    account = "testaccount"
+
+    ref_sso_url = "https://testsso.snowflake.net/sso"
+    ref_token_url = "https://testsso.snowflake.net/token"
+    rest = _init_rest(ref_sso_url, ref_token_url)
+
+    auth = AuthByOkta(application)
+
+    rest._protocol = "https"
+    rest._host = f"{account}.snowflakecomputing.com"
+    rest._port = 443
+
+    response_html = (
+        "<html><body>"
+        '<form action="https://testaccount.snowflakecomputing.com/post_back"></form>'
+        "</body></html>"
+    )
+    auth._step5(rest._connection, response_html)
+    assert (
+        not rest._connection.errorhandler.called
+    ), "_step5 should accept post_back_url when implicit port 443 matches explicit :443"
+
+
 def test_auth_prepare_body_does_not_overwrite_client_environment_fields():
     application = "testapplication"
     auth_class = AuthByOkta(application)

@@ -36,7 +36,7 @@ pipeline {
                 dir('k8sc-jenkins_scripts') {
                     git branch: 'master',
                     credentialsId: 'jenkins-snowflake-github-app-3',
-                    url: 'https://github.com/snowflakedb/k8sc-jenkins_scripts.git'
+                    url: 'https://github.com/snowflake-eng/k8sc-jenkins_scripts.git'
                 }
             }
         }
