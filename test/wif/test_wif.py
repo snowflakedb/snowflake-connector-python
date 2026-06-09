@@ -46,8 +46,14 @@ def test_wif_defined_provider():
 
 
 @pytest.mark.wif
-def test_aks_mi_native_auth():
-    """Case 1 & 4: AKS native MI authentication via WorkloadIdentityCredential."""
+def test_aks_workload_identity_auth():
+    """AKS workload identity authentication via WorkloadIdentityCredential.
+
+    Covers MI and SP scenarios via different service accounts configured in CI:
+    - Case 1: MI service account on cluster 1
+    - Case 2: SP service account on cluster 1
+    - Case 4: MI service account on cluster 2
+    """
     if not IS_AKS or PROVIDER != "AZURE":
         pytest.skip("Requires AKS environment with AZURE provider")
     connection_params = {
@@ -58,23 +64,7 @@ def test_aks_mi_native_auth():
     }
     assert connect_and_execute_simple_query(
         connection_params, EXPECTED_USERNAME
-    ), "AKS MI native authentication failed"
-
-
-@pytest.mark.wif
-def test_aks_sp_direct_auth():
-    """Case 2: AKS SP direct authentication via service account annotation."""
-    if not IS_AKS or PROVIDER != "AZURE":
-        pytest.skip("Requires AKS environment with AZURE provider")
-    connection_params = {
-        "host": HOST,
-        "account": ACCOUNT,
-        "authenticator": "WORKLOAD_IDENTITY",
-        "workload_identity_provider": "AZURE",
-    }
-    assert connect_and_execute_simple_query(
-        connection_params, EXPECTED_USERNAME
-    ), "AKS SP direct authentication failed"
+    ), "AKS workload identity authentication failed"
 
 
 @pytest.mark.wif
