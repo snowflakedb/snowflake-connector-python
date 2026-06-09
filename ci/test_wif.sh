@@ -26,6 +26,7 @@ run_tests_on_aks() {
     SNOWFLAKE_TEST_WIF_HOST="$snowflake_host" \
     SNOWFLAKE_TEST_WIF_ACCOUNT="$SNOWFLAKE_TEST_WIF_ACCOUNT" \
     SNOWFLAKE_TEST_WIF_USERNAME="$snowflake_user" \
+    TEST_NAME="$test_name" \
     POD_NAME="$pod_name" \
     bash << 'SSHEOF'
       set -e
@@ -45,11 +46,11 @@ run_tests_on_aks() {
       kubectl exec "$POD_NAME" -- bash -c "
         apt-get update -q && apt-get install git g++ -y -q
         if [[ '$BRANCH' =~ ^PR-[0-9]+\$ ]]; then
-          curl -sL https://github.com/snowflakedb/snowflake-connector-python/archive/refs/pull/\$(echo \$BRANCH | cut -d- -f2)/head.tar.gz | tar -xz
+          curl -sL https://github.com/snowflakedb/snowflake-connector-python/archive/refs/pull/$(echo $BRANCH | cut -d- -f2)/head.tar.gz | tar -xz
           mv snowflake-connector-python-* snowflake-connector-python
         else
-          curl -sL https://github.com/snowflakedb/snowflake-connector-python/archive/refs/heads/\$BRANCH.tar.gz | tar -xz
-          mv snowflake-connector-python-\$BRANCH snowflake-connector-python
+          curl -sL https://github.com/snowflakedb/snowflake-connector-python/archive/refs/heads/$BRANCH.tar.gz | tar -xz
+          mv snowflake-connector-python-$BRANCH snowflake-connector-python
         fi
         cd snowflake-connector-python
         pip install -e '.[azure]' pytest -q
@@ -58,7 +59,7 @@ run_tests_on_aks() {
         SNOWFLAKE_TEST_WIF_HOST=$SNOWFLAKE_TEST_WIF_HOST \
         SNOWFLAKE_TEST_WIF_ACCOUNT=$SNOWFLAKE_TEST_WIF_ACCOUNT \
         SNOWFLAKE_TEST_WIF_USERNAME=$SNOWFLAKE_TEST_WIF_USERNAME \
-        python -m pytest test/wif/test_wif.py::$test_name -v
+        python -m pytest test/wif/test_wif.py::$TEST_NAME -v
       "
       local status=$?
       kubectl delete pod "$POD_NAME" --ignore-not-found

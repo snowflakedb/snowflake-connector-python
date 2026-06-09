@@ -195,4 +195,6 @@ pandas, pyarrow, installed_pandas = _import_or_missing_pandas_option()
 keyring, installed_keyring = _import_or_missing_keyring_option()
 botocore, boto3, installed_boto = _import_or_missing_boto_option()
 aiobotocore, aioboto3, installed_aioboto = _import_or_missing_aioboto_option()
-azure_identity, azure_identity_aio, installed_azure_identity = _import_or_missing_azure_identity_option()
+azure_identity, azure_identity_aio, installed_azure_identity = (
+    _import_or_missing_azure_identity_option()
+)

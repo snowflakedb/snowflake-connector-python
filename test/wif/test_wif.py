@@ -99,8 +99,6 @@ def test_aks_oidc_backward_compat():
     ), "AKS OIDC backward-compatible authentication failed"
 
 
-
-
 @pytest.mark.wif
 def test_should_authenticate_using_oidc():
     if not is_provider_gcp():

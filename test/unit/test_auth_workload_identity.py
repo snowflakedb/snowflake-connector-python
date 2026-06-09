@@ -16,9 +16,9 @@ from snowflake.connector.vendored.requests.exceptions import (
     Timeout,
 )
 from snowflake.connector.wif_util import (
-    AttestationProvider,
     AZURE_WIF_FEDERATION_AUDIENCE,
     DEFAULT_ENTRA_SNOWFLAKE_RESOURCE,
+    AttestationProvider,
     WorkloadIdentityAttestation,
     get_aws_sts_hostname,
 )
@@ -795,4 +795,6 @@ def test_aks_impersonation_path_raises_error(monkeypatch):
     )
     with pytest.raises(ProgrammingError) as excinfo:
         auth_class.prepare(conn=None)
-    assert "workload_identity_impersonation_path is not supported on AKS" in str(excinfo.value)
+    assert "workload_identity_impersonation_path is not supported on AKS" in str(
+        excinfo.value
+    )
