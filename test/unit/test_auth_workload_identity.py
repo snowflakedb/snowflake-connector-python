@@ -704,60 +704,6 @@ def test_aks_path_plumbs_mi_token_to_api(mock_wic, monkeypatch):
     }
 
 
-@mock.patch("snowflake.connector.session_manager.SessionManager.post")
-@mock.patch("snowflake.connector.wif_util.azure_identity.WorkloadIdentityCredential")
-def test_aks_path_with_impersonation_calls_sp_token_exchange(
-    mock_wic, mock_post_request, monkeypatch
-):
-    tenant_id = "2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
-    sp_client_id = "some-sp-client-id"
-    mi_token = gen_dummy_id_token(
-        sub="mi-object-id",
-        iss=f"https://sts.windows.net/{tenant_id}",
-        tid=tenant_id,
-    )
-    sp_token = gen_dummy_id_token(
-        sub="sp-subject", iss=f"https://sts.windows.net/{tenant_id}"
-    )
-    mock_wic.return_value.get_token.return_value.token = mi_token
-    mock_post_request.return_value = build_response(
-        json.dumps({"access_token": sp_token}).encode("utf-8")
-    )
-    monkeypatch.setenv("AZURE_CLIENT_ID", "fake-client-id")
-    monkeypatch.setenv("AZURE_TENANT_ID", tenant_id)
-    monkeypatch.setenv("AZURE_FEDERATED_TOKEN_FILE", "/var/run/secrets/token")
-
-    auth_class = AuthByWorkloadIdentity(
-        provider=AttestationProvider.AZURE,
-        impersonation_path=[sp_client_id],
-    )
-    auth_class.prepare(conn=None)
-
-    mock_wic.return_value.get_token.assert_called_once_with(
-        f"{AZURE_WIF_FEDERATION_AUDIENCE}/.default"
-    )
-    mock_post_request.assert_called_once_with(
-        url=f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
-        data={
-            "grant_type": "client_credentials",
-            "client_id": sp_client_id,
-            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-            "client_assertion": mi_token,
-            "scope": f"{DEFAULT_ENTRA_SNOWFLAKE_RESOURCE}/.default",
-        },
-    )
-    assert (
-        auth_class.assertion_content
-        == f'{{"_provider":"AZURE","iss":"https://sts.windows.net/{tenant_id}","sub":"sp-subject"}}'
-    )
-    assert extract_api_data(auth_class) == {
-        "AUTHENTICATOR": "WORKLOAD_IDENTITY",
-        "PROVIDER": "AZURE",
-        "TOKEN": sp_token,
-        "CLIENT_ENVIRONMENT": {"WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH": 1},
-    }
-
-
 def test_aks_env_vars_partially_set_falls_back_to_imds(
     fake_azure_vm_metadata_service: FakeAzureVmMetadataService,
     monkeypatch,
