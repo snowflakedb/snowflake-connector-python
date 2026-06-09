@@ -25,10 +25,12 @@ PROVIDER = os.getenv("SNOWFLAKE_TEST_WIF_PROVIDER")
 EXPECTED_USERNAME = os.getenv("SNOWFLAKE_TEST_WIF_USERNAME")
 IMPERSONATION_PATH = os.getenv("SNOWFLAKE_TEST_WIF_IMPERSONATION_PATH")
 EXPECTED_USERNAME_IMPERSONATION = os.getenv("SNOWFLAKE_TEST_WIF_USERNAME_IMPERSONATION")
+_federated_token_file = os.environ.get("AZURE_FEDERATED_TOKEN_FILE", "")
 IS_AKS = bool(
     os.environ.get("AZURE_CLIENT_ID")
     and os.environ.get("AZURE_TENANT_ID")
-    and os.environ.get("AZURE_FEDERATED_TOKEN_FILE")
+    and _federated_token_file
+    and os.path.exists(_federated_token_file)
 )
 
 
