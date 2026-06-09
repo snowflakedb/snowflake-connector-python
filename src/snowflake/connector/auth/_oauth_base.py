@@ -54,9 +54,9 @@ class _OAuthTokensMixin:
         if self._refresh_token_enabled:
             self._refresh_token = None
         self._token_cache = token_cache
+        self._idp_host = idp_host
         if self._token_cache:
             logger.debug("token cache is going to be used if needed")
-            self._idp_host = idp_host
             self._access_token_key: TokenKey | None = None
             if self._refresh_token_enabled:
                 self._refresh_token_key: TokenKey | None = None
@@ -167,7 +167,35 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         self._scope = scope
         if refresh_token_enabled:
             logger.debug("oauth refresh token is going to be used if needed")
-            self._scope += (" " if self._scope else "") + "offline_access"
+            if self._should_append_offline_access_scope():
+                self._scope += (" " if self._scope else "") + "offline_access"
+            else:
+                logger.debug(
+                    "skipping 'offline_access' scope: Snowflake custom OAuth "
+                    "uses 'refresh_token' or it is already present in scope"
+                )
+
+    def _should_append_offline_access_scope(self) -> bool:
+        """Whether to append the OIDC ``offline_access`` scope.
+
+        Snowflake custom OAuth (security integrations of type CUSTOM) does not
+        accept ``offline_access`` and instead documents ``refresh_token`` as the
+        scope used to request offline access. Appending ``offline_access``
+        unconditionally causes ``invalid_scope`` errors against Snowflake's
+        authorization server.
+
+        Skip the append when:
+          * the token endpoint host is a Snowflake host, OR
+          * the user already requested ``refresh_token`` in scope (explicit intent).
+        """
+        host = (self._idp_host or "").lower()
+        if host.endswith(".snowflakecomputing.com") or host.endswith(
+            ".snowflakecomputing.cn"
+        ):
+            return False
+        if "refresh_token" in (self._scope or "").split():
+            return False
+        return True
 
     @abstractmethod
     def _request_tokens(
