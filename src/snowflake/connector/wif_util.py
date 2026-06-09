@@ -425,12 +425,17 @@ def create_azure_attestation(
 
     If the application isn't running on Azure or no credentials were found, raises an error.
     """
-    # AKS Workload Identity path: all three env vars are injected by the AKS webhook
+    # AKS Workload Identity path: the three env vars are injected by the AKS webhook,
+    # and the token file is mounted by the Azure Workload Identity webhook.
+    # Checking file existence (rather than KUBERNETES_SERVICE_HOST) correctly handles
+    # pods with enableServiceLinks=false and avoids false positives on non-AKS K8s.
+    _federated_token_file = os.environ.get("AZURE_FEDERATED_TOKEN_FILE", "")
     is_aks = all(
         [
             os.environ.get("AZURE_CLIENT_ID"),
             os.environ.get("AZURE_TENANT_ID"),
-            os.environ.get("AZURE_FEDERATED_TOKEN_FILE"),
+            _federated_token_file,
+            os.path.exists(_federated_token_file),
         ]
     )
     if is_aks:
