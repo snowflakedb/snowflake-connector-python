@@ -675,8 +675,9 @@ def test_azure_impersonation_raises_error_if_access_token_missing_in_response(
 # -- Azure AKS Tests --
 
 
+@mock.patch("snowflake.connector.wif_util.os.path.exists", return_value=True)
 @mock.patch("snowflake.connector.wif_util.azure_identity.WorkloadIdentityCredential")
-def test_aks_path_plumbs_mi_token_to_api(mock_wic, monkeypatch):
+def test_aks_path_plumbs_mi_token_to_api(mock_wic, _mock_exists, monkeypatch):
     tenant_id = "2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
     mi_token = gen_dummy_id_token(
         sub="611ab25b-2e81-4e18-92a7-b21f2bebb269",
@@ -716,8 +717,9 @@ def test_aks_env_vars_partially_set_falls_back_to_imds(
     assert extract_api_data(auth_class)["TOKEN"] == fake_azure_vm_metadata_service.token
 
 
+@mock.patch("snowflake.connector.wif_util.os.path.exists", return_value=True)
 @mock.patch("snowflake.connector.wif_util.installed_azure_identity", False)
-def test_aks_missing_azure_identity_dependency_raises_error(monkeypatch):
+def test_aks_missing_azure_identity_dependency_raises_error(_mock_exists, monkeypatch):
     monkeypatch.setenv("AZURE_CLIENT_ID", "fake-client-id")
     monkeypatch.setenv("AZURE_TENANT_ID", "fake-tenant-id")
     monkeypatch.setenv("AZURE_FEDERATED_TOKEN_FILE", "/var/run/secrets/token")
@@ -728,7 +730,8 @@ def test_aks_missing_azure_identity_dependency_raises_error(monkeypatch):
     assert "azure-identity" in str(excinfo.value)
 
 
-def test_aks_impersonation_path_raises_error(monkeypatch):
+@mock.patch("snowflake.connector.wif_util.os.path.exists", return_value=True)
+def test_aks_impersonation_path_raises_error(_mock_exists, monkeypatch):
     monkeypatch.setenv("AZURE_CLIENT_ID", "fake-client-id")
     monkeypatch.setenv("AZURE_TENANT_ID", "fake-tenant-id")
     monkeypatch.setenv("AZURE_FEDERATED_TOKEN_FILE", "/var/run/secrets/token")
