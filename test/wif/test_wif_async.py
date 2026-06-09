@@ -86,9 +86,9 @@ async def test_aks_oidc_backward_compat_async():
     """Case 3: OIDC backward-compatible path using K8s SA projected token."""
     if not IS_AKS:
         pytest.skip("Requires AKS environment")
-    token_file = os.environ.get("AZURE_FEDERATED_TOKEN_FILE")
-    if not token_file:
-        pytest.skip("AZURE_FEDERATED_TOKEN_FILE not set")
+    token_file = "/var/run/secrets/snowflake/token"
+    if not os.path.exists(token_file):
+        pytest.skip(f"Projected token file not found: {token_file}")
     with open(token_file) as f:
         token = f.read().strip()
     connection_params = {
