@@ -352,6 +352,7 @@ def get_azure_mi_token_via_aks(resource: str) -> str:
     """
     if not installed_azure_identity:
         raise MissingDependencyError("azure-identity")
+    logger.debug("Detected AKS workload identity environment, using WorkloadIdentityCredential")
     try:
         credential = azure_identity.WorkloadIdentityCredential()
         return credential.get_token(f"{resource}/.default").token
@@ -416,18 +417,6 @@ def create_azure_attestation(
 
     If the application isn't running on Azure or no credentials were found, raises an error.
     """
-    if impersonation_path:
-        if len(impersonation_path) != 1:
-            raise ProgrammingError(
-                msg="Azure WIF impersonation only supports a single service principal (single-hop). impersonation_path must contain exactly one client_id.",
-                errno=ER_INVALID_WIF_SETTINGS,
-            )
-    resource = (
-        AZURE_WIF_FEDERATION_AUDIENCE
-        if impersonation_path
-        else snowflake_entra_resource
-    )
-
     # AKS Workload Identity path: all three env vars are injected by the AKS webhook
     is_aks = all([
         os.environ.get("AZURE_CLIENT_ID"),
@@ -435,8 +424,25 @@ def create_azure_attestation(
         os.environ.get("AZURE_FEDERATED_TOKEN_FILE"),
     ])
     if is_aks:
-        jwt_str = get_azure_mi_token_via_aks(resource)
+        if impersonation_path:
+            raise ProgrammingError(
+                msg="workload_identity_impersonation_path is not supported on AKS.",
+                errno=ER_INVALID_WIF_SETTINGS,
+            )
+        jwt_str = get_azure_mi_token_via_aks(snowflake_entra_resource)
     else:
+        if impersonation_path:
+            if len(impersonation_path) != 1:
+                raise ProgrammingError(
+                    msg="Azure WIF impersonation only supports a single service principal (single-hop). impersonation_path must contain exactly one client_id.",
+                    errno=ER_INVALID_WIF_SETTINGS,
+                )
+        resource = (
+            AZURE_WIF_FEDERATION_AUDIENCE
+            if impersonation_path
+            else snowflake_entra_resource
+        )
+
         headers = {"Metadata": "true"}
         url_without_query_string = "http://169.254.169.254/metadata/identity/oauth2/token"
         query_params = f"api-version=2018-02-01&resource={resource}"
@@ -487,10 +493,10 @@ def create_azure_attestation(
                 errno=ER_WIF_CREDENTIALS_NOT_FOUND,
             )
 
-    if impersonation_path:
-        jwt_str = get_azure_sp_token_via_impersonation(
-            jwt_str, impersonation_path[0], snowflake_entra_resource, session_manager
-        )
+        if impersonation_path:
+            jwt_str = get_azure_sp_token_via_impersonation(
+                jwt_str, impersonation_path[0], snowflake_entra_resource, session_manager
+            )
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     return WorkloadIdentityAttestation(
         AttestationProvider.AZURE, jwt_str, {"iss": issuer, "sub": subject}

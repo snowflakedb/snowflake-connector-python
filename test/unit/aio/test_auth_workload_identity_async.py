@@ -779,3 +779,17 @@ async def test_aks_missing_azure_identity_dependency_raises_error(monkeypatch):
     with pytest.raises(MissingDependencyError) as excinfo:
         await auth_class.prepare(conn=None)
     assert "azure-identity" in str(excinfo.value)
+
+
+async def test_aks_impersonation_path_raises_error(monkeypatch):
+    monkeypatch.setenv("AZURE_CLIENT_ID", "fake-client-id")
+    monkeypatch.setenv("AZURE_TENANT_ID", "fake-tenant-id")
+    monkeypatch.setenv("AZURE_FEDERATED_TOKEN_FILE", "/var/run/secrets/token")
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=["some-sp-client-id"],
+    )
+    with pytest.raises(ProgrammingError) as excinfo:
+        await auth_class.prepare(conn=None)
+    assert "workload_identity_impersonation_path is not supported on AKS" in str(excinfo.value)
