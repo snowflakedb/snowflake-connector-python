@@ -764,9 +764,9 @@ async def test_aks_env_vars_partially_set_falls_back_to_imds(
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
     await auth_class.prepare(conn=None)
 
-    assert (
-        await extract_api_data(auth_class)
-    )["TOKEN"] == fake_azure_vm_metadata_service.token
+    assert (await extract_api_data(auth_class))[
+        "TOKEN"
+    ] == fake_azure_vm_metadata_service.token
 
 
 @mock.patch("snowflake.connector.aio._wif_util.installed_azure_identity", False)
@@ -792,4 +792,6 @@ async def test_aks_impersonation_path_raises_error(monkeypatch):
     )
     with pytest.raises(ProgrammingError) as excinfo:
         await auth_class.prepare(conn=None)
-    assert "workload_identity_impersonation_path is not supported on AKS" in str(excinfo.value)
+    assert "workload_identity_impersonation_path is not supported on AKS" in str(
+        excinfo.value
+    )

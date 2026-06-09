@@ -10,9 +10,9 @@ import jwt
 from snowflake.connector.options import (
     aioboto3,
     aiobotocore,
+    azure_identity_aio,
     botocore,
     installed_aioboto,
-    azure_identity_aio,
     installed_azure_identity,
 )
 
@@ -43,7 +43,9 @@ async def get_azure_mi_token_via_aks(resource: str) -> str:
     """
     if not installed_azure_identity:
         raise MissingDependencyError("azure-identity")
-    logger.debug("Detected AKS workload identity environment, using WorkloadIdentityCredential")
+    logger.debug(
+        "Detected AKS workload identity environment, using WorkloadIdentityCredential"
+    )
     try:
         credential = azure_identity_aio.WorkloadIdentityCredential()
         token = await credential.get_token(f"{resource}/.default")
@@ -307,11 +309,13 @@ async def create_azure_attestation(
     If the application isn't running on Azure or no credentials were found, raises an error.
     """
     # AKS Workload Identity path: all three env vars are injected by the AKS webhook
-    is_aks = all([
-        os.environ.get("AZURE_CLIENT_ID"),
-        os.environ.get("AZURE_TENANT_ID"),
-        os.environ.get("AZURE_FEDERATED_TOKEN_FILE"),
-    ])
+    is_aks = all(
+        [
+            os.environ.get("AZURE_CLIENT_ID"),
+            os.environ.get("AZURE_TENANT_ID"),
+            os.environ.get("AZURE_FEDERATED_TOKEN_FILE"),
+        ]
+    )
     if is_aks:
         if impersonation_path:
             raise ProgrammingError(
@@ -333,7 +337,9 @@ async def create_azure_attestation(
         )
 
         headers = {"Metadata": "true"}
-        url_without_query_string = "http://169.254.169.254/metadata/identity/oauth2/token"
+        url_without_query_string = (
+            "http://169.254.169.254/metadata/identity/oauth2/token"
+        )
         query_params = f"api-version=2018-02-01&resource={resource}"
 
         # Check if running in Azure Functions environment
@@ -386,7 +392,10 @@ async def create_azure_attestation(
 
         if impersonation_path:
             jwt_str = await get_azure_sp_token_via_impersonation(
-                jwt_str, impersonation_path[0], snowflake_entra_resource, session_manager
+                jwt_str,
+                impersonation_path[0],
+                snowflake_entra_resource,
+                session_manager,
             )
 
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
