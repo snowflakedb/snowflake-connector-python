@@ -7,6 +7,73 @@ export RSA_KEY_PATH_AWS_AZURE="$THIS_DIR/wif/parameters/rsa_wif_aws_azure"
 export RSA_KEY_PATH_GCP="$THIS_DIR/wif/parameters/rsa_wif_gcp"
 export PARAMETERS_FILE_PATH="$THIS_DIR/wif/parameters/parameters_wif.json"
 
+run_tests_on_aks() {
+  local cluster="$1"
+  local service_account="$2"
+  local snowflake_host="$3"
+  local snowflake_user="$4"
+  local description="$5"
+  local test_name="$6"
+
+  local pod_name="wif-test-$(date +%s)"
+
+  echo "Running AKS tests ($description) on cluster $cluster"
+
+  ssh -i "$RSA_KEY_PATH_AWS_AZURE" -o IdentitiesOnly=yes -p 443 "$HOST_AKS" \
+    BRANCH="$BRANCH" \
+    CLUSTER="$cluster" \
+    SERVICE_ACCOUNT="$service_account" \
+    SNOWFLAKE_TEST_WIF_HOST="$snowflake_host" \
+    SNOWFLAKE_TEST_WIF_ACCOUNT="$SNOWFLAKE_TEST_WIF_ACCOUNT" \
+    SNOWFLAKE_TEST_WIF_USERNAME="$snowflake_user" \
+    POD_NAME="$pod_name" \
+    bash << 'SSHEOF'
+      set -e
+      set -o pipefail
+
+      kubectl config use-context "$CLUSTER"
+
+      kubectl run "$POD_NAME" \
+        --image=python:3.11 \
+        --overrides="{\"spec\":{\"serviceAccountName\":\"$SERVICE_ACCOUNT\"}}" \
+        --labels="azure.workload.identity/use=true" \
+        --restart=Never \
+        -- sleep 3600
+
+      kubectl wait --for=condition=ready pod/"$POD_NAME" --timeout=120s
+
+      kubectl exec "$POD_NAME" -- bash -c "
+        apt-get update -q && apt-get install git g++ -y -q
+        if [[ '$BRANCH' =~ ^PR-[0-9]+\$ ]]; then
+          curl -sL https://github.com/snowflakedb/snowflake-connector-python/archive/refs/pull/\$(echo \$BRANCH | cut -d- -f2)/head.tar.gz | tar -xz
+          mv snowflake-connector-python-* snowflake-connector-python
+        else
+          curl -sL https://github.com/snowflakedb/snowflake-connector-python/archive/refs/heads/\$BRANCH.tar.gz | tar -xz
+          mv snowflake-connector-python-\$BRANCH snowflake-connector-python
+        fi
+        cd snowflake-connector-python
+        pip install -e '.[azure]' pytest -q
+        SF_OCSP_TEST_MODE=true \
+        RUN_WIF_TESTS=true \
+        SNOWFLAKE_TEST_WIF_HOST=$SNOWFLAKE_TEST_WIF_HOST \
+        SNOWFLAKE_TEST_WIF_ACCOUNT=$SNOWFLAKE_TEST_WIF_ACCOUNT \
+        SNOWFLAKE_TEST_WIF_USERNAME=$SNOWFLAKE_TEST_WIF_USERNAME \
+        python -m pytest test/wif/test_wif.py::$test_name -v
+      "
+      local status=$?
+      kubectl delete pod "$POD_NAME" --ignore-not-found
+      exit $status
+SSHEOF
+
+  local status=$?
+  if [[ $status -ne 0 ]]; then
+    echo "AKS tests ($description) failed with exit status: $status"
+    EXIT_STATUS=1
+  else
+    echo "AKS tests ($description) passed"
+  fi
+}
+
 run_tests_and_set_result() {
   local provider="$1"
   local host="$2"
@@ -86,6 +153,10 @@ set +e  # Don't exit on first failure
 run_tests_and_set_result "AZURE" "$HOST_AZURE" "$SNOWFLAKE_TEST_WIF_HOST_AZURE" "$RSA_KEY_PATH_AWS_AZURE" "$SNOWFLAKE_TEST_WIF_USERNAME_AZURE" "$SNOWFLAKE_TEST_WIF_IMPERSONATION_PATH_AZURE" "$SNOWFLAKE_TEST_WIF_USERNAME_AZURE_IMPERSONATION"
 run_tests_and_set_result "AWS" "$HOST_AWS" "$SNOWFLAKE_TEST_WIF_HOST_AWS" "$RSA_KEY_PATH_AWS_AZURE" "$SNOWFLAKE_TEST_WIF_USERNAME_AWS" "$SNOWFLAKE_TEST_WIF_IMPERSONATION_PATH_AWS" "$SNOWFLAKE_TEST_WIF_USERNAME_AWS_IMPERSONATION"
 run_tests_and_set_result "GCP" "$HOST_GCP" "$SNOWFLAKE_TEST_WIF_HOST_GCP" "$RSA_KEY_PATH_GCP" "$SNOWFLAKE_TEST_WIF_USERNAME_GCP" "$SNOWFLAKE_TEST_WIF_IMPERSONATION_PATH_GCP" "$SNOWFLAKE_TEST_WIF_USERNAME_GCP_IMPERSONATION"
+run_tests_on_aks "$SNOWFLAKE_TEST_WIF_AKS_CLUSTER_1" "$SNOWFLAKE_TEST_WIF_AKS_SA_MI" "$SNOWFLAKE_TEST_WIF_HOST_AKS" "$SNOWFLAKE_TEST_WIF_USERNAME_AKS" "AKS MI cluster 1" "test_aks_mi_native_auth"
+run_tests_on_aks "$SNOWFLAKE_TEST_WIF_AKS_CLUSTER_1" "$SNOWFLAKE_TEST_WIF_AKS_SA_SP" "$SNOWFLAKE_TEST_WIF_HOST_AKS" "$SNOWFLAKE_TEST_WIF_USERNAME_AKS_SP" "AKS SP cluster 1" "test_aks_sp_direct_auth"
+run_tests_on_aks "$SNOWFLAKE_TEST_WIF_AKS_CLUSTER_1" "$SNOWFLAKE_TEST_WIF_AKS_SA_MI" "$SNOWFLAKE_TEST_WIF_HOST_AKS" "$SNOWFLAKE_TEST_WIF_USERNAME_AKS_OIDC" "AKS OIDC cluster 1" "test_aks_oidc_backward_compat"
+run_tests_on_aks "$SNOWFLAKE_TEST_WIF_AKS_CLUSTER_2" "$SNOWFLAKE_TEST_WIF_AKS_SA_MI" "$SNOWFLAKE_TEST_WIF_HOST_AKS" "$SNOWFLAKE_TEST_WIF_USERNAME_AKS" "AKS MI cluster 2" "test_aks_mi_native_auth"
 set -e  # Re-enable exit on error
 echo "Exit status: $EXIT_STATUS"
 exit $EXIT_STATUS
