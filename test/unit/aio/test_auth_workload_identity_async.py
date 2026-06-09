@@ -690,8 +690,7 @@ async def test_aks_env_vars_partially_set_falls_back_to_imds(
     fake_azure_vm_metadata_service,
     monkeypatch,
 ):
-    # Only AZURE_CLIENT_ID is set; without AZURE_TENANT_ID and AZURE_FEDERATED_TOKEN_FILE,
-    # is_aks=False and the code falls back to the IMDS path.
+    # Only AZURE_CLIENT_ID is set; is_aks requires all three env vars and the token file to exist.
     monkeypatch.setenv("AZURE_CLIENT_ID", "fake-client-id")
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
@@ -702,9 +701,31 @@ async def test_aks_env_vars_partially_set_falls_back_to_imds(
     ] == fake_azure_vm_metadata_service.token
 
 
+async def test_aks_token_file_missing_falls_back_to_imds(
+    fake_azure_vm_metadata_service,
+    monkeypatch,
+):
+    # All three env vars are set but the token file doesn't exist; is_aks=False, falls back to IMDS.
+    monkeypatch.setenv("AZURE_CLIENT_ID", "fake-client-id")
+    monkeypatch.setenv("AZURE_TENANT_ID", "fake-tenant-id")
+    monkeypatch.setenv("AZURE_FEDERATED_TOKEN_FILE", "/var/run/secrets/token")
+
+    with mock.patch(
+        "snowflake.connector.aio._wif_util.os.path.exists", return_value=False
+    ):
+        auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
+        await auth_class.prepare(conn=None)
+
+    assert (await extract_api_data(auth_class))[
+        "TOKEN"
+    ] == fake_azure_vm_metadata_service.token
+
+
 @mock.patch("snowflake.connector.aio._wif_util.os.path.exists", return_value=True)
 @mock.patch("snowflake.connector.aio._wif_util.installed_azure_identity", False)
-async def test_aks_missing_azure_identity_dependency_raises_error(_mock_exists, monkeypatch):
+async def test_aks_missing_azure_identity_dependency_raises_error(
+    _mock_exists, monkeypatch
+):
     monkeypatch.setenv("AZURE_CLIENT_ID", "fake-client-id")
     monkeypatch.setenv("AZURE_TENANT_ID", "fake-tenant-id")
     monkeypatch.setenv("AZURE_FEDERATED_TOKEN_FILE", "/var/run/secrets/token")
