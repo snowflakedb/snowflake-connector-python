@@ -34,12 +34,33 @@ run_tests_on_aks() {
 
       kubectl config use-context "$CLUSTER"
 
-      kubectl run "$POD_NAME" \
-        --image=python:3.11 \
-        --overrides="{\"spec\":{\"serviceAccountName\":\"$SERVICE_ACCOUNT\"}}" \
-        --labels="azure.workload.identity/use=true" \
-        --restart=Never \
-        -- sleep 3600
+      cat <<PODEOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $POD_NAME
+  namespace: default
+  labels:
+    azure.workload.identity/use: "true"
+spec:
+  serviceAccountName: $SERVICE_ACCOUNT
+  restartPolicy: Never
+  containers:
+  - name: test
+    image: python:3.11
+    command: ["sleep", "3600"]
+    volumeMounts:
+    - name: snowflake-token
+      mountPath: /var/run/secrets/snowflake
+  volumes:
+  - name: snowflake-token
+    projected:
+      sources:
+      - serviceAccountToken:
+          audience: snowflakecomputing.com
+          expirationSeconds: 3600
+          path: token
+PODEOF
 
       kubectl wait --for=condition=ready pod/"$POD_NAME" --timeout=120s
 
@@ -61,7 +82,7 @@ run_tests_on_aks() {
         SNOWFLAKE_TEST_WIF_USERNAME=$SNOWFLAKE_TEST_WIF_USERNAME \
         python -m pytest test/wif/test_wif.py::$TEST_NAME -v
       "
-      local status=$?
+      status=$?
       kubectl delete pod "$POD_NAME" --ignore-not-found
       exit $status
 SSHEOF
