@@ -15,8 +15,6 @@ import jwt
 import pytest
 
 from snowflake.connector.aio._wif_util import (
-    AZURE_WIF_FEDERATION_AUDIENCE,
-    DEFAULT_ENTRA_SNOWFLAKE_RESOURCE,
     AttestationProvider,
     WorkloadIdentityAttestation,
 )

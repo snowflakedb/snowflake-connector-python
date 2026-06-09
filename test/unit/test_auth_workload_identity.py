@@ -16,8 +16,6 @@ from snowflake.connector.vendored.requests.exceptions import (
     Timeout,
 )
 from snowflake.connector.wif_util import (
-    AZURE_WIF_FEDERATION_AUDIENCE,
-    DEFAULT_ENTRA_SNOWFLAKE_RESOURCE,
     AttestationProvider,
     WorkloadIdentityAttestation,
     get_aws_sts_hostname,
