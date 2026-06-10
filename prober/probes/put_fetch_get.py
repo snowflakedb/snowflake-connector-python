@@ -81,9 +81,7 @@ def get_driver_version() -> str:
     Returns:
         str: The connector version string.
     """
-    return (
-        os.environ.get("PROBER_DRIVER_VERSION") or snowflake.connector.__version__
-    )
+    return os.environ.get("PROBER_DRIVER_VERSION") or snowflake.connector.__version__
 
 
 def _sanitize_identifier_part(value: str) -> str:
