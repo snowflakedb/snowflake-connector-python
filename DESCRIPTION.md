@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - Upcoming Release
   - Fixed OAuth scope handling for Snowflake custom OAuth: when refresh tokens are enabled, the connector no longer appends the OIDC `offline_access` scope for token endpoints on `*.snowflakecomputing.com` or `*.snowflakecomputing.cn`, which caused `invalid_scope` errors. Snowflake custom OAuth expects `refresh_token` in scope instead. External IdP behavior is unchanged.
+  - Removed pandas upper bound dependency constraint on the `[pandas]` extra to allow installation of pandas 3.0.0 and later.
 
 - v4.6.0(May 28,2026)
   - Dropped support for Python 3.9. The minimum supported version is now Python 3.10.
