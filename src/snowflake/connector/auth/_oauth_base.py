@@ -106,6 +106,18 @@ class _OAuthTokensMixin:
             else None
         )
 
+    def _invalidate_refresh_token(self) -> None:
+        """Clear a confirmed-invalid refresh token from memory and cache.
+
+        A lone remove() does not destroy macOS Keychain ACL entries; only the
+        remove-then-store pattern does. Safe to call on definitive IdP rejection.
+        """
+        self._refresh_token = None
+        if self._token_cache:
+            key = self._get_refresh_token_cache_key()
+            if key:
+                self._token_cache.remove(key)
+
     def _store_tokens(
         self, access_token: str | None = None, refresh_token: str | None = None
     ) -> None:
@@ -385,8 +397,10 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
                 "received the following response body when exchanging refresh token: %s",
                 SecretDetector.mask_secrets(str(resp.data)),
             )
-            # Clear in-memory refresh token - leave keychain alone
-            self._refresh_token = None
+            # IdP responded but rejected the token - evict it from cache so the
+            # next connection doesn't waste a round-trip retrying a dead token.
+            # A lone remove() is safe and does not destroy macOS Keychain ACL.
+            self._invalidate_refresh_token()
 
     def _get_refresh_token_response(
         self, conn: SnowflakeConnection

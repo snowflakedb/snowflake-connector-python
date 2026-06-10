@@ -571,3 +571,71 @@ class TestOAuthResetTemporaryState:
         mock_token_cache.retrieve.reset_mock()
         auth._load_tokens_from_cache("test_user")
         mock_token_cache.retrieve.assert_called()
+
+
+class TestOAuthRefreshTokenEviction:
+    """Tests for _invalidate_refresh_token() - evicts dead tokens from keychain on IdP rejection."""
+
+    def _make_auth(self, mock_token_cache, refresh_token_enabled=True):
+        return AuthByOauthCode(
+            "app",
+            "clientId",
+            "clientSecret",
+            "https://test.snowflakecomputing.com/oauth/authorize",
+            "https://test.snowflakecomputing.com/oauth/token-request",
+            "http://localhost:8080",
+            "session:role:test",
+            "test.snowflakecomputing.com",
+            token_cache=mock_token_cache,
+            refresh_token_enabled=refresh_token_enabled,
+        )
+
+    def test_invalidate_refresh_token_removes_from_cache(
+        self, mock_token_cache, omit_oauth_urls_check
+    ):
+        """_invalidate_refresh_token() clears memory and calls cache.remove()."""
+        auth = self._make_auth(mock_token_cache)
+        auth._update_cache_keys("test_user")
+        auth._refresh_token = "stale_refresh_token"
+
+        auth._invalidate_refresh_token()
+
+        assert auth._refresh_token is None
+        mock_token_cache.remove.assert_called_once()
+        mock_token_cache.store.assert_not_called()
+
+    def test_do_refresh_token_evicts_on_idp_rejection(
+        self, mock_connection, mock_token_cache, omit_oauth_urls_check
+    ):
+        """When IdP responds but rejects the refresh token (no access_token in body),
+        the stale refresh token is removed from the keychain."""
+        auth = self._make_auth(mock_token_cache)
+        auth._update_cache_keys("test_user")
+        auth._refresh_token = "stale_refresh_token"
+
+        # IdP returns a response but without access_token (e.g. {"error": "invalid_token"})
+        bad_response = Mock()
+        bad_response.data = b'{"error": "invalid_token"}'
+
+        with patch.object(
+            auth, "_get_refresh_token_response", return_value=bad_response
+        ):
+            auth._do_refresh_token(conn=mock_connection)
+
+        assert auth._refresh_token is None
+        mock_token_cache.remove.assert_called_once()
+
+    def test_do_refresh_token_keeps_keychain_on_network_error(
+        self, mock_connection, mock_token_cache, omit_oauth_urls_check
+    ):
+        """When refresh fails due to a network error (resp=None), the keychain
+        entry is preserved - it may still be valid once connectivity is restored."""
+        auth = self._make_auth(mock_token_cache)
+        auth._update_cache_keys("test_user")
+        auth._refresh_token = "valid_refresh_token"
+
+        with patch.object(auth, "_get_refresh_token_response", return_value=None):
+            auth._do_refresh_token(conn=mock_connection)
+
+        assert auth._refresh_token is None  # cleared from memory
+        mock_token_cache.remove.assert_not_called()  # keychain untouched
