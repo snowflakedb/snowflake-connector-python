@@ -96,19 +96,16 @@ def _sanitize_identifier_part(value: str) -> str:
 
 def get_resource_suffix(name_suffix: str = "") -> str:
     """
-    Builds a deterministic suffix from the Python and driver versions so that
-    each (language, driver_version[, probe_variant]) combination owns a stable
-    pool of Snowflake object names.
-
-    Using a deterministic name (instead of a random one) bounds the number of
-    stages/tables a prober can leak: if cleanup is skipped on crash, the next
-    run with the same versions reuses the same name and `CREATE OR REPLACE`
-    wipes the leftover state.
+    Builds a deterministic suffix from the Python and driver versions so each
+    (python_version, driver_version[, probe_variant]) combination owns a single
+    stable Snowflake object name. Combined with ``CREATE OR REPLACE`` this
+    bounds the resources the prober can leak: a crashed run is reclaimed on the
+    next invocation instead of accumulating new random-suffixed objects.
 
     Args:
-        name_suffix: Optional discriminator (e.g. "fail_closed") to keep
-            different probe variants from colliding with each other when they
-            run against the same schema.
+        name_suffix: Optional discriminator (e.g. ``"fail_closed"``) to keep
+            different probe variants from colliding when they run against the
+            same schema.
     """
     parts = [
         f"py{_sanitize_identifier_part(get_python_version())}",
@@ -212,8 +209,8 @@ def create_data_table(
     Creates a data table in Snowflake with the specified schema.
 
     The table name is deterministic per (python_version, driver_version,
-    name_suffix) so that leaked tables from previously aborted runs are
-    overwritten via CREATE OR REPLACECREATE OR REPLACE on the next run instead of accumulating.
+    name_suffix); ``CREATE OR REPLACE`` ensures a leftover table from a
+    previously aborted run is overwritten rather than accumulating.
 
     Returns:
         str: The name of the created table.
@@ -257,8 +254,8 @@ def create_data_stage(
     Creates a stage in Snowflake for data upload.
 
     The stage name is deterministic per (python_version, driver_version,
-    name_suffix) so that leaked stages from previously aborted runs are
-    overwritten via CREATE OR REPLACE on the next run instead of accumulating.
+    name_suffix); ``CREATE OR REPLACE`` ensures a leftover stage from a
+    previously aborted run is overwritten rather than accumulating.
 
     Returns:
         str: The name of the created stage.
