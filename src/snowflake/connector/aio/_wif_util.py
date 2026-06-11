@@ -43,10 +43,9 @@ async def get_azure_mi_token_via_aks(resource: str) -> str:
         "Detected AKS workload identity environment, using WorkloadIdentityCredential"
     )
     try:
-        credential = azure_identity_aio.WorkloadIdentityCredential()
-        token = await credential.get_token(f"{resource}/.default")
-        await credential.close()
-        return token.token
+        async with azure_identity_aio.WorkloadIdentityCredential() as credential:
+            token = await credential.get_token(f"{resource}/.default")
+            return token.token
     except Exception as e:
         raise ProgrammingError(
             msg=f"Error fetching Azure MI token via WorkloadIdentityCredential: {e}. Ensure the application is running on AKS with workload identity configured.",
