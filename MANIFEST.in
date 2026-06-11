@@ -18,6 +18,7 @@ include src/snowflake/connector/minicore __init__.py
 recursive-include src/snowflake/connector/minicore *.so *.dll *.dylib *.a *.h *.lib
 
 exclude .git-blame-ignore-revs
+exclude reproduce_snow_3342254.py
 exclude .pre-commit-config.yaml
 exclude license_header.txt
 exclude tox.ini
