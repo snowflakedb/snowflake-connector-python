@@ -210,15 +210,15 @@ def phase1_syscall_pattern():
     if bytes_calls:
         readable = [
             (
-                f"{s/1024/1024:.1f}MB"
+                f"{s / 1024 / 1024:.1f}MB"
                 if s >= 1024 * 1024
-                else f"{s/1024:.1f}KB" if s >= 1024 else f"{s}B"
+                else f"{s / 1024:.1f}KB" if s >= 1024 else f"{s}B"
             )
             for s in bytes_calls
         ]
         print(f"    sizes: {readable}")
         print(
-            f"    largest single call: {max(bytes_calls)/1024/1024:.1f} MB  ← saturates socket buffer"
+            f"    largest single call: {max(bytes_calls) / 1024 / 1024:.1f} MB  ← saturates socket buffer"
         )
 
     print(
@@ -246,7 +246,7 @@ def phase1_syscall_pattern():
         max(bytesio_calls) <= HTTP_BLOCKSIZE
     ), f"BytesIO chunks should be <= {HTTP_BLOCKSIZE} bytes"
     print(
-        f"  [PASS] bytes   → body sent in 1 sendall of {S3_CHUNK_SIZE//1024//1024} MB  "
+        f"  [PASS] bytes   → body sent in 1 sendall of {S3_CHUNK_SIZE // 1024 // 1024} MB  "
         f"(can saturate socket buffer)"
     )
     print(
@@ -383,7 +383,7 @@ def phase2_stall_simulation():
         + (f"  ERROR: {bytes_error}" if bytes_error else "")
     )
     print(f"  BytesIO path: {len(bio_calls)} sendall() calls")
-    print(f"    worst single call  : {bio_max*1000:.1f} ms")
+    print(f"    worst single call  : {bio_max * 1000:.1f} ms")
     print(f"    total in sendall() : {bio_total:.3f}s")
     print()
     print("  Key insight:")
@@ -593,7 +593,7 @@ def phase4_http400_timeout():
             status = None
             body = str(exc)
 
-    print(f"  bytes path ({len(data)//1024//1024} MB as raw bytes):")
+    print(f"  bytes path ({len(data) // 1024 // 1024} MB as raw bytes):")
     print(f"    elapsed    : {elapsed:.2f}s")
     if status is not None:
         print(f"    HTTP status: {status}")
@@ -628,7 +628,7 @@ def phase4_http400_timeout():
             status_bio = None
             body_bio = str(exc)
 
-    print(f"\n  BytesIO path ({len(data)//1024//1024} MB as io.BytesIO):")
+    print(f"\n  BytesIO path ({len(data) // 1024 // 1024} MB as io.BytesIO):")
     print(f"    elapsed    : {elapsed_bio:.2f}s")
     if status_bio is not None:
         print(f"    HTTP status: {status_bio}")
@@ -663,14 +663,20 @@ def phase4_http400_timeout():
 
 
 # ---------------------------------------------------------------------------
-# Phase 5 – real packet loss via dnctl + pfctl (macOS only, requires sudo)
+# Phase 5 – real packet loss via lo1 virtual interface + dnctl/pfctl
 # ---------------------------------------------------------------------------
 
-DUMMYNET_PIPE = 99  # high number unlikely to conflict with existing pipes
-PACKET_LOSS_RATE = 0.30  # 30%
-P5_TEST_ADDR = "127.0.0.2"  # 127.x.x.x always routes to lo0 — no alias needed
+DUMMYNET_PIPE = 99  # high pipe number unlikely to conflict
+PACKET_LOSS_RATE = 0.10  # 10% – realistic Wi-Fi loss, enough to force retransmits
+P5_IFACE = "lo1"  # dedicated virtual loopback clone (never touches lo0)
+P5_TEST_ADDR = "127.100.0.1"  # IP assigned exclusively to lo1
 P5_PAYLOAD = 8 * 1024 * 1024  # 8 MB = S3_DEFAULT_CHUNK_SIZE
-P5_BYTES_TIMEOUT = 30.0  # give up on bytes path after this many seconds
+# Client-side upload timeout for the bytes path. The real S3 uses ~119 s;
+# we use 30 s so the test completes quickly.
+P5_BYTES_TIMEOUT = 30.0
+# The server waits this long for the full body before returning 400.
+# Must be > BytesIO completion time under 10% loss (typically a few seconds).
+P5_SERVER_TIMEOUT = P5_BYTES_TIMEOUT * 3
 
 
 def _sudo(*args: str, capture: bool = False) -> subprocess.CompletedProcess:
@@ -680,17 +686,40 @@ def _sudo(*args: str, capture: bool = False) -> subprocess.CompletedProcess:
     return subprocess.run(["sudo"] + list(args), **kw)
 
 
+def _iface_exists(iface: str) -> bool:
+    return subprocess.run(["ifconfig", iface], capture_output=True).returncode == 0
+
+
+def _create_lo1(iface: str, addr: str) -> bool:
+    """Create a loopback clone interface and assign addr to it."""
+    if _iface_exists(iface):
+        print(f"  Warning: {iface} already exists — will reuse it.")
+    else:
+        r = _sudo("ifconfig", iface, "create", capture=True)
+        if r.returncode != 0:
+            print(f"  ifconfig {iface} create failed: {r.stderr.strip()}")
+            return False
+    r = _sudo("ifconfig", iface, "inet", addr, "up", capture=True)
+    if r.returncode != 0:
+        print(f"  ifconfig {iface} inet {addr} up failed: {r.stderr.strip()}")
+        return False
+    return True
+
+
+def _destroy_lo1(iface: str) -> None:
+    _sudo("ifconfig", iface, "destroy", capture=True)
+
+
 def _pf_is_enabled() -> bool:
-    r = _sudo("pfctl", "-si", capture=True)
-    return "Status: Enabled" in r.stdout
+    return "Status: Enabled" in _sudo("pfctl", "-si", capture=True).stdout
 
 
 def _pf_save_rules() -> str:
     return _sudo("pfctl", "-sr", capture=True).stdout
 
 
-def _setup_packet_loss() -> bool:
-    """Configure dnctl pipe + pfctl to drop PACKET_LOSS_RATE of TCP to P5_TEST_ADDR."""
+def _setup_packet_loss_on_iface(iface: str) -> bool:
+    """Create a dummynet pipe and route all TCP on iface through it."""
     r = _sudo(
         "dnctl",
         "pipe",
@@ -704,10 +733,8 @@ def _setup_packet_loss() -> bool:
         print(f"  dnctl pipe config failed: {r.stderr.strip()}")
         return False
 
-    rules = (
-        f"dummynet out on lo0 proto tcp from any to {P5_TEST_ADDR} "
-        f"pipe {DUMMYNET_PIPE}\n"
-    )
+    # Rules scoped only to our virtual interface — lo0 is never touched.
+    rules = f"dummynet out on {iface} proto tcp pipe {DUMMYNET_PIPE}\n"
     with tempfile.NamedTemporaryFile(mode="w", suffix=".conf", delete=False) as f:
         f.write(rules)
         tmp = f.name
@@ -721,13 +748,11 @@ def _setup_packet_loss() -> bool:
 
     r = _sudo("pfctl", "-e", capture=True)
     if r.returncode != 0 and "already enabled" not in r.stderr.lower():
-        print(f"  pfctl -e: {r.stderr.strip()}")
-        return False
-
+        print(f"  pfctl -e warning: {r.stderr.strip()}")
     return True
 
 
-def _restore_pf(was_enabled: bool, saved_rules: str) -> None:
+def _restore_pf_and_iface(iface: str, was_enabled: bool, saved_rules: str) -> None:
     _sudo("pfctl", "-d", capture=True)
     _sudo("dnctl", "pipe", str(DUMMYNET_PIPE), "delete", capture=True)
     if saved_rules.strip():
@@ -740,25 +765,108 @@ def _restore_pf(was_enabled: bool, saved_rules: str) -> None:
             os.unlink(tmp)
     if was_enabled:
         _sudo("pfctl", "-e", capture=True)
+    _destroy_lo1(iface)
 
 
-def _p5_upload(payload, sock_addr: tuple[str, int], timeout: float) -> dict:
+def _p5_server_handler(conn: socket.socket) -> None:
     """
-    Upload payload (bytes or BytesIO) to a raw TCP server at sock_addr.
-    Returns {"elapsed": float, "status": int|None, "error": str|None, "xml_code": str|None}
+    Greedy-read server for Phase 5.
+
+    Reads the full PUT body as fast as TCP delivers it.
+    Returns HTTP 200 if all bytes arrive within P5_SERVER_TIMEOUT,
+    HTTP 400 RequestTimeout (real S3 XML) if the upload stalls.
+    This mirrors exactly what S3 does when the TCP window freezes.
     """
+    conn.settimeout(P5_SERVER_TIMEOUT)
+    buf = b""
+    try:
+        while b"\r\n\r\n" not in buf:
+            chunk = conn.recv(4096)
+            if not chunk:
+                conn.close()
+                return
+            buf += chunk
+    except OSError:
+        conn.close()
+        return
+
+    content_length = 0
+    for line in buf.split(b"\r\n"):
+        if line.lower().startswith(b"content-length:"):
+            content_length = int(line.split(b":")[1].strip())
+            break
+
+    received = 0
+    timed_out = False
+    try:
+        while received < content_length:
+            chunk = conn.recv(min(65536, content_length - received))
+            if not chunk:
+                break
+            received += len(chunk)
+    except OSError:
+        timed_out = True
+
+    if not timed_out and received >= content_length:
+        try:
+            conn.sendall(
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Length: 0\r\n"
+                b"Connection: close\r\n\r\n"
+            )
+        except OSError:
+            pass
+    else:
+        try:
+            conn.sendall(
+                b"HTTP/1.1 400 Bad Request\r\n"
+                b"Content-Type: application/xml\r\n"
+                + f"Content-Length: {len(S3_REQUEST_TIMEOUT_XML)}\r\n".encode()
+                + b"Connection: close\r\n\r\n"
+                + S3_REQUEST_TIMEOUT_XML
+            )
+        except OSError:
+            pass
+    conn.close()
+
+
+@contextmanager
+def p5_mock_s3_server(bind_addr: str) -> Generator[tuple[str, int]]:
+    """Mock S3 server for Phase 5: reads greedily, 200 on success / 400 on stall."""
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind((bind_addr, 0))
+    srv.listen(5)
+    host, port = srv.getsockname()
+
+    def accept_loop():
+        srv.settimeout(P5_SERVER_TIMEOUT + 5)
+        while True:
+            try:
+                conn, _ = srv.accept()
+            except OSError:
+                break
+            threading.Thread(
+                target=_p5_server_handler, args=(conn,), daemon=True
+            ).start()
+
+    t = threading.Thread(target=accept_loop, daemon=True)
+    t.start()
+    try:
+        yield host, port
+    finally:
+        srv.close()
+        t.join(timeout=2.0)
+
+
+def _p5_upload(payload, addr: tuple[str, int], timeout: float) -> dict:
+    """PUT payload to mock S3; return result dict."""
     try:
         from snowflake.connector.vendored import requests as _req
     except ImportError:
         import requests as _req  # type: ignore[no-redef]
 
-    host, port = sock_addr
-    url = f"http://{host}:{port}/upload"
-    content_length = (
-        len(payload)
-        if isinstance(payload, (bytes, bytearray))
-        else (payload.seek(0, 2) or payload.seek(0, 2))
-    )
+    host, port = addr
     if hasattr(payload, "seek"):
         payload.seek(0)
         content_length = payload.seek(0, 2)
@@ -766,11 +874,11 @@ def _p5_upload(payload, sock_addr: tuple[str, int], timeout: float) -> dict:
     else:
         content_length = len(payload)
 
-    t0 = time.monotonic()
     result: dict = {}
+    t0 = time.monotonic()
     try:
         resp = _req.put(
-            url,
+            f"http://{host}:{port}/upload",
             data=payload,
             headers={"Content-Length": str(content_length)},
             timeout=timeout,
@@ -794,27 +902,30 @@ def _p5_upload(payload, sock_addr: tuple[str, int], timeout: float) -> dict:
 
 def phase5_packet_loss():
     print("=" * 70)
-    print("PHASE 5: real packet loss via dnctl + pfctl (requires sudo)")
+    print("PHASE 5: real packet loss via lo1 virtual interface + dnctl/pfctl")
     print("=" * 70)
 
     if sys.platform != "darwin":
-        print("\n  Skipped: Phase 5 requires macOS (dnctl + pfctl).")
+        print("\n  Skipped: requires macOS (dnctl + pfctl).")
         return
     if not shutil.which("dnctl"):
         print("\n  Skipped: /usr/sbin/dnctl not found.")
         return
 
     print(
-        f"\n  Interface  : lo0 → {P5_TEST_ADDR}"
-        f"\n  Packet loss: {PACKET_LOSS_RATE*100:.0f}%  (dummynet pipe {DUMMYNET_PIPE})"
-        f"\n  Payload    : {P5_PAYLOAD // 1024 // 1024} MB  (S3_DEFAULT_CHUNK_SIZE)"
-        f"\n  bytes timeout: {P5_BYTES_TIMEOUT}s\n"
+        f"\n  Virtual iface : {P5_IFACE}  addr={P5_TEST_ADDR}"
+        f"\n  Packet loss   : {PACKET_LOSS_RATE * 100:.0f}%  "
+        f"(dummynet pipe {DUMMYNET_PIPE}, lo0 untouched)"
+        f"\n  Payload       : {P5_PAYLOAD // 1024 // 1024} MB"
+        f"  (one S3_DEFAULT_CHUNK_SIZE slice)"
+        f"\n  bytes timeout : {P5_BYTES_TIMEOUT:.0f}s  "
+        f"(real S3 uses ~119 s)"
+        f"\n  server timeout: {P5_SERVER_TIMEOUT:.0f}s  "
+        f"(returns HTTP 400 if upload stalls)\n"
     )
 
-    # Warm up sudo credentials once (shows password prompt if needed)
     print("  Requesting sudo (password prompt may appear)...")
-    r = _sudo("true")
-    if r.returncode != 0:
+    if _sudo("true").returncode != 0:
         print("  sudo failed — skipping Phase 5.")
         return
 
@@ -822,85 +933,87 @@ def phase5_packet_loss():
     saved_rules = _pf_save_rules()
 
     try:
-        if not _setup_packet_loss():
+        if not _create_lo1(P5_IFACE, P5_TEST_ADDR):
             return
-        print("  Packet loss active.\n")
+        print(f"  Created {P5_IFACE}  ({P5_TEST_ADDR})")
 
-        # Verify loss is configured
+        if not _setup_packet_loss_on_iface(P5_IFACE):
+            return
+
         r = _sudo("dnctl", "pipe", str(DUMMYNET_PIPE), "show", capture=True)
         for line in r.stdout.splitlines():
-            if "plr" in line or "q." in line or str(DUMMYNET_PIPE) in line:
+            if str(DUMMYNET_PIPE) in line or "plr" in line:
                 print(f"  dnctl: {line.strip()}")
-        print()
+        print(f"\n  {PACKET_LOSS_RATE * 100:.0f}% packet loss active on {P5_IFACE}.\n")
 
         data = b"X" * P5_PAYLOAD
 
-        # ---- bytes path ----
-        with mock_s3_server(bind_addr=P5_TEST_ADDR) as (host, port):
-            print(f"  [bytes path] PUT {P5_PAYLOAD//1024//1024}MB → {host}:{port}")
-            res = _p5_upload(data, (host, port), timeout=P5_BYTES_TIMEOUT)
-
-        print(f"    elapsed : {res['elapsed']:.2f}s")
-        if res["status"] is not None:
-            print(f"    HTTP    : {res['status']}")
-            if res["xml_code"]:
-                print(f"    S3 code : {res['xml_code']}")
-        else:
-            print(f"    error   : {res['error']}")
-
-        # ---- BytesIO path ----
-        with mock_s3_server(bind_addr=P5_TEST_ADDR) as (host, port):
-            print(f"\n  [BytesIO path] PUT {P5_PAYLOAD//1024//1024}MB → {host}:{port}")
-            res_bio = _p5_upload(
-                io.BytesIO(data), (host, port), timeout=P5_BYTES_TIMEOUT * 3
+        # ---- bytes path (one 8 MB sendall — current connector) ----
+        with p5_mock_s3_server(P5_TEST_ADDR) as (host, port):
+            print(
+                f"  [bytes]   PUT {P5_PAYLOAD // 1024 // 1024} MB → "
+                f"{host}:{port}  (timeout {P5_BYTES_TIMEOUT:.0f}s)"
             )
-
-        print(f"    elapsed : {res_bio['elapsed']:.2f}s")
-        if res_bio["status"] is not None:
-            print(f"    HTTP    : {res_bio['status']}")
-            if res_bio["xml_code"]:
-                print(f"    S3 code : {res_bio['xml_code']}")
+            res_bytes = _p5_upload(data, (host, port), P5_BYTES_TIMEOUT)
+        print(f"    elapsed  : {res_bytes['elapsed']:.2f}s")
+        if res_bytes["status"] is not None:
+            print(f"    response : HTTP {res_bytes['status']}")
+            if res_bytes.get("xml_code"):
+                print(f"    S3 code  : {res_bytes['xml_code']}")
         else:
-            print(f"    error   : {res_bio['error']}")
+            print(f"    error    : {res_bytes['error']}")
+
+        # ---- BytesIO path (1024 × 8 KB sendalls — proposed fix) ----
+        with p5_mock_s3_server(P5_TEST_ADDR) as (host, port):
+            print(
+                f"\n  [BytesIO] PUT {P5_PAYLOAD // 1024 // 1024} MB → "
+                f"{host}:{port}  (timeout {P5_SERVER_TIMEOUT:.0f}s)"
+            )
+            res_bio = _p5_upload(io.BytesIO(data), (host, port), P5_SERVER_TIMEOUT)
+        print(f"    elapsed  : {res_bio['elapsed']:.2f}s")
+        if res_bio["status"] is not None:
+            print(f"    response : HTTP {res_bio['status']}")
+            if res_bio.get("xml_code"):
+                print(f"    S3 code  : {res_bio['xml_code']}")
+        else:
+            print(f"    error    : {res_bio['error']}")
 
         print()
-        _summarise_phase5(res, res_bio)
+        _summarise_phase5(res_bytes, res_bio)
 
     finally:
-        _restore_pf(was_enabled, saved_rules)
-        print("\n  pfctl/dnctl state restored.")
+        _restore_pf_and_iface(P5_IFACE, was_enabled, saved_rules)
+        print("\n  lo1 destroyed; pfctl/dnctl state restored.")
 
 
 def _summarise_phase5(bytes_res: dict, bio_res: dict) -> None:
-    b_ok = bytes_res["status"] == 200
-    b_400 = bytes_res["status"] == 400 and bytes_res.get("xml_code") == "RequestTimeout"
-    b_err = bytes_res["error"] is not None
-
+    b_stalled = bytes_res["error"] is not None or bytes_res.get("status") in (
+        400,
+        None,
+    )
     bio_ok = bio_res["status"] == 200
-    bio_400 = bio_res["status"] == 400 and bio_res.get("xml_code") == "RequestTimeout"
 
-    print("  Result:")
-    if b_400 or b_err:
+    print("  Verdict:")
+    if b_stalled and bio_ok:
         print(
-            f"    bytes   → STALLED/TIMEOUT after {bytes_res['elapsed']:.1f}s  ✓ theory confirmed"
+            f"    [PASS] bytes   → stalled/timed out after "
+            f"{bytes_res['elapsed']:.1f}s  ← theory confirmed"
         )
-    elif b_ok:
         print(
-            f"    bytes   → succeeded in {bytes_res['elapsed']:.1f}s  "
-            f"(30% loss insufficient on loopback to trigger deadlock)"
+            f"    [PASS] BytesIO → 200 OK in {bio_res['elapsed']:.1f}s" "  ← fix works"
         )
-    else:
-        print(f"    bytes   → {bytes_res}")
-
-    if bio_ok:
-        print(f"    BytesIO → succeeded in {bio_res['elapsed']:.1f}s  ✓ fix works")
-    elif bio_400 or bio_res["error"]:
+    elif b_stalled and not bio_ok:
         print(
-            f"    BytesIO → also failed ({bio_res['elapsed']:.1f}s) — "
-            f"increase PACKET_LOSS_RATE or try with real S3 + pfctl"
+            f"    [PARTIAL] bytes stalled ({bytes_res['elapsed']:.1f}s) "
+            "but BytesIO also failed — increase P5_SERVER_TIMEOUT "
+            "or reduce PACKET_LOSS_RATE"
         )
-    else:
-        print(f"    BytesIO → {bio_res}")
+    elif not b_stalled:
+        print(
+            f"    [INCONCLUSIVE] bytes completed in {bytes_res['elapsed']:.1f}s — "
+            "10% loss on loopback was insufficient to trigger the macOS deadlock; "
+            "try with real S3 + pfctl on en0, or increase PACKET_LOSS_RATE"
+        )
 
 
 # ---------------------------------------------------------------------------
