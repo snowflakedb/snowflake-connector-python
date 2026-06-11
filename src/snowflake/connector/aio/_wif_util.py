@@ -38,7 +38,9 @@ GCP_METADATA_SERVICE_ACCOUNT_BASE_URL = "http://metadata.google.internal/compute
 async def get_azure_mi_token_via_aks(resource: str) -> str:
     """Gets an Azure MI access token via AsyncWorkloadIdentityCredential on AKS."""
     if not installed_azure_identity:
-        raise MissingDependencyError("azure-identity")
+        raise MissingDependencyError(
+            "azure-identity (install with: pip install 'snowflake-connector-python[azure]')"
+        )
     logger.debug(
         "Detected AKS workload identity environment, using WorkloadIdentityCredential"
     )
