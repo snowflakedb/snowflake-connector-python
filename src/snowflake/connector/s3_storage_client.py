@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 from cryptography.hazmat.primitives import hashes, hmac
 
 from .compat import quote, urlparse
+from .errors import OperationalError
 from .constants import (
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_VALUE_OCTET_STREAM,
@@ -37,6 +38,12 @@ AMZ_IV = "x-amz-iv"
 ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
 
 EXPIRED_TOKEN = "ExpiredToken"
+
+# S3 redirect handling
+MAX_S3_REDIRECTS = 5
+METHOD_PRESERVING_REDIRECTS = (307, 308)
+METHOD_CHANGING_REDIRECTS = (301, 302)
+ALL_REDIRECT_STATUS_CODES = METHOD_PRESERVING_REDIRECTS + METHOD_CHANGING_REDIRECTS
 ADDRESSING_STYLE = "virtual"  # explicit force to use virtual addressing style
 UNSIGNED_PAYLOAD = "UNSIGNED-PAYLOAD"
 
@@ -321,6 +328,80 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             payload = b""
         if query_parts is None:
             query_parts = {}
+
+        for _ in range(MAX_S3_REDIRECTS):
+            response = self._send_single_request_with_authentication(
+                url=url,
+                verb=verb,
+                retry_id=retry_id,
+                query_parts=query_parts,
+                x_amz_headers=x_amz_headers.copy(),
+                headers=headers.copy(),
+                payload=payload,
+                unsigned_payload=unsigned_payload,
+                ignore_content_encoding=ignore_content_encoding,
+            )
+
+            if response.status_code not in ALL_REDIRECT_STATUS_CODES:
+                return response
+
+            url = self._handle_s3_redirect(response, verb, url)
+
+        raise OperationalError(
+            msg=f"Too many S3 redirects (max {MAX_S3_REDIRECTS})",
+            errno=253003,
+        )
+
+    def _handle_s3_redirect(
+        self, response: requests.Response, verb: str, original_url: str
+    ) -> str:
+        """Handle S3 redirect response, update region, and return new URL."""
+        if response.status_code in METHOD_CHANGING_REDIRECTS:
+            if verb not in ("GET", "HEAD"):
+                raise OperationalError(
+                    msg=f"S3 returned {response.status_code} for {verb} request. "
+                    f"Expected 307/308 for method-preserving redirect.",
+                    errno=253003,
+                )
+
+        location = response.headers.get("Location")
+        if not location:
+            raise OperationalError(
+                msg=f"S3 returned {response.status_code} without Location header",
+                errno=253003,
+            )
+
+        bucket_region = response.headers.get("x-amz-bucket-region")
+        if not bucket_region:
+            raise OperationalError(
+                msg=f"S3 returned {response.status_code} without x-amz-bucket-region header",
+                errno=253003,
+            )
+
+        logger.debug(
+            "S3 redirect: %d from %s to %s (region: %s)",
+            response.status_code,
+            original_url,
+            location,
+            bucket_region,
+        )
+
+        self.region_name = bucket_region
+        return location
+
+    def _send_single_request_with_authentication(
+        self,
+        url: str,
+        verb: str,
+        retry_id: int | str,
+        query_parts: dict[str, str],
+        x_amz_headers: dict[str, str],
+        headers: dict[str, str],
+        payload: bytes | bytearray | IOBase,
+        unsigned_payload: bool,
+        ignore_content_encoding: bool,
+    ) -> requests.Response:
+        """Send a single authenticated request to S3 with retry logic."""
         parsed_url = urlparse(url)
         x_amz_headers["x-amz-security-token"] = self.credentials.creds.get(
             "AWS_TOKEN", ""
@@ -377,7 +458,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             )
             headers.update(x_amz_headers)
             headers["Authorization"] = authorization_header
-            rest_args = {"headers": headers}
+            rest_args = {"headers": headers, "allow_redirects": False}
 
             if payload:
                 rest_args["data"] = payload
