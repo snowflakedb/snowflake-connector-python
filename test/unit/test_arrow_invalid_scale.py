@@ -14,6 +14,7 @@ except ImportError:
 
 try:
     from snowflake.connector.arrow_context import ArrowConverterContext
+    from snowflake.connector.errors import InterfaceError
     from snowflake.connector.nanoarrow_arrow_iterator import (
         PyArrowRowIterator as NanoarrowPyArrowRowIterator,
     )
@@ -55,7 +56,7 @@ def _iterate(data):
 @pytest.mark.parametrize("scale", _INVALID_SCALES)
 def test_time_invalid_scale_raises(scale):
     data = _ipc_bytes(pyarrow.int64(), {"logicalType": "TIME", "scale": str(scale)}, 0)
-    with pytest.raises(ValueError, match="invalid scale value"):
+    with pytest.raises(InterfaceError, match="invalid scale value"):
         _iterate(data)
 
 
@@ -64,7 +65,7 @@ def test_timestamp_ntz_invalid_scale_raises(scale):
     data = _ipc_bytes(
         pyarrow.int64(), {"logicalType": "TIMESTAMP_NTZ", "scale": str(scale)}, 0
     )
-    with pytest.raises(ValueError, match="invalid scale value"):
+    with pytest.raises(InterfaceError, match="invalid scale value"):
         _iterate(data)
 
 
@@ -73,7 +74,7 @@ def test_timestamp_ltz_invalid_scale_raises(scale):
     data = _ipc_bytes(
         pyarrow.int64(), {"logicalType": "TIMESTAMP_LTZ", "scale": str(scale)}, 0
     )
-    with pytest.raises(ValueError, match="invalid scale value"):
+    with pytest.raises(InterfaceError, match="invalid scale value"):
         _iterate(data)
 
 
@@ -91,7 +92,7 @@ def test_timestamp_tz_invalid_scale_raises(scale):
         {"logicalType": "TIMESTAMP_TZ", "scale": str(scale), "byteLength": "8"},
         {"epoch": 0, "timezone": 1440},
     )
-    with pytest.raises(ValueError, match="invalid scale value"):
+    with pytest.raises(InterfaceError, match="invalid scale value"):
         _iterate(data)
 
 
