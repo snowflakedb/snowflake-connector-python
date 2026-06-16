@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 from cryptography.hazmat.primitives import hashes, hmac
 
 from .compat import quote, urlparse
-from .errors import OperationalError
 from .constants import (
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_VALUE_OCTET_STREAM,
@@ -20,6 +19,7 @@ from .constants import (
     ResultStatus,
 )
 from .encryption_util import EncryptionMetadata
+from .errors import OperationalError
 from .storage_client import SnowflakeStorageClient, remove_content_encoding
 from .vendored import requests
 
@@ -659,7 +659,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         else:
             chunk_size = self.chunk_size
             if chunk_id < self.num_of_chunks - 1:
-                _range = f"{chunk_id * chunk_size}-{(chunk_id+1)*chunk_size-1}"
+                _range = f"{chunk_id * chunk_size}-{(chunk_id + 1) * chunk_size - 1}"
             else:
                 _range = f"{chunk_id * chunk_size}-"
 
