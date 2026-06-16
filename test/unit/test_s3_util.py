@@ -549,7 +549,7 @@ def test_s3_redirect_307_success_with_resign():
         return success_resp
 
     with mock.patch.dict(METHODS, HEAD=mock_head):
-        result = rest_client.get_file_header("file.txt")
+        rest_client.get_file_header("file.txt")
         assert call_count[0] == 2
         assert rest_client.region_name == "us-west-2"
 
@@ -742,7 +742,7 @@ def test_s3_redirect_301_allowed_for_head():
         return success_resp
 
     with mock.patch.dict(METHODS, HEAD=mock_head):
-        result = rest_client.get_file_header("file.txt")
+        rest_client.get_file_header("file.txt")
         assert call_count[0] == 2
         assert rest_client.region_name == "us-west-2"
 
