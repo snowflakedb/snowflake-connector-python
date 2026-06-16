@@ -382,7 +382,7 @@ jobs:
 
   test-lambda:
     name: Test Lambda linux-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
-    needs: build
+    needs: [build, define-matrix]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
