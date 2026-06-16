@@ -36,9 +36,7 @@ def _ipc_bytes(arrow_type, column_meta, row_value):
     field = pyarrow.field("col", arrow_type, True, column_meta)
     writer = RecordBatchStreamWriter(stream, pyarrow.schema([field]))
     writer.write_batch(
-        RecordBatch.from_arrays(
-            [pyarrow.array([row_value], type=arrow_type)], ["col"]
-        )
+        RecordBatch.from_arrays([pyarrow.array([row_value], type=arrow_type)], ["col"])
     )
     writer.close()
     stream.seek(0)
@@ -56,10 +54,8 @@ def _iterate(data):
 
 @pytest.mark.parametrize("scale", _INVALID_SCALES)
 def test_time_invalid_scale_raises(scale):
-    data = _ipc_bytes(
-        pyarrow.int64(), {"logicalType": "TIME", "scale": str(scale)}, 0
-    )
-    with pytest.raises(Exception):
+    data = _ipc_bytes(pyarrow.int64(), {"logicalType": "TIME", "scale": str(scale)}, 0)
+    with pytest.raises(ValueError, match="invalid scale value"):
         _iterate(data)
 
 
@@ -68,7 +64,7 @@ def test_timestamp_ntz_invalid_scale_raises(scale):
     data = _ipc_bytes(
         pyarrow.int64(), {"logicalType": "TIMESTAMP_NTZ", "scale": str(scale)}, 0
     )
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match="invalid scale value"):
         _iterate(data)
 
 
@@ -77,7 +73,7 @@ def test_timestamp_ltz_invalid_scale_raises(scale):
     data = _ipc_bytes(
         pyarrow.int64(), {"logicalType": "TIMESTAMP_LTZ", "scale": str(scale)}, 0
     )
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match="invalid scale value"):
         _iterate(data)
 
 
@@ -95,7 +91,7 @@ def test_timestamp_tz_invalid_scale_raises(scale):
         {"logicalType": "TIMESTAMP_TZ", "scale": str(scale), "byteLength": "8"},
         {"epoch": 0, "timezone": 1440},
     )
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match="invalid scale value"):
         _iterate(data)
 
 
@@ -104,9 +100,7 @@ def test_timestamp_tz_invalid_scale_raises(scale):
 
 @pytest.mark.parametrize("scale", _VALID_SCALES)
 def test_time_valid_scale_accepted(scale):
-    data = _ipc_bytes(
-        pyarrow.int64(), {"logicalType": "TIME", "scale": str(scale)}, 0
-    )
+    data = _ipc_bytes(pyarrow.int64(), {"logicalType": "TIME", "scale": str(scale)}, 0)
     _iterate(data)
 
 
