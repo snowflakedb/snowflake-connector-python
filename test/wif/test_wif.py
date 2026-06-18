@@ -156,10 +156,11 @@ def test_should_authenticate_using_aws_caller_identity():
         pytest.skip("Skipping test - not running on AWS")
 
     connection_params = {
-        "host": "sfctest0.snowflakecomputing.com",
-        "account": "sfctest0",
+        "host": HOST,
+        "account": ACCOUNT,
         "authenticator": "WORKLOAD_IDENTITY",
         "workload_identity_provider": "AWS",
+        "workload_identity_impersonation_path": ["arn:aws:iam::376129840140:role/drivers-wif-automated-tests-caller-identity"],
     }
     assert connect_and_execute_simple_query(
         connection_params, "TEST_WIF_E2E_AWS_CALLER_IDENTITY"
