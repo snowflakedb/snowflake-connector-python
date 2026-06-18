@@ -150,6 +150,22 @@ def test_should_authenticate_using_aws_outbound_token():
         os.environ.pop("SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN", None)
 
 
+@pytest.mark.wif
+def test_should_authenticate_using_aws_caller_identity():
+    if PROVIDER != "AWS":
+        pytest.skip("Skipping test - not running on AWS")
+
+    connection_params = {
+        "host": "sfctest0.snowflakecomputing.com",
+        "account": "sfctest0",
+        "authenticator": "WORKLOAD_IDENTITY",
+        "workload_identity_provider": "AWS",
+    }
+    assert connect_and_execute_simple_query(
+        connection_params, "TEST_WIF_E2E_AWS_CALLER_IDENTITY"
+    ), "Failed to connect using WIF with AWS GetCallerIdentity"
+
+
 def is_provider_gcp() -> bool:
     return PROVIDER == "GCP"
 
