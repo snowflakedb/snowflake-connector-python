@@ -14,7 +14,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed input validation for `scale` metadata in Arrow result set processing for `TIME`, `TIMESTAMP_NTZ`, `TIMESTAMP_LTZ`, and `TIMESTAMP_TZ` columns (SNOW-3388299).
   - Removed pandas upper bound dependency constraint on the `[pandas]` extra to allow installation of pandas 3.0.0 and later.
   - Fixed S3 storage client to correctly handle 307/308 (method-preserving) and 301/302 (GET/HEAD only) redirects by disabling automatic redirect following and re-signing each request with AWS SigV4 credentials for the redirect target. The region is updated from the `x-amz-bucket-region` response header on each redirect. Redirects are capped at 5 hops.
-
+  - Added native AKS (Azure Kubernetes Service) workload identity support. When running on AKS with workload identity configured, the connector automatically uses `WorkloadIdentityCredential` to authenticate via the injected service account credentials. OIDC backward compatibility is also supported.
 
 - v4.6.0(May 28,2026)
   - Dropped support for Python 3.9. The minimum supported version is now Python 3.10.
