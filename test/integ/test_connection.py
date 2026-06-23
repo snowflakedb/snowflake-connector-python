@@ -2685,3 +2685,46 @@ def test_empty_result_stats(conn_cnx):
                     num_dml_duplicates=None,
                 ),
             )
+
+
+def test_fqn_ddl_does_not_pollute_schema_cache(conn_cnx, db_parameters):
+    """SNOW-3665226: fully-qualified DDL must not mutate the connector's cached
+    current schema / database when the session has no schema set.
+
+    Repro: open a connection without a schema, execute a DDL that references a
+    fully-qualified object (db.schema.name).  The connector was updating its
+    _schema/_database cache from the server's finalSchemaName/finalDatabaseName
+    response fields, which reflect the *object's* schema — not the session's
+    current schema — causing get_current_schema() to diverge from
+    SELECT CURRENT_SCHEMA() on the server.
+    """
+    database = db_parameters["database"].upper()
+    schema = db_parameters["schema"].upper()
+    view_name = f'"{database}"."{schema}"."SNOW_3665226_REPRO_VIEW"'
+
+    # Open a session with NO schema so the cache starts as None.
+    with conn_cnx(schema=None) as cnx:
+        with cnx.cursor() as cur:
+            # Sanity-check: cache and server agree before the test.
+            assert cnx._schema is None
+            server_schema_before = cur.execute("SELECT CURRENT_SCHEMA()").fetchone()[0]
+            assert server_schema_before is None
+
+            # Touch a fully-qualified object — this must not change the session context.
+            try:
+                cur.execute(f"CREATE OR REPLACE TEMP VIEW {view_name} AS SELECT 1 AS x")
+            finally:
+                cur.execute(f"DROP VIEW IF EXISTS {view_name}")
+
+            # Cache must still be None — the session schema never changed.
+            assert cnx._schema is None, (
+                f"connector cache was polluted: _schema={cnx._schema!r}, "
+                f"but no USE SCHEMA was issued"
+            )
+            assert cnx._database is not None  # database was set at connect time
+
+            # Server must also still return NULL for CURRENT_SCHEMA().
+            server_schema_after = cur.execute("SELECT CURRENT_SCHEMA()").fetchone()[0]
+            assert (
+                server_schema_after is None
+            ), f"unexpected server schema: {server_schema_after!r}"
