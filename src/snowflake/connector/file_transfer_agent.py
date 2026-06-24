@@ -9,6 +9,7 @@ import os
 import sys
 import threading
 from concurrent.futures.thread import ThreadPoolExecutor
+from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import partial
 from logging import getLogger
@@ -462,9 +463,16 @@ class SnowflakeFileTransferAgent:
         max_concurrency = min(
             self._parallel, self._snowflake_server_dop_cap_for_file_transfer
         )
-        network_tpe = ThreadPoolExecutor(max_concurrency)
-        preprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
-        postprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
+        thread_pools_exit_stack = ExitStack()
+        network_tpe = thread_pools_exit_stack.enter_context(
+            ThreadPoolExecutor(max_concurrency)
+        )
+        preprocess_tpe = thread_pools_exit_stack.enter_context(
+            ThreadPoolExecutor(iobound_tpe_limit)
+        )
+        postprocess_tpe = thread_pools_exit_stack.enter_context(
+            ThreadPoolExecutor(iobound_tpe_limit)
+        )
         logger.debug(f"Chunk ThreadPoolExecutor size: {max_concurrency}")
         cv_main_thread = threading.Condition()  # to signal the main thread
         cv_chunk_process = (
@@ -661,37 +669,38 @@ class SnowflakeFileTransferAgent:
                         f"An exception was raised in {repr(callback)}", exc_info=True
                     )
 
-        for file_client in files:
-            callback = partial(preprocess_done_cb, done_client=file_client)
-            if is_upload:
-                preprocess_tpe.submit(
-                    function_and_callback_wrapper,
-                    # Work fn
-                    file_client.prepare_upload,
-                    # Callback fn
-                    callback,
-                    file_client.meta,
-                )
-            else:
-                preprocess_tpe.submit(
-                    function_and_callback_wrapper,
-                    # Work fn
-                    file_client.prepare_download,
-                    # Callback fn
-                    callback,
-                    file_client.meta,
-                )
-            transfer_metadata.num_files_started += 1  # TODO: do we need this?
+        with thread_pools_exit_stack:
+            for file_client in files:
+                callback = partial(preprocess_done_cb, done_client=file_client)
+                if is_upload:
+                    preprocess_tpe.submit(
+                        function_and_callback_wrapper,
+                        # Work fn
+                        file_client.prepare_upload,
+                        # Callback fn
+                        callback,
+                        file_client.meta,
+                    )
+                else:
+                    preprocess_tpe.submit(
+                        function_and_callback_wrapper,
+                        # Work fn
+                        file_client.prepare_download,
+                        # Callback fn
+                        callback,
+                        file_client.meta,
+                    )
+                transfer_metadata.num_files_started += 1  # TODO: do we need this?
 
-        with cv_main_thread:
-            while transfer_metadata.num_files_completed < num_total_files:
-                cv_main_thread.wait()
-                # If both exception_caught_in_work and exception_caught_in_callback
-                # are present, the former will take precedence.
-                if exception_caught_in_work is not None:
-                    raise exception_caught_in_work
-                if exception_caught_in_callback is not None:
-                    raise exception_caught_in_callback
+            with cv_main_thread:
+                while transfer_metadata.num_files_completed < num_total_files:
+                    cv_main_thread.wait()
+                    # If both exception_caught_in_work and exception_caught_in_callback
+                    # are present, the former will take precedence.
+                    if exception_caught_in_work is not None:
+                        raise exception_caught_in_work
+                    if exception_caught_in_callback is not None:
+                        raise exception_caught_in_callback
 
         self._results = metas
 
