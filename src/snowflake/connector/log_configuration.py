@@ -9,6 +9,11 @@ from snowflake.connector.constants import DIRS
 from snowflake.connector.secret_detector import SecretDetector
 
 LOG_FILE_NAME = "python-connector.log"
+LOG_FORMAT = (
+    "%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - "
+    "%(funcName)s() - %(levelname)s - %(message)s"
+)
+EASY_LOGGING_LOGGERS = ["snowflake.connector", "botocore", "boto3"]
 
 
 class EasyLoggingConfigPython:
@@ -42,21 +47,29 @@ class EasyLoggingConfigPython:
 
     # create_log() is called outside __init__() so that it can be easily turned off
     def create_log(self):
-        if self.save_logs:
-            logging.basicConfig(
-                filename=os.path.join(self.path, LOG_FILE_NAME),
-                level=logging.getLevelName(self.level),
-            )
-            for logger_name in ["snowflake.connector", "botocore", "boto3"]:
-                logger = logging.getLogger(logger_name)
-                logger.setLevel(logging.getLevelName(self.level))
-                ch = TimedRotatingFileHandler(
-                    os.path.join(self.path, LOG_FILE_NAME), when="midnight"
-                )
-                ch.setLevel(logging.getLevelName(self.level))
-                ch.setFormatter(
-                    SecretDetector(
-                        "%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s"
-                    )
-                )
-                logger.addHandler(ch)
+        if not self.save_logs:
+            return
+
+        log_file_path = os.path.abspath(os.path.join(self.path, LOG_FILE_NAME))
+        level = logging.getLevelName(self.level)
+
+        # A single TimedRotatingFileHandler is shared across all easy-logging
+        # loggers, keeping exactly one open handle on the log file so rotation
+        # works on Windows. create_log() runs on every connection, so skip any
+        # logger that already has a rotating handler for this file to avoid
+        # stacking handlers (SNOW-3680325).
+        handler = None
+        for logger_name in EASY_LOGGING_LOGGERS:
+            logger = logging.getLogger(logger_name)
+            logger.setLevel(level)
+            if any(
+                isinstance(h, TimedRotatingFileHandler)
+                and getattr(h, "baseFilename", None) == log_file_path
+                for h in logger.handlers
+            ):
+                continue
+            if handler is None:
+                handler = TimedRotatingFileHandler(log_file_path, when="midnight")
+                handler.setLevel(level)
+                handler.setFormatter(SecretDetector(LOG_FORMAT))
+            logger.addHandler(handler)

@@ -146,3 +146,75 @@ def test_no_save_logs(config_file_setup, log_directory):
     logger.info("this is a test logger")
 
     assert not os.path.exists(os.path.join(log_directory, "python-connector.log"))
+
+
+@pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
+def test_create_log_is_idempotent_and_does_not_duplicate(
+    config_file_setup, log_directory
+):
+    # create_log() runs on every connection. Repeated calls must not stack
+    # handlers (which would duplicate records and keep extra file handles open,
+    # blocking rotation on Windows), and must not add a non-rotating root
+    # FileHandler via logging.basicConfig (SNOW-3680325).
+    from logging import FileHandler, getLogger
+    from logging.handlers import TimedRotatingFileHandler
+
+    log_file = os.path.join(log_directory, "python-connector.log")
+    root_file_handlers_before = [
+        h for h in getLogger().handlers if isinstance(h, FileHandler)
+    ]
+
+    easy_logging = EasyLoggingConfigPython()
+    try:
+        for _ in range(3):
+            easy_logging.create_log()
+
+        for logger_name in ("snowflake.connector", "botocore", "boto3"):
+            rotating = [
+                h
+                for h in getLogger(logger_name).handlers
+                if isinstance(h, TimedRotatingFileHandler)
+                and h.baseFilename == os.path.abspath(log_file)
+            ]
+            assert len(rotating) == 1, (
+                f"{logger_name} should have exactly one rotating handler, "
+                f"got {len(rotating)}"
+            )
+
+        # The shared handler must be the same instance across loggers.
+        handlers = {
+            id(
+                next(
+                    h
+                    for h in getLogger(name).handlers
+                    if isinstance(h, TimedRotatingFileHandler)
+                    and h.baseFilename == os.path.abspath(log_file)
+                )
+            )
+            for name in ("snowflake.connector", "botocore", "boto3")
+        }
+        assert len(handlers) == 1
+
+        # basicConfig must not have added a root FileHandler.
+        root_file_handlers_after = [
+            h for h in getLogger().handlers if isinstance(h, FileHandler)
+        ]
+        assert len(root_file_handlers_after) == len(root_file_handlers_before)
+
+        # A single emitted record must be written exactly once.
+        getLogger("snowflake.connector").info("idempotent-marker")
+        for h in getLogger("snowflake.connector").handlers:
+            h.flush()
+        with open(log_file) as f:
+            assert f.read().count("idempotent-marker") == 1
+    finally:
+        # Detach the handler we attached so other tests are unaffected.
+        for logger_name in ("snowflake.connector", "botocore", "boto3"):
+            log = getLogger(logger_name)
+            for h in list(log.handlers):
+                if isinstance(h, TimedRotatingFileHandler):
+                    log.removeHandler(h)
+                    h.close()
+        getLogger("snowflake.connector").setLevel(10)
+        getLogger("botocore").setLevel(0)
+        getLogger("boto3").setLevel(0)
