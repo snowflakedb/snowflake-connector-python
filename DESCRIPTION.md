@@ -13,6 +13,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed `connect()` being significantly slower on deep call stacks (e.g. Django apps with several middleware/decorator layers) because `get_application_path()` used `inspect.stack()`, which reads and parses the source file of every frame on the stack. It now walks frame references directly instead (SNOW-3691001, #2908).
   - Fixed `split_statements` truncating unquoted URLs containing `://` at the `//`, misreading it as a line comment. The guards added alongside `//` comment support in 4.7.2 (SNOW-3772985) only recognized `file://`, so every other scheme (`http://`, `https://`, `s3://`, `snow://`, `azure://`) was cut short. Any `scheme://` is now recognized, on both the line-comment and block-comment paths (the latter affected globs such as `s3://bucket/*.csv`) (SNOW-3930192).
   - Result batch construction now logs only whether a `qrmk` is present, for both the sync and async result paths (SNOW-3675590).
+  - DEBUG logging in `create_batches_from_response()` reports chunk-header names with type/length value metadata (SNOW-3675590).
+  - The malformed-response ERROR log in `create_batches_from_response()` reports a structural summary of the response (SNOW-3675590).
 
 - v4.7.2(Aug 6,2026)
   - Fixed a thread leak in the file transfer agent by properly shutting down ThreadPoolExecutors after PUT/GET transfers (SNOW-3556240, #2878).

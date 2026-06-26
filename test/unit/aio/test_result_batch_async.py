@@ -168,6 +168,65 @@ async def test_retries_until_success():
 
 
 @pytest.mark.skipolddriver
+async def test_create_batches_does_not_log_chunk_header_values_async(caplog):
+    """SNOW-3675590: async twin of test_result_batch.test_create_batches_does_not_log_chunk_header_values."""
+    from snowflake.connector.aio._result_batch import create_batches_from_response
+
+    secret_value = "U1NFLUMtY3VzdG9tZXIta2V5LXNlY3JldA=="
+    data = {
+        "rowtype": [],
+        "total": 1,
+        "rowset": [],
+        "chunks": [
+            {
+                "url": "https://example.invalid/chunk0",
+                "rowCount": 1,
+                "uncompressedSize": 10,
+                "compressedSize": 5,
+            }
+        ],
+        "chunkHeaders": {
+            "Accept-Encoding": "gzip",
+            "x-amz-server-side-encryption-customer-key": secret_value,
+        },
+    }
+
+    cursor = mock.MagicMock()
+    with caplog.at_level(logging.DEBUG, logger="snowflake.connector.aio._result_batch"):
+        create_batches_from_response(cursor, "json", data, schema=[])
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert "added chunk header: key=Accept-Encoding" in logged
+    assert "value=str len=4" in logged
+    assert "gzip" not in logged
+    assert secret_value not in logged
+
+
+@pytest.mark.skipolddriver
+async def test_create_batches_error_logs_shape_not_raw_response_async(caplog):
+    """SNOW-3675590: async twin of test_result_batch.test_create_batches_error_logs_shape_not_raw_response."""
+    from snowflake.connector.aio._result_batch import create_batches_from_response
+
+    secret_qrmk = "U0VDUkVULXFybWstdmFsdWU="
+    secret_url = "https://x.invalid/c?X-Amz-Signature=DEADBEEFsignature"
+    data = {"rowtype": [], "total": 0, "qrmk": secret_qrmk, "extra": secret_url}
+
+    cursor = mock.MagicMock()
+    cursor._connection._session_parameters = {}
+    with caplog.at_level(logging.ERROR, logger="snowflake.connector.aio._result_batch"):
+        try:
+            create_batches_from_response(cursor, "arrow", data, schema=[])
+        except Exception:
+            pass
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert "Don't know how to construct ResultBatches" in logged
+    assert "format='arrow'" in logged and "shape=" in logged
+    assert secret_qrmk not in logged
+    assert secret_url not in logged
+
+
+@pytest.mark.skipolddriver
 async def test_create_batches_does_not_log_qrmk_value_async(caplog):
     """SNOW-3675590 (async): the bare-qrmk path must not log the key.
 
