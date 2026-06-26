@@ -347,6 +347,106 @@ class TestGzipDecompressionFallback:
 
 
 @pytest.mark.skipolddriver
+def test_create_batches_does_not_log_chunk_header_values(caplog):
+    """SNOW-3675590: chunk header *values* can be secrets (e.g. the SSE-C
+    customer key), so create_batches_from_response must log only header names.
+
+    The previous guard ``if "encryption" not in header_key`` was a fragile
+    case-sensitive substring check: it suppressed names containing the lowercase
+    substring "encryption" but logged the value of every other header, including
+    ones whose name merely differed in case (e.g. "Accept-Encoding").
+    """
+    from snowflake.connector.result_batch import create_batches_from_response
+
+    secret_value = "U1NFLUMtY3VzdG9tZXIta2V5LXNlY3JldA=="
+    data = {
+        "rowtype": [],
+        "total": 1,
+        "rowset": [],
+        "chunks": [
+            {
+                "url": "https://example.invalid/chunk0",
+                "rowCount": 1,
+                "uncompressedSize": 10,
+                "compressedSize": 5,
+            }
+        ],
+        "chunkHeaders": {
+            # header name that does not contain "encryption"
+            "Accept-Encoding": "gzip",
+            # the real SSE-C key
+            "x-amz-server-side-encryption-customer-key": secret_value,
+        },
+    }
+
+    cursor = mock.MagicMock()
+    with caplog.at_level(logging.DEBUG, logger="snowflake.connector.result_batch"):
+        create_batches_from_response(cursor, "json", data, schema=[])
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    # header NAMES are safe to log, plus non-sensitive value metadata (type/len)
+    assert "added chunk header: key=Accept-Encoding" in logged
+    assert "value=str len=4" in logged  # metadata for "gzip" (len 4), not the value
+    # but no header VALUE is ever logged (neither the benign one nor the secret)
+    assert "gzip" not in logged
+    assert secret_value not in logged
+
+
+def test_describe_value_hides_secrets_in_response_dict():
+    """SNOW-3675590: describe_value on a response dict must expose keys/types/sizes
+    only, never the values (which can include secrets like qrmk or presigned URLs)."""
+    from snowflake.connector.secret_detector import SecretDetector
+
+    secret = "U0VDUkVULXFybWstdmFsdWU="
+    result = SecretDetector.describe_value(
+        {
+            "rowtype": [],
+            "total": 5,
+            "qrmk": secret,
+            "chunkHeaders": {"x-amz-...": "secret-header-value"},
+            "chunks": [{"url": "https://x.invalid?X-Amz-Signature=sig"}],
+        }
+    )
+    assert "qrmk: str len=24" in result
+    assert "chunks: list len=1" in result
+    assert "chunkHeaders: dict{x-amz-...: str len=19}" in result
+    assert "total: int" in result
+    # no value (secret or otherwise) leaks into the summary
+    assert secret not in result
+    assert "secret-header-value" not in result
+    assert "X-Amz-Signature" not in result
+
+
+@pytest.mark.skipolddriver
+def test_create_batches_error_logs_shape_not_raw_response(caplog):
+    """SNOW-3675590: the malformed-response ERROR must log the structural shape
+    rather than the response object — and it fires at ERROR level regardless of
+    DEBUG."""
+    from snowflake.connector.result_batch import create_batches_from_response
+
+    secret_qrmk = "U0VDUkVULXFybWstdmFsdWU="
+    secret_url = "https://x.invalid/c?X-Amz-Signature=DEADBEEFsignature"
+    # arrow format with neither rowsetBase64 nor chunks -> malformed -> else branch
+    data = {"rowtype": [], "total": 0, "qrmk": secret_qrmk, "extra": secret_url}
+
+    cursor = mock.MagicMock()
+    cursor._connection._session_parameters = {}
+    with caplog.at_level(logging.ERROR, logger="snowflake.connector.result_batch"):
+        try:
+            create_batches_from_response(cursor, "arrow", data, schema=[])
+        except Exception:
+            # the empty-arrow fallback may raise under a mock cursor; the ERROR
+            # line is emitted before it, which is what we are asserting on.
+            pass
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert "Don't know how to construct ResultBatches" in logged
+    assert "format='arrow'" in logged and "shape=" in logged
+    assert secret_qrmk not in logged
+    assert secret_url not in logged
+
+
+@pytest.mark.skipolddriver
 def test_create_batches_does_not_log_qrmk_value(caplog):
     """SNOW-3675590: the bare-qrmk (no chunkHeaders) path must not log the key.
 

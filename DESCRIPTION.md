@@ -14,6 +14,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed `split_statements` truncating unquoted URLs containing `://` at the `//`, misreading it as a line comment. The guards added alongside `//` comment support in 4.7.2 (SNOW-3772985) only recognized `file://`, so every other scheme (`http://`, `https://`, `s3://`, `snow://`, `azure://`) was cut short. Any `scheme://` is now recognized, on both the line-comment and block-comment paths (the latter affected globs such as `s3://bucket/*.csv`) (SNOW-3930192).
   - Fixed the on-disk OCSP response validation cache failing with `RuntimeError: UnixFileLock on ... was inherited across fork; construct a new instance` when it was written from a forked child process. This could surface on fork-based platforms when fetching results with `client_fetch_use_mp=True`, where chunk downloads run in worker processes that perform their own certificate revocation checks. The cache's file lock is now re-created when the owning process changes, matching what already happened for the `spawn` start method.
   - Result batch construction now logs only whether a `qrmk` is present, for both the sync and async result paths (SNOW-3675590).
+  - DEBUG logging in `create_batches_from_response()` reports chunk-header names with type/length value metadata (SNOW-3675590).
+  - The malformed-response ERROR log in `create_batches_from_response()` reports a structural summary of the response (SNOW-3675590).
 
 - v4.7.2(Aug 6,2026)
   - Fixed a thread leak in the file transfer agent by properly shutting down ThreadPoolExecutors after PUT/GET transfers (SNOW-3556240, #2878).

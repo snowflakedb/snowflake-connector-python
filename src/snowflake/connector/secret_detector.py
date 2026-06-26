@@ -98,6 +98,32 @@ class SecretDetector(logging.Formatter):
         )
 
     @staticmethod
+    def describe_value(value) -> str:
+        """Non-sensitive metadata for a possibly-secret value (never the value).
+
+        Lets call sites log present/empty/type/length for values that may be
+        secrets (e.g. SSE-C chunk-header values, qrmk). SNOW-3675590.
+        """
+        if value is None:
+            return "None"
+        try:
+            if isinstance(value, dict):
+                if not value:
+                    return "empty dict"
+                inner = ", ".join(
+                    f"{k}: {SecretDetector.describe_value(v)}" for k, v in value.items()
+                )
+                return f"dict{{{inner}}}"
+            type_name = type(value).__name__
+            length = len(value)
+        except Exception:
+            # describe_value must never raise (it runs while logging)
+            return type(value).__name__
+        if length == 0:
+            return f"empty {type_name}"
+        return f"{type_name} len={length}"
+
+    @staticmethod
     def mask_secrets(text: str) -> MaskedMessageData:
         """Masks any secrets. This is the method that should be used by outside classes.
 
