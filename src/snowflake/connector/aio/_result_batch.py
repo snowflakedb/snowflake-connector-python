@@ -33,7 +33,6 @@ from snowflake.connector.result_batch import JSONResultBatch as JSONResultBatchS
 from snowflake.connector.result_batch import RemoteChunkInfo
 from snowflake.connector.result_batch import ResultBatch as ResultBatchSync
 from snowflake.connector.result_batch import _create_nanoarrow_iterator
-from snowflake.connector.secret_detector import SecretDetector
 
 if TYPE_CHECKING:
     from pandas import DataFrame
@@ -91,7 +90,10 @@ def create_batches_from_response(
                         f"added chunk header: key={header_key}, value={header_value}"
                     )
         elif qrmk is not None:
-            logger.debug(f"qrmk={SecretDetector.mask_secrets(qrmk)}")
+            # SNOW-3675590: never log the qrmk value — it is the AES-256 SSE-C
+            # result-encryption key. Log only its presence; do not route it
+            # through masking helpers as a substitute.
+            logger.debug("qrmk is present in the result response")
             chunk_headers[SSE_C_ALGORITHM] = SSE_C_AES
             chunk_headers[SSE_C_KEY] = qrmk
 

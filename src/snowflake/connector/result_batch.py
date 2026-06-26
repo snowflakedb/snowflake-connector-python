@@ -26,7 +26,6 @@ from .network import (
 )
 from .options import installed_pandas
 from .options import pyarrow as pa
-from .secret_detector import SecretDetector
 from .session_manager import HttpConfig, SessionManager, SessionManagerFactory
 from .time_util import TimerContextManager
 
@@ -167,7 +166,10 @@ def create_batches_from_response(
                         f"added chunk header: key={header_key}, value={header_value}"
                     )
         elif qrmk is not None:
-            logger.debug(f"qrmk={SecretDetector.mask_secrets(qrmk)}")
+            # SNOW-3675590: never log the qrmk value — it is the AES-256 SSE-C
+            # result-encryption key. Log only its presence; do not route it
+            # through masking helpers as a substitute.
+            logger.debug("qrmk is present in the result response")
             chunk_headers[SSE_C_ALGORITHM] = SSE_C_AES
             chunk_headers[SSE_C_KEY] = qrmk
 
