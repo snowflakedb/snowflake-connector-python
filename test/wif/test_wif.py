@@ -131,21 +131,23 @@ def test_should_authenticate_with_impersonation():
 
 
 @pytest.mark.wif
-def test_should_authenticate_using_aws_outbound_token():
+@pytest.mark.parametrize("outbound_token_enabled", ["true", "false"], ids=["outbound_token", "caller_identity"])
+def test_should_authenticate_using_aws_with_issuer(outbound_token_enabled):
     if PROVIDER != "AWS":
         pytest.skip("Skipping test - not running on AWS")
 
-    os.environ["SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN"] = "true"
+    os.environ["SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN"] = outbound_token_enabled
     try:
         connection_params = {
             "host": HOST,
             "account": ACCOUNT,
             "authenticator": "WORKLOAD_IDENTITY",
             "workload_identity_provider": "AWS",
+            "workload_identity_impersonation_path": ["arn:aws:iam::376129840140:role/drivers-wif-automated-tests-with-issuer"],
         }
         assert connect_and_execute_simple_query(
-            connection_params, EXPECTED_USERNAME
-        ), "Failed to connect using WIF with AWS outbound token"
+            connection_params, "TEST_WIF_E2E_AWS_WITH_ISSUER"
+        ), f"Failed to connect using WIF with AWS outbound token enabled={outbound_token_enabled}"
     finally:
         os.environ.pop("SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN", None)
 
