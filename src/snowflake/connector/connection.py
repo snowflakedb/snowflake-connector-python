@@ -270,7 +270,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # Opt into AWS WIF JWT attestation via STS GetWebIdentityToken instead of the default SigV4 GetCallerIdentity method
-
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
