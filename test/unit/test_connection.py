@@ -632,6 +632,7 @@ def test_otel_error_message(caplog, mock_post_requests):
             "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
         ),
         ("workload_identity_impersonation_path", ["subject-b", "subject-c"]),
+        ("workload_identity_aws_use_outbound_token", True),
     ],
 )
 def test_cannot_set_dependent_params_without_wlid_authenticator(
