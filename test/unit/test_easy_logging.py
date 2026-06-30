@@ -6,7 +6,8 @@ pytestmark = pytest.mark.skipolddriver
 
 import os.path
 import platform
-from logging import getLogger
+from logging import FileHandler, getLogger
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 try:
@@ -148,73 +149,221 @@ def test_no_save_logs(config_file_setup, log_directory):
     assert not os.path.exists(os.path.join(log_directory, "python-connector.log"))
 
 
+EASY_LOGGING_LOGGERS = ("snowflake.connector", "botocore", "boto3")
+
+
+@pytest.fixture(scope="function")
+def reset_easy_logging():
+    """Undo the process-global logging state create_log() mutates.
+
+    create_log() attaches a shared rotating file handler to the easy-logging
+    loggers and sets their levels. Without this teardown those handlers would
+    leak into unrelated tests (and keep the log file open).
+    """
+    yield
+    for logger_name in EASY_LOGGING_LOGGERS:
+        log = getLogger(logger_name)
+        for h in list(log.handlers):
+            if isinstance(h, TimedRotatingFileHandler):
+                log.removeHandler(h)
+                h.close()
+    getLogger("snowflake.connector").setLevel(10)
+    getLogger("botocore").setLevel(0)
+    getLogger("boto3").setLevel(0)
+
+
+def _rotating_handlers(logger_name, log_file):
+    return [
+        h
+        for h in getLogger(logger_name).handlers
+        if isinstance(h, TimedRotatingFileHandler)
+        and h.baseFilename == os.path.abspath(log_file)
+    ]
+
+
 @pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
 def test_create_log_is_idempotent_and_does_not_duplicate(
-    config_file_setup, log_directory
+    config_file_setup, log_directory, reset_easy_logging
 ):
     # create_log() runs on every connection. Repeated calls must not stack
     # handlers (which would duplicate records and keep extra file handles open,
     # blocking rotation on Windows), and must not add a non-rotating root
     # FileHandler via logging.basicConfig (SNOW-3680325).
-    from logging import FileHandler, getLogger
-    from logging.handlers import TimedRotatingFileHandler
-
     log_file = os.path.join(log_directory, "python-connector.log")
     root_file_handlers_before = [
         h for h in getLogger().handlers if isinstance(h, FileHandler)
     ]
 
     easy_logging = EasyLoggingConfigPython()
-    try:
-        for _ in range(3):
-            easy_logging.create_log()
+    for _ in range(3):
+        easy_logging.create_log()
 
-        for logger_name in ("snowflake.connector", "botocore", "boto3"):
-            rotating = [
-                h
-                for h in getLogger(logger_name).handlers
-                if isinstance(h, TimedRotatingFileHandler)
-                and h.baseFilename == os.path.abspath(log_file)
-            ]
-            assert len(rotating) == 1, (
-                f"{logger_name} should have exactly one rotating handler, "
-                f"got {len(rotating)}"
-            )
+    for logger_name in EASY_LOGGING_LOGGERS:
+        rotating = _rotating_handlers(logger_name, log_file)
+        assert len(rotating) == 1, (
+            f"{logger_name} should have exactly one rotating handler, "
+            f"got {len(rotating)}"
+        )
 
-        # The shared handler must be the same instance across loggers.
-        handlers = {
-            id(
-                next(
-                    h
-                    for h in getLogger(name).handlers
-                    if isinstance(h, TimedRotatingFileHandler)
-                    and h.baseFilename == os.path.abspath(log_file)
-                )
-            )
-            for name in ("snowflake.connector", "botocore", "boto3")
-        }
-        assert len(handlers) == 1
+    # The shared handler must be the same instance across loggers.
+    handlers = {
+        id(_rotating_handlers(name, log_file)[0]) for name in EASY_LOGGING_LOGGERS
+    }
+    assert len(handlers) == 1
 
-        # basicConfig must not have added a root FileHandler.
-        root_file_handlers_after = [
-            h for h in getLogger().handlers if isinstance(h, FileHandler)
-        ]
-        assert len(root_file_handlers_after) == len(root_file_handlers_before)
+    # basicConfig must not have added a root FileHandler.
+    root_file_handlers_after = [
+        h for h in getLogger().handlers if isinstance(h, FileHandler)
+    ]
+    assert len(root_file_handlers_after) == len(root_file_handlers_before)
 
-        # A single emitted record must be written exactly once.
-        getLogger("snowflake.connector").info("idempotent-marker")
-        for h in getLogger("snowflake.connector").handlers:
-            h.flush()
-        with open(log_file) as f:
-            assert f.read().count("idempotent-marker") == 1
-    finally:
-        # Detach the handler we attached so other tests are unaffected.
-        for logger_name in ("snowflake.connector", "botocore", "boto3"):
-            log = getLogger(logger_name)
-            for h in list(log.handlers):
-                if isinstance(h, TimedRotatingFileHandler):
-                    log.removeHandler(h)
-                    h.close()
-        getLogger("snowflake.connector").setLevel(10)
-        getLogger("botocore").setLevel(0)
-        getLogger("boto3").setLevel(0)
+    # A single emitted record must be written exactly once.
+    getLogger("snowflake.connector").info("idempotent-marker")
+    for h in getLogger("snowflake.connector").handlers:
+        h.flush()
+    with open(log_file) as f:
+        assert f.read().count("idempotent-marker") == 1
+
+
+@pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
+def test_create_log_concurrent_calls_attach_single_handler(
+    config_file_setup, log_directory, reset_easy_logging
+):
+    # Connections may be opened concurrently from multiple threads, each calling
+    # create_log(). Registration is locked so they cannot race into attaching
+    # more than one handler on the same file (SNOW-3680325).
+    import threading
+
+    easy_logging = EasyLoggingConfigPython()
+    log_file = os.path.join(log_directory, "python-connector.log")
+
+    thread_count = 8
+    barrier = threading.Barrier(thread_count)
+
+    def worker():
+        # Maximize contention so all threads reach create_log() together.
+        barrier.wait()
+        easy_logging.create_log()
+
+    threads = [threading.Thread(target=worker) for _ in range(thread_count)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    for logger_name in EASY_LOGGING_LOGGERS:
+        rotating = _rotating_handlers(logger_name, log_file)
+        assert len(rotating) == 1, (
+            f"{logger_name} should have exactly one rotating handler after "
+            f"concurrent create_log(), got {len(rotating)}"
+        )
+    handlers = {
+        id(_rotating_handlers(name, log_file)[0]) for name in EASY_LOGGING_LOGGERS
+    }
+    assert len(handlers) == 1
+
+
+@pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
+def test_create_log_reuses_handler_for_partial_state(
+    config_file_setup, log_directory, reset_easy_logging
+):
+    # If the shared handler is detached from some loggers but not others (e.g.
+    # reset elsewhere), a subsequent create_log() must reattach that same
+    # instance rather than build a second handler on the same file.
+    log_file = os.path.join(log_directory, "python-connector.log")
+    easy_logging = EasyLoggingConfigPython()
+    easy_logging.create_log()
+
+    original = _rotating_handlers("snowflake.connector", log_file)[0]
+
+    # Simulate partial state: detach from one logger only.
+    boto3_logger = getLogger("boto3")
+    boto3_logger.removeHandler(original)
+    assert original not in boto3_logger.handlers
+
+    easy_logging.create_log()
+
+    for logger_name in EASY_LOGGING_LOGGERS:
+        rotating = _rotating_handlers(logger_name, log_file)
+        assert len(rotating) == 1, (
+            f"{logger_name} should have exactly one rotating handler, "
+            f"got {len(rotating)}"
+        )
+        assert (
+            rotating[0] is original
+        ), f"{logger_name} should reuse the original shared handler instance"
+
+
+@pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
+def test_create_log_reflects_changed_level_on_reuse(
+    config_file_setup, log_directory, reset_easy_logging
+):
+    # A later connection configured with a different level must update the
+    # reused handler and loggers, not stay pinned to the first level.
+    import logging
+
+    log_file = os.path.join(log_directory, "python-connector.log")
+    easy_logging = EasyLoggingConfigPython()
+    easy_logging.level = "INFO"
+    easy_logging.create_log()
+
+    handler = _rotating_handlers("snowflake.connector", log_file)[0]
+    assert handler.level == logging.INFO
+
+    easy_logging.level = "ERROR"
+    easy_logging.create_log()
+
+    # Same handler instance, updated level.
+    assert _rotating_handlers("snowflake.connector", log_file)[0] is handler
+    assert handler.level == logging.ERROR
+    for logger_name in EASY_LOGGING_LOGGERS:
+        assert getLogger(logger_name).level == logging.ERROR
+
+
+@pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
+def test_create_log_masks_secrets_in_file(
+    config_file_setup, log_directory, reset_easy_logging
+):
+    # Every record funnels through the one shared handler, whose formatter is
+    # SecretDetector. A credential-shaped value must be masked in the file and
+    # written exactly once.
+    log_file = os.path.join(log_directory, "python-connector.log")
+    easy_logging = EasyLoggingConfigPython()
+    easy_logging.create_log()
+
+    sf_logger = getLogger("snowflake.connector")
+    sf_logger.info("connecting with password=SuperSecret123!")
+    for h in sf_logger.handlers:
+        h.flush()
+
+    with open(log_file) as f:
+        contents = f.read()
+    assert "SuperSecret123!" not in contents
+    assert contents.count("password=****") == 1
+
+
+@pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
+def test_create_log_only_writes_easy_logging_loggers(
+    config_file_setup, log_directory, reset_easy_logging
+):
+    # Pin the post-basicConfig scope: records from the easy-logging loggers reach
+    # the file, but an unrelated library logger (which used to be captured via
+    # the root FileHandler that basicConfig installed) does not (SNOW-3680325).
+    log_file = os.path.join(log_directory, "python-connector.log")
+    easy_logging = EasyLoggingConfigPython()
+    easy_logging.create_log()
+
+    getLogger("snowflake.connector").info("sf-connector-marker")
+    getLogger("botocore").info("botocore-marker")
+    unrelated = getLogger("some.unrelated.library")
+    unrelated.setLevel(10)
+    unrelated.info("unrelated-marker")
+
+    for h in getLogger("snowflake.connector").handlers:
+        h.flush()
+
+    with open(log_file) as f:
+        contents = f.read()
+    assert "sf-connector-marker" in contents
+    assert "botocore-marker" in contents
+    assert "unrelated-marker" not in contents
