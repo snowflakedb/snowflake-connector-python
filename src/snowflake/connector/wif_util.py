@@ -178,6 +178,7 @@ def get_aws_session(impersonation_path: list[str] | None = None):
 
 def create_aws_attestation(
     impersonation_path: list[str] | None = None,
+    aws_use_outbound_token: bool = False,
 ) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for AWS.
 
@@ -200,12 +201,17 @@ def create_aws_attestation(
         )
     region = get_aws_region()
     partition = session.get_partition_for_region(region)
-    # TODO: Remove this environment variable check once AWS WIF outbound token is fully released
-    # and make it the default behavior (SNOW-2919437)
-    if (
+    # The JWT-based GetWebIdentityToken method is opt-in via either the
+    # workload_identity_aws_use_outbound_token connection option or the
+    # SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN environment variable.
+    #
+    # Env variable is kept for backward compatibility as it's already
+    # described in docs.snowflake.com :/
+    env_outbound_token_enabled = (
         os.environ.get("SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN", "false").lower()
         == "true"
-    ):
+    )
+    if aws_use_outbound_token or env_outbound_token_enabled:
         sts_client = session.client("sts", region_name=region)
         response = sts_client.get_web_identity_token(
             Audience=[SNOWFLAKE_AUDIENCE], SigningAlgorithm="ES384"
@@ -544,6 +550,7 @@ def create_attestation(
     token: str | None = None,
     impersonation_path: list[str] | None = None,
     session_manager: SessionManager | None = None,
+    aws_use_outbound_token: bool = False,
 ) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
 
@@ -557,7 +564,7 @@ def create_attestation(
     )
 
     if provider == AttestationProvider.AWS:
-        return create_aws_attestation(impersonation_path)
+        return create_aws_attestation(impersonation_path, aws_use_outbound_token)
     elif provider == AttestationProvider.AZURE:
         return create_azure_attestation(
             entra_resource, session_manager, impersonation_path

@@ -131,23 +131,28 @@ def test_should_authenticate_with_impersonation():
 
 
 @pytest.mark.wif
-def test_should_authenticate_using_aws_outbound_token():
+def test_should_authenticate_using_get_web_identity_token():
+    # AWS WIF supports two attestation methods: GetCallerIdentity (default) and
+    # GetWebIdentityToken (enabled via workload_identity_aws_use_outbound_token).
+    # This test covers the GetWebIdentityToken method against the dedicated
+    # TEST_WIF_E2E_AWS_WITH_ISSUER Snowflake user (configured with an ISSUER). Since an EC2 instance
+    # can only have one IAM role, the test impersonates a dedicated role that maps to that user.
     if PROVIDER != "AWS":
         pytest.skip("Skipping test - not running on AWS")
 
-    os.environ["SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN"] = "true"
-    try:
-        connection_params = {
-            "host": HOST,
-            "account": ACCOUNT,
-            "authenticator": "WORKLOAD_IDENTITY",
-            "workload_identity_provider": "AWS",
-        }
-        assert connect_and_execute_simple_query(
-            connection_params, EXPECTED_USERNAME
-        ), "Failed to connect using WIF with AWS outbound token"
-    finally:
-        os.environ.pop("SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN", None)
+    connection_params = {
+        "host": HOST,
+        "account": ACCOUNT,
+        "authenticator": "WORKLOAD_IDENTITY",
+        "workload_identity_provider": "AWS",
+        "workload_identity_aws_use_outbound_token": True,
+        "workload_identity_impersonation_path": [
+            "arn:aws:iam::376129840140:role/drivers-wif-automated-tests-with-issuer",
+        ],
+    }
+    assert connect_and_execute_simple_query(
+        connection_params, "TEST_WIF_E2E_AWS_WITH_ISSUER"
+    ), "Failed to connect using WIF with GetWebIdentityToken"
 
 
 def is_provider_gcp() -> bool:
