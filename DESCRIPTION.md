@@ -7,7 +7,7 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- Upcoming Release
+- v4.7.0(Jul 1,2026)
   - Fixed `python-connector.log` not rotating on Windows, and every record being logged twice, when easy logging is enabled via `config.toml` (SNOW-3680325).
     - **Note:** As part of this fix, easy logging no longer calls `logging.basicConfig()` and therefore no longer configures the root logger. `python-connector.log` now captures only the `snowflake.connector`, `botocore`, and `boto3`.
   - Improved URL validation reliability by replacing the hand-rolled regex in `is_valid_url()` with `urllib.parse.urlparse` (SNOW-3392651).
