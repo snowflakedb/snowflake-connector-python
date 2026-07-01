@@ -2728,3 +2728,72 @@ def test_fqn_ddl_does_not_pollute_schema_cache(conn_cnx, db_parameters):
             assert (
                 server_schema_after is None
             ), f"unexpected server schema: {server_schema_after!r}"
+
+
+def test_fqn_ddl_does_not_pollute_schema_cache_with_active_context(
+    conn_cnx, db_parameters
+):
+    """SNOW-3665226: fully-qualified DDL must not mutate the connector's cached
+    current schema / database when the session *does* have an active schema set.
+
+    Repro variant: connect with an explicit database+schema context, then execute
+    a DDL referencing a fully-qualified object in a *different* schema.  Before
+    the fix the connector would overwrite _schema/_database with the object's
+    schema, causing get_current_schema() to diverge from CURRENT_SCHEMA().
+    """
+    unique = random_string(5).lower()
+    bootstrap_db = f"SNOW_3665226_DB_{unique}".upper()
+    bootstrap_schema = f"SNOW_3665226_SCHEMA_{unique}".upper()
+    other_schema = f"SNOW_3665226_OTHER_{unique}".upper()
+
+    # Use a separate bootstrap connection to create the test database and schemas.
+    with conn_cnx() as bootstrap_cnx:
+        with bootstrap_cnx.cursor() as cur:
+            cur.execute(f"CREATE DATABASE IF NOT EXISTS {bootstrap_db}")
+            cur.execute(f"USE DATABASE {bootstrap_db}")
+            cur.execute(f"CREATE SCHEMA IF NOT EXISTS {bootstrap_schema}")
+            cur.execute(f"CREATE SCHEMA IF NOT EXISTS {other_schema}")
+
+    try:
+        # Connect with the bootstrap db+schema as the session context.
+        with conn_cnx(database=bootstrap_db, schema=bootstrap_schema) as cnx:
+            with cnx.cursor() as cur:
+                # Sanity-check: cache and server agree before the DDL.
+                assert cnx._database.upper() == bootstrap_db
+                assert cnx._schema.upper() == bootstrap_schema
+                server_schema_before = cur.execute(
+                    "SELECT CURRENT_SCHEMA()"
+                ).fetchone()[0]
+                assert server_schema_before.upper() == bootstrap_schema
+
+                # Execute DDL that targets a *different* schema (fully-qualified).
+                view_fqn = (
+                    f'"{bootstrap_db}"."{other_schema}"."SNOW_3665226_VIEW_{unique}"'
+                )
+                try:
+                    cur.execute(
+                        f"CREATE OR REPLACE TEMP VIEW {view_fqn} AS SELECT 1 AS x"
+                    )
+                finally:
+                    cur.execute(f"DROP VIEW IF EXISTS {view_fqn}")
+
+                # The connector cache must still reflect the original session context.
+                assert cnx._schema.upper() == bootstrap_schema, (
+                    f"connector _schema was polluted: got {cnx._schema!r}, "
+                    f"expected {bootstrap_schema!r}"
+                )
+                assert cnx._database.upper() == bootstrap_db, (
+                    f"connector _database was polluted: got {cnx._database!r}, "
+                    f"expected {bootstrap_db!r}"
+                )
+
+                # Server must also still report the original schema.
+                server_schema_after = cur.execute("SELECT CURRENT_SCHEMA()").fetchone()[
+                    0
+                ]
+                assert (
+                    server_schema_after.upper() == bootstrap_schema
+                ), f"unexpected server schema: {server_schema_after!r}"
+    finally:
+        with conn_cnx() as cleanup_cnx:
+            cleanup_cnx.cursor().execute(f"DROP DATABASE IF EXISTS {bootstrap_db}")
