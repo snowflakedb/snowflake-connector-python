@@ -366,6 +366,47 @@ def test_aws_token_format_based_on_env_variable(
         verify_aws_token(data["TOKEN"], fake_aws_environment.region)
 
 
+@pytest.mark.parametrize(
+    "aws_use_outbound_token,env_value,expected_format",
+    [
+        # Connection option enables JWT regardless of env var
+        (True, None, "jwt"),
+        (True, "false", "jwt"),
+        # Env var enables JWT even when the option is off (backward compatibility)
+        (False, "true", "jwt"),
+        # Neither set -> default SigV4 GetCallerIdentity
+        (False, None, "old"),
+        (False, "false", "old"),
+    ],
+)
+def test_aws_token_format_based_on_connection_option(
+    fake_aws_environment: FakeAwsEnvironment,
+    monkeypatch,
+    aws_use_outbound_token,
+    env_value,
+    expected_format,
+):
+    """AWS JWT attestation is used when either the connection option or the env var is enabled (OR semantics)."""
+    if env_value is not None:
+        monkeypatch.setenv("SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN", env_value)
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AWS,
+        aws_use_outbound_token=aws_use_outbound_token,
+    )
+    auth_class.prepare(conn=None)
+
+    data = extract_api_data(auth_class)
+
+    assert data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
+    assert data["PROVIDER"] == "AWS"
+
+    if expected_format == "jwt":
+        assert data["TOKEN"] == fake_aws_environment.web_identity_token
+    else:
+        verify_aws_token(data["TOKEN"], fake_aws_environment.region)
+
+
 # -- GCP Tests --
 
 

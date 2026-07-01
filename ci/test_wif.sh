@@ -21,6 +21,9 @@ run_tests_on_aks() {
 
   ssh -i "$RSA_KEY_PATH_AWS_AZURE" -o IdentitiesOnly=yes -p 443 "$HOST_AKS" \
     BRANCH="$BRANCH" \
+    REPO_SLUG="$REPO_SLUG" \
+    REF="$REF" \
+    GITHUB_TOKEN="$GITHUB_TOKEN" \
     CLUSTER="$cluster" \
     SERVICE_ACCOUNT="$service_account" \
     SNOWFLAKE_TEST_WIF_HOST="$snowflake_host" \
@@ -66,13 +69,8 @@ PODEOF
 
       kubectl exec "$POD_NAME" -- bash -c "
         apt-get update -q && apt-get install git g++ -y -q
-        if [[ '$BRANCH' =~ ^PR-[0-9]+\$ ]]; then
-          curl -sL https://github.com/snowflakedb/snowflake-connector-python/archive/refs/pull/$(echo $BRANCH | cut -d- -f2)/head.tar.gz | tar -xz
-          mv snowflake-connector-python-* snowflake-connector-python
-        else
-          curl -sL https://github.com/snowflakedb/snowflake-connector-python/archive/refs/heads/$BRANCH.tar.gz | tar -xz
-          mv snowflake-connector-python-$BRANCH snowflake-connector-python
-        fi
+        mkdir -p snowflake-connector-python
+        curl -fsSL -H 'Authorization: token $GITHUB_TOKEN' https://api.github.com/repos/$REPO_SLUG/tarball/$REF | tar -xz --strip-components=1 -C snowflake-connector-python
         cd snowflake-connector-python
         pip install -e '.[azure]' pytest -q
         SF_OCSP_TEST_MODE=true \
@@ -106,7 +104,7 @@ run_tests_and_set_result() {
   local impersonation_path="$6"
   local snowflake_user_for_impersonation="$7"
 
-  ssh -i "$rsa_key_path" -o IdentitiesOnly=yes -p 443 "$host" env BRANCH="$BRANCH" SNOWFLAKE_TEST_WIF_HOST="$snowflake_host" SNOWFLAKE_TEST_WIF_PROVIDER="$provider" SNOWFLAKE_TEST_WIF_ACCOUNT="$SNOWFLAKE_TEST_WIF_ACCOUNT" SNOWFLAKE_TEST_WIF_USERNAME="$snowflake_user" SNOWFLAKE_TEST_WIF_IMPERSONATION_PATH="$impersonation_path" SNOWFLAKE_TEST_WIF_USERNAME_IMPERSONATION="$snowflake_user_for_impersonation" bash << EOF
+  ssh -i "$rsa_key_path" -o IdentitiesOnly=yes -p 443 "$host" env BRANCH="$BRANCH" REPO_SLUG="$REPO_SLUG" REF="$REF" GITHUB_TOKEN="$GITHUB_TOKEN" SNOWFLAKE_TEST_WIF_HOST="$snowflake_host" SNOWFLAKE_TEST_WIF_PROVIDER="$provider" SNOWFLAKE_TEST_WIF_ACCOUNT="$SNOWFLAKE_TEST_WIF_ACCOUNT" SNOWFLAKE_TEST_WIF_USERNAME="$snowflake_user" SNOWFLAKE_TEST_WIF_IMPERSONATION_PATH="$impersonation_path" SNOWFLAKE_TEST_WIF_USERNAME_IMPERSONATION="$snowflake_user_for_impersonation" bash << EOF
       set -e
       set -o pipefail
       docker run \
@@ -114,6 +112,9 @@ run_tests_and_set_result() {
         --cpus=1 \
         -m 1g \
         -e BRANCH \
+        -e REPO_SLUG \
+        -e REF \
+        -e GITHUB_TOKEN \
         -e SNOWFLAKE_TEST_WIF_PROVIDER \
         -e SNOWFLAKE_TEST_WIF_HOST \
         -e SNOWFLAKE_TEST_WIF_ACCOUNT \
@@ -123,13 +124,8 @@ run_tests_and_set_result() {
         snowflakedb/client-python-test:1 \
           bash -c "
             echo 'Running tests on branch: \$BRANCH'
-            if [[ \"\$BRANCH\" =~ ^PR-[0-9]+\$ ]]; then
-              curl -L https://github.com/snowflakedb/snowflake-connector-python/archive/refs/pull/\$(echo \$BRANCH | cut -d- -f2)/head.tar.gz | tar -xz
-              mv snowflake-connector-python-* snowflake-connector-python
-            else
-              curl -L https://github.com/snowflakedb/snowflake-connector-python/archive/refs/heads/\$BRANCH.tar.gz | tar -xz
-              mv snowflake-connector-python-\$BRANCH snowflake-connector-python
-            fi
+            mkdir -p snowflake-connector-python
+            curl -fsSL -H 'Authorization: token \$GITHUB_TOKEN' https://api.github.com/repos/\$REPO_SLUG/tarball/\$REF | tar -xz --strip-components=1 -C snowflake-connector-python
             cd snowflake-connector-python
             bash ci/wif/test_wif.sh
           "
@@ -156,6 +152,28 @@ get_branch() {
   echo "${branch}"
 }
 
+# Derive the GitHub "owner/repo" slug of the checkout under test so the remote
+# workers fetch the *same* repository they were launched from. This keeps the
+# script identical between snowflake-connector-python (public) and
+# snowflake-connector-python-private (private) when mirrored: the public Jenkins
+# job tests the public repo, the private one tests the private repo.
+get_repo_slug() {
+  local url
+  if [[ -n "${GIT_URL}" ]]; then
+    # Jenkins (set from scmInfo in the Jenkinsfile)
+    url="${GIT_URL}"
+  else
+    # Local
+    url=$(git -C "$THIS_DIR" config --get remote.origin.url)
+  fi
+  # Normalize git@github.com:owner/repo.git / https://github.com/owner/repo.git -> owner/repo
+  url="${url%.git}"
+  url="${url#git@github.com:}"
+  url="${url#ssh://git@github.com/}"
+  url="${url#https://github.com/}"
+  echo "${url}"
+}
+
 setup_parameters() {
   source "$THIS_DIR/setup_gpg_home.sh"
   gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" --output "$RSA_KEY_PATH_AWS_AZURE" "${RSA_KEY_PATH_AWS_AZURE}.gpg"
@@ -168,6 +186,17 @@ setup_parameters() {
 
 BRANCH=$(get_branch)
 export BRANCH
+REPO_SLUG=$(get_repo_slug)
+export REPO_SLUG
+# Commit under test. Jenkins provides GIT_COMMIT (the PR head SHA); fetching the
+# tarball by SHA is unambiguous and avoids re-deriving PR numbers per repo.
+REF="${GIT_COMMIT:-$(git -C "$THIS_DIR" rev-parse HEAD)}"
+export REF
+# GITHUB_TOKEN is injected by the Jenkinsfile (the GitHub App installed on this
+# repo: jenkins-snowflakedb-github-app here, jenkins-snowdrivers-github-app on the
+# private mirror); required to fetch the source on the remote workers when REPO_SLUG
+# is private.
+export GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 setup_parameters
 
 # Run tests for all cloud providers
