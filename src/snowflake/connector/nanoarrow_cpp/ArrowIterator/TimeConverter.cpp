@@ -1,5 +1,7 @@
 #include "TimeConverter.hpp"
 
+#include <mutex>
+
 namespace sf {
 
 TimeConverter::TimeConverter(ArrowArrayView* array, int32_t scale)
@@ -22,14 +24,16 @@ PyObject* TimeConverter::toPyObject(int64_t rowIndex) const {
 
 py::UniqueRef& TimeConverter::m_pyDatetimeTime() {
   static py::UniqueRef pyDatetimeTime;
-  if (pyDatetimeTime.empty()) {
+  // Serializes the lazy import for free-threaded builds
+  static std::once_flag onceFlag;
+  std::call_once(onceFlag, []() {
     py::PyUniqueLock lock;
     py::UniqueRef pyDatetimeModule;
     py::importPythonModule("datetime", pyDatetimeModule);
     /** TODO : to check status here */
 
     py::importFromModule(pyDatetimeModule, "time", pyDatetimeTime);
-  }
+  });
   return pyDatetimeTime;
 }
 

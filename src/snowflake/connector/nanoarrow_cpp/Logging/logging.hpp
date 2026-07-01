@@ -1,6 +1,7 @@
 #ifndef PC_LOGGING_HPP
 #define PC_LOGGING_HPP
 
+#include <mutex>
 #include <string>
 
 #include "Python/Common.hpp"
@@ -30,6 +31,9 @@ class Logger {
 
  private:
   py::UniqueRef m_pyLogger;
+  // Guards once-only init of m_pyLogger; on free-threaded builds (3.13t+)
+  // two racing threads can double-invoke setupPyLogger() and leak a PyLogger.
+  std::once_flag m_initOnceFlag;
   const char *const m_name;
   static constexpr int CRITICAL = 50;
   static constexpr int FATAL = CRITICAL;

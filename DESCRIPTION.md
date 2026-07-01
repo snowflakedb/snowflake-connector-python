@@ -15,6 +15,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Removed pandas upper bound dependency constraint on the `[pandas]` extra to allow installation of pandas 3.0.0 and later.
   - Fixed S3 storage client to correctly handle 307/308 (method-preserving) and 301/302 (GET/HEAD only) redirects by disabling automatic redirect following and re-signing each request with AWS SigV4 credentials for the redirect target. The region is updated from the `x-amz-bucket-region` response header on each redirect. Redirects are capped at 5 hops.
   - Added support for Python 3.14t (free-threaded). Note: Python 3.14t CI testing excludes `win_arm64` (no `cryptography` wheels available) and `mitmproxy` proxy tests on all platforms (transitive dependencies `aioquic`/`pylsqpack` lack free-threaded-compatible wheels).
+  - Fixed Arrow iterator compatibility with free-threaded Python (3.13t/3.14t). Importing the connector on a `--disable-gil` interpreter no longer re-enables the GIL, and concurrent Arrow result conversion is now thread-safe.
+  - Published free-threaded (`cp314t`) wheels and conda packages alongside the existing 3.14 builds.
 
 
 - v4.6.0(May 28,2026)
