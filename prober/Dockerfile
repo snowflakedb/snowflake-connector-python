@@ -1,4 +1,7 @@
-FROM ubuntu:25.10
+# ubuntu:26.04 is the current LTS release with long-term security support. We
+# avoid interim releases (e.g. 25.10) whose ~9-month support window leaves
+# base-image OS packages unpatched once they go EOL.
+FROM ubuntu:26.04
 
 # boilerplate labels required by validation when pushing to ACR, ECR & GCR
 LABEL org.opencontainers.image.source="https://github.com/snowflakedb/snowflake-connector-python"
@@ -14,7 +17,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # pyenv compiles CPython from source - these are the recommended build deps for
 # Ubuntu/Debian (see https://github.com/pyenv/pyenv/wiki#suggested-build-environment)
+# `apt-get upgrade` pulls security fixes for the base-image OS packages (glibc,
+# openssl, dpkg, gnupg2, libcap2, ...) that are not otherwise reinstalled below.
 RUN apt-get update && \
+    apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
         bash \
         ca-certificates \
