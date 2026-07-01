@@ -2688,15 +2688,9 @@ def test_empty_result_stats(conn_cnx):
 
 
 def test_fqn_ddl_does_not_pollute_schema_cache(conn_cnx, db_parameters):
-    """SNOW-3665226: fully-qualified DDL must not mutate the connector's cached
-    current schema / database when the session has no schema set.
-
-    Repro: open a connection without a schema, execute a DDL that references a
-    fully-qualified object (db.schema.name).  The connector was updating its
-    _schema/_database cache from the server's finalSchemaName/finalDatabaseName
-    response fields, which reflect the *object's* schema — not the session's
-    current schema — causing get_current_schema() to diverge from
-    SELECT CURRENT_SCHEMA() on the server.
+    """SNOW-3665226: a fully-qualified DDL must not populate the connector's
+    cached _schema/_database when the session has none set (finalSchemaName/
+    finalDatabaseName reflect the referenced object, not the session context).
     """
     database = db_parameters["database"].upper()
     schema = db_parameters["schema"].upper()
@@ -2707,6 +2701,8 @@ def test_fqn_ddl_does_not_pollute_schema_cache(conn_cnx, db_parameters):
         with cnx.cursor() as cur:
             # Sanity-check: cache and server agree before the test.
             assert cnx._schema is None
+            db_before = cnx._database
+            assert db_before is not None  # database was set at connect time
             server_schema_before = cur.execute("SELECT CURRENT_SCHEMA()").fetchone()[0]
             assert server_schema_before is None
 
@@ -2716,12 +2712,15 @@ def test_fqn_ddl_does_not_pollute_schema_cache(conn_cnx, db_parameters):
             finally:
                 cur.execute(f"DROP VIEW IF EXISTS {view_name}")
 
-            # Cache must still be None — the session schema never changed.
+            # Cache must still be None / unchanged — the session context never changed.
             assert cnx._schema is None, (
                 f"connector cache was polluted: _schema={cnx._schema!r}, "
-                f"but no USE SCHEMA was issued"
+                "but no USE SCHEMA was issued"
             )
-            assert cnx._database is not None  # database was set at connect time
+            assert cnx._database == db_before, (
+                f"connector _database was polluted: got {cnx._database!r}, "
+                f"expected {db_before!r}"
+            )
 
             # Server must also still return NULL for CURRENT_SCHEMA().
             server_schema_after = cur.execute("SELECT CURRENT_SCHEMA()").fetchone()[0]
