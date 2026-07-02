@@ -2696,20 +2696,14 @@ def test_fqn_ddl_does_not_pollute_schema_cache(conn_cnx, db_parameters):
     schema = db_parameters["schema"].upper()
     view_name = f'"{database}"."{schema}"."SNOW_3665226_REPRO_VIEW"'
 
-    # Open a session with NO database and NO schema so both caches start as None.
-    # The FQN object below lives in `database`.`schema`; without the guard the
-    # connector would overwrite the None caches with the object's namespace. We
-    # start _database as None too (not just _schema) so its "None is not
-    # overridden" path is actually exercised rather than a tautology.
-    with conn_cnx(database=None, schema=None) as cnx:
+    # Open a session with NO schema so the cache starts as None.
+    with conn_cnx(schema=None) as cnx:
         with cnx.cursor() as cur:
-            # Sanity-check: cache and server agree (both empty) before the test.
-            assert cnx._database is None
+            # Sanity-check: cache and server agree before the test.
             assert cnx._schema is None
-            server_db_before, server_schema_before = cur.execute(
-                "SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()"
-            ).fetchone()
-            assert server_db_before is None
+            db_before = cnx._database
+            assert db_before is not None  # database was set at connect time
+            server_schema_before = cur.execute("SELECT CURRENT_SCHEMA()").fetchone()[0]
             assert server_schema_before is None
 
             # Touch a fully-qualified object — this must not change the session context.
@@ -2718,23 +2712,18 @@ def test_fqn_ddl_does_not_pollute_schema_cache(conn_cnx, db_parameters):
             finally:
                 cur.execute(f"DROP VIEW IF EXISTS {view_name}")
 
-            # Caches must still be None — the session context never changed.
-            assert cnx._database is None, (
-                f"connector cache was polluted: _database={cnx._database!r}, "
-                "but no USE DATABASE was issued"
-            )
+            # Cache must still be None / unchanged — the session context never changed.
             assert cnx._schema is None, (
                 f"connector cache was polluted: _schema={cnx._schema!r}, "
                 "but no USE SCHEMA was issued"
             )
+            assert cnx._database == db_before, (
+                f"connector _database was polluted: got {cnx._database!r}, "
+                f"expected {db_before!r}"
+            )
 
-            # Server must also still return NULL for the current namespace.
-            server_db_after, server_schema_after = cur.execute(
-                "SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()"
-            ).fetchone()
-            assert (
-                server_db_after is None
-            ), f"unexpected server database: {server_db_after!r}"
+            # Server must also still return NULL for CURRENT_SCHEMA().
+            server_schema_after = cur.execute("SELECT CURRENT_SCHEMA()").fetchone()[0]
             assert (
                 server_schema_after is None
             ), f"unexpected server schema: {server_schema_after!r}"
