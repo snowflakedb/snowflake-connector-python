@@ -1521,13 +1521,10 @@ def assert_pandas_batch_types(
     assert batch.dtypes is not None
 
     pandas_dtypes = batch.dtypes
+    # pd.string is represented as an np.object
+    # np.dtype string is not the same as pd.string (python)
     for pandas_dtype, expected_type in zip(pandas_dtypes, expected_types):
-        actual_type = pandas_dtype.type
-        expected_numpy_type = numpy.dtype(expected_type).type
-        # pandas 3+ uses native str (not numpy.object_) as the type for string dtype
-        if actual_type is str and expected_numpy_type is numpy.object_:
-            continue
-        assert_dtype_equal(actual_type, expected_numpy_type)
+        assert_dtype_equal(pandas_dtype.type, numpy.dtype(expected_type).type)
 
 
 def test_pandas_dtypes(conn_cnx):
@@ -1629,13 +1626,7 @@ def test_fetch_with_pandas_nullable_types(conn_cnx):
         [pandas.Float64Dtype(), pandas.Float64Dtype(), pandas.Float64Dtype()],
         index=["1.0::FLOAT", "'NAN'::FLOAT", "NULL::FLOAT"],
     )
-    # pandas 3+ coerces NaN to pd.NA in nullable Float64Dtype, so NaN and NULL both show as <NA>
-    _pandas_major = int(pandas.__version__.split(".")[0])
-    if _pandas_major >= 3:
-        expected_df_to_string = """   1.0::FLOAT  'NAN'::FLOAT  NULL::FLOAT
-0         1.0          <NA>         <NA>"""
-    else:
-        expected_df_to_string = """   1.0::FLOAT  'NAN'::FLOAT  NULL::FLOAT
+    expected_df_to_string = """   1.0::FLOAT  'NAN'::FLOAT  NULL::FLOAT
 0         1.0           NaN         <NA>"""
     with conn_cnx() as cnx_table:
         # fetch dataframe with new arrow support
