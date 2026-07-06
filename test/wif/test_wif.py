@@ -79,6 +79,26 @@ def test_should_authenticate_with_impersonation():
     ), f"Failed to connect using WIF with provider {PROVIDER}"
 
 
+@pytest.mark.wif
+def test_should_authenticate_using_aws_outbound_token():
+    if PROVIDER != "AWS":
+        pytest.skip("Skipping test - not running on AWS")
+
+    os.environ["SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN"] = "true"
+    try:
+        connection_params = {
+            "host": HOST,
+            "account": ACCOUNT,
+            "authenticator": "WORKLOAD_IDENTITY",
+            "workload_identity_provider": "AWS",
+        }
+        assert connect_and_execute_simple_query(
+            connection_params, EXPECTED_USERNAME
+        ), "Failed to connect using WIF with AWS outbound token"
+    finally:
+        os.environ.pop("SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN", None)
+
+
 def is_provider_gcp() -> bool:
     return PROVIDER == "GCP"
 

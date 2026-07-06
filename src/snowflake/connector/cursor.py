@@ -1695,7 +1695,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         if not self.connection._reuse_results:
             self._result_set = None
 
-    def __iter__(self) -> Iterator[dict] | Iterator[tuple]:
+    def __iter__(self) -> Iterator[FetchRow]:
         """Iteration over the result set."""
         while True:
             _next = self.fetchone()
