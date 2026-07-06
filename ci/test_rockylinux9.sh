@@ -42,7 +42,7 @@ fi
 
 # Fetch wiremock
 WIREMOCK_VERSION=3.11.0
-if [[ -n "$JENKINS_HOME" ]]; then
+if [[ -n "$JENKINS_HOME" && "$JENKINS_HOME" != "false" ]]; then
     WIREMOCK_BASE_URL=https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/development-maven-virtual
 else
     WIREMOCK_BASE_URL=https://repo1.maven.org/maven2
