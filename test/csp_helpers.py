@@ -263,7 +263,7 @@ class FakeGceMetadataService(FakeMetadataService):
 
     @property
     def expected_hostnames(self):
-        return ["169.254.169.254", "metadata.google.internal"]
+        return ["metadata.google.internal"]
 
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
