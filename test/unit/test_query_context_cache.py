@@ -516,3 +516,81 @@ def test_qcc_updated_regardless_of_query_success(success):
     entry_ids = {e.id for e in conn.query_context_cache._get_elements()}
     assert 1 in entry_ids, "Original entry should still be present"
     assert 2 in entry_ids, "New entry from server response should have been merged"
+
+
+def test_qcc_not_shrunk_after_failed_query_with_hybrid_table():
+    """SNOW-3010877: QCC must not shrink when a query on a hybrid table fails.
+
+    Simulates the hybrid table scenario: a successful INSERT populates
+    the QCC with 2 entries (main + DPO), then a duplicate-key INSERT
+    fails but the server still sends queryContext in the error response.
+    The connector must merge it so the cache does not shrink.
+    """
+    from snowflake.connector.connection import SnowflakeConnection
+
+    conn = MagicMock()
+    conn._disable_query_context_cache = False
+    conn.is_query_context_cache_disabled = False
+    conn.query_context_cache = QueryContextCache(5)
+    conn.query_context_cache_size = 5
+
+    conn.get_query_context = types.MethodType(
+        SnowflakeConnection.get_query_context, conn
+    )
+    conn.set_query_context = types.MethodType(
+        SnowflakeConnection.set_query_context, conn
+    )
+
+    # Q1 — successful insert: server returns queryContext with 2 entries
+    conn.rest.request.return_value = {
+        "success": True,
+        "data": {
+            "queryId": "success-query-id",
+            "queryContext": {
+                "entries": [
+                    {"id": 0, "timestamp": 100, "priority": 0, "context": "main_ctx"},
+                    {"id": 1, "timestamp": 100, "priority": 1, "context": "ht_dpo_ctx"},
+                ]
+            },
+        },
+    }
+    SnowflakeConnection.cmd_query(
+        conn, "INSERT INTO ht VALUES ('k1','v1')", 1, uuid.uuid4()
+    )
+    qcc_after_success = len(conn.query_context_cache)
+    assert qcc_after_success == 2, "QCC should have 2 entries after successful query"
+
+    # Q2 — duplicate key insert fails, but server still sends queryContext
+    conn.rest.request.return_value = {
+        "success": False,
+        "code": "100072",
+        "message": "Duplicate key value violates unique constraint",
+        "data": {
+            "queryId": "failed-query-id",
+            "queryContext": {
+                "entries": [
+                    {
+                        "id": 0,
+                        "timestamp": 200,
+                        "priority": 0,
+                        "context": "main_ctx_v2",
+                    },
+                    {
+                        "id": 1,
+                        "timestamp": 200,
+                        "priority": 1,
+                        "context": "ht_dpo_ctx_v2",
+                    },
+                ]
+            },
+        },
+    }
+    SnowflakeConnection.cmd_query(
+        conn, "INSERT INTO ht VALUES ('k1','v1')", 2, uuid.uuid4()
+    )
+
+    qcc_after_failure = len(conn.query_context_cache)
+    assert qcc_after_failure >= qcc_after_success, (
+        f"QCC should not shrink after a failed query: "
+        f"before={qcc_after_success}, after={qcc_after_failure}"
+    )
