@@ -443,7 +443,7 @@ async def write_pandas(
             quote_identifiers,
         )
 
-        if auto_create_table or overwrite:
+        if auto_create_table:
             iceberg = "ICEBERG " if iceberg_config else ""
             iceberg_config_statement = _iceberg_config_statement_helper(
                 iceberg_config or {}
