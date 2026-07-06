@@ -7,15 +7,22 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- Upcoming Release
+- NEXT_RELEASE(TBD)
+  - Added support for Python 3.14t (free-threaded).
+    - **Note:** Python 3.14t CI testing excludes `win_arm64` (no `cryptography` wheels available) and `mitmproxy` proxy tests on all platforms (transitive dependencies `aioquic`/`pylsqpack` lack free-threaded-compatible wheels).
+
+- v4.7.0(Jul 2,2026)
+  - Fixed `python-connector.log` not rotating on Windows, and every record being logged twice, when easy logging is enabled via `config.toml` (SNOW-3680325).
+    - **Note:** As part of this fix, easy logging no longer calls `logging.basicConfig()` and therefore no longer configures the root logger. `python-connector.log` now captures only the `snowflake.connector`, `botocore`, and `boto3`.
   - Improved URL validation reliability by replacing the hand-rolled regex in `is_valid_url()` with `urllib.parse.urlparse` (SNOW-3392651).
   - Fixed OAuth infinite loop when tokens expire by ensuring `reauthenticate()` calls `_request_tokens()` directly instead of looping through `prepare()`. Token cache is now read exactly once per connection, and `_store_tokens()` preserves macOS Keychain ACL by never calling `remove()`. The async OAuth `reauthenticate()` now runs the synchronous OAuth flow on a worker thread instead of blocking the event loop.
   - Fixed OAuth scope handling for Snowflake custom OAuth: when refresh tokens are enabled, the connector no longer appends the OIDC `offline_access` scope for token endpoints on `*.snowflakecomputing.com` or `*.snowflakecomputing.cn`, which caused `invalid_scope` errors. Snowflake custom OAuth expects `refresh_token` in scope instead. External IdP behavior is unchanged.
   - Fixed input validation for `scale` metadata in Arrow result set processing for `TIME`, `TIMESTAMP_NTZ`, `TIMESTAMP_LTZ`, and `TIMESTAMP_TZ` columns (SNOW-3388299).
   - Removed pandas upper bound dependency constraint on the `[pandas]` extra to allow installation of pandas 3.0.0 and later.
   - Fixed S3 storage client to correctly handle 307/308 (method-preserving) and 301/302 (GET/HEAD only) redirects by disabling automatic redirect following and re-signing each request with AWS SigV4 credentials for the redirect target. The region is updated from the `x-amz-bucket-region` response header on each redirect. Redirects are capped at 5 hops.
-  - Added support for Python 3.14t (free-threaded). Note: Python 3.14t CI testing excludes `win_arm64` (no `cryptography` wheels available) and `mitmproxy` proxy tests on all platforms (transitive dependencies `aioquic`/`pylsqpack` lack free-threaded-compatible wheels).
-
+  - Added native AKS (Azure Kubernetes Service) workload identity support. When running on AKS with workload identity configured, the connector automatically uses `WorkloadIdentityCredential` to authenticate via the injected service account credentials. OIDC backward compatibility is also supported.
+  - Added the `workload_identity_aws_use_outbound_token` connection option (default `false`) to opt into AWS WIF JWT attestation via STS `GetWebIdentityToken` instead of the default SigV4 `GetCallerIdentity` method.
+  - Fixed a bug where a fully-qualified DDL statement (e.g. `CREATE VIEW db.schema.obj`) on a session with no current schema would populate the connector's cached `_schema`/`_database` from the referenced object's namespace. This made `get_current_schema()` diverge from the server's `CURRENT_SCHEMA()` and mis-qualified Snowpark temp objects (SNOW-3665226).
 
 - v4.6.0(May 28,2026)
   - Dropped support for Python 3.9. The minimum supported version is now Python 3.10.

@@ -266,6 +266,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "workload_identity_provider": (None, (type(None), AttestationProvider)),
     "workload_identity_entra_resource": (None, (type(None), str)),
     "workload_identity_impersonation_path": (None, (type(None), list[str])),
+    "workload_identity_aws_use_outbound_token": (
+        False,
+        bool,
+    ),  # Opt into AWS WIF JWT attestation via STS GetWebIdentityToken instead of the default SigV4 GetCallerIdentity method
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
@@ -1643,6 +1647,7 @@ class SnowflakeConnection:
                     token=self._token,
                     entra_resource=self._workload_identity_entra_resource,
                     impersonation_path=self._workload_identity_impersonation_path,
+                    aws_use_outbound_token=self._workload_identity_aws_use_outbound_token,
                 )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
@@ -1830,10 +1835,11 @@ class SnowflakeConnection:
                 "workload_identity_provider",
                 "workload_identity_entra_resource",
                 "workload_identity_impersonation_path",
+                "workload_identity_aws_use_outbound_token",
             ]
             for dependent_option in workload_identity_dependent_options:
                 if (
-                    self.__getattribute__(f"_{dependent_option}") is not None
+                    self.__getattribute__(f"_{dependent_option}")
                     and self._authenticator != WORKLOAD_IDENTITY_AUTHENTICATOR
                 ):
                     Error.errorhandler_wrapper(
@@ -1983,9 +1989,14 @@ class SnowflakeConnection:
             ret["data"] = {}
         if _update_current_object:
             data = ret["data"]
-            if "finalDatabaseName" in data and data["finalDatabaseName"] is not None:
+            is_context_switch = sql.strip().upper().startswith("USE ")
+            if data.get("finalDatabaseName") is not None and (
+                self._database is not None or is_context_switch
+            ):
                 self._database = data["finalDatabaseName"]
-            if "finalSchemaName" in data and data["finalSchemaName"] is not None:
+            if data.get("finalSchemaName") is not None and (
+                self._schema is not None or is_context_switch
+            ):
                 self._schema = data["finalSchemaName"]
             if "finalWarehouseName" in data and data["finalWarehouseName"] is not None:
                 self._warehouse = data["finalWarehouseName"]

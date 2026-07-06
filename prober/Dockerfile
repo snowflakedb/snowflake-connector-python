@@ -1,4 +1,7 @@
-FROM ubuntu:25.10
+# ubuntu:26.04 is the current LTS release with long-term security support. We
+# avoid interim releases (e.g. 25.10) whose ~9-month support window leaves
+# base-image OS packages unpatched once they go EOL.
+FROM ubuntu:26.04
 
 # boilerplate labels required by validation when pushing to ACR, ECR & GCR
 LABEL org.opencontainers.image.source="https://github.com/snowflakedb/snowflake-connector-python"
@@ -10,11 +13,19 @@ LABEL com.snowflake.owners.jira_component="Python Driver"
 # fake layers label to pass the validation
 LABEL com.snowflake.ugcbi.layers="sha256:850959b749c07b254308a4d1a84686fd7c09fcb94aeae33cc5748aa07e5cb232,sha256:b79d3c4628a989cbb8bc6f0bf0940ff33a68da2dca9c1ffbf8cfb2a27ac8d133,sha256:1cbcc0411a84fbce85e7ee2956c8c1e67b8e0edc81746a33d9da48c852037c3e,sha256:07e89b796f91d37255c6eec926b066d6818f3f2edc344a584d1b9566f77e1c27,sha256:84ff92691f909a05b224e1c56abb4864f01b4f8e3c854e4bb4c7baf1d3f6d652,sha256:3ab72684daee4eea64c3ae78a43ea332b86358446b6f2904dca4b634712e1537"
 
+# ubuntu:26.04 introduced a multi-line org.opencontainers.image.description label that
+# breaks jenkins_push.sh (empty line from \n\n in the value produces key="" → bad array
+# subscript in the bash associative array at line 42). Override it with a single-line value.
+LABEL org.opencontainers.image.description="Snowflake Python Connector prober image"
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 # pyenv compiles CPython from source - these are the recommended build deps for
 # Ubuntu/Debian (see https://github.com/pyenv/pyenv/wiki#suggested-build-environment)
+# `apt-get upgrade` pulls security fixes for the base-image OS packages (glibc,
+# openssl, dpkg, gnupg2, libcap2, ...) that are not otherwise reinstalled below.
 RUN apt-get update && \
+    apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
         bash \
         ca-certificates \

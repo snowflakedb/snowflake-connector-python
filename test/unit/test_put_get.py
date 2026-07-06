@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import os
 from os import chmod, path
 from unittest import mock
 from unittest.mock import patch
@@ -235,7 +236,16 @@ def test_iobound_limit(tmp_path):
         },
         iobound_tpe_limit=2,
     )
-    assert len(list(filter(lambda e: e.args == (3,), tpe.call_args_list))) == 2
+    # The IObound pools (preprocess + postprocess) are sized to one worker per
+    # file, capped by the host core count: min(num_files, os.cpu_count()).
+    # Derive the expectation from the real core count so the test verifies the
+    # actual behaviour on whatever machine runs it (3 on a >=3-core host, 2 on a
+    # 2-core host) instead of mocking os.cpu_count to a hypothetical value.
+    expected_iobound = min(3, os.cpu_count())
+    assert (
+        len(list(filter(lambda e: e.args == (expected_iobound,), tpe.call_args_list)))
+        == 2
+    )
     with mock.patch(
         "snowflake.connector.file_transfer_agent.ThreadPoolExecutor"
     ) as tpe:
@@ -251,8 +261,20 @@ def test_iobound_limit(tmp_path):
                     rest_client.execute()
                 except AttributeError:
                     pass
-    # 2 IObound TPEs should be created for 3 files limited to 2
-    assert len(list(filter(lambda e: e.args == (2,), tpe.call_args_list))) == 2
+    # 2 IObound TPEs should be created for 3 files, further capped by the
+    # explicit iobound_tpe_limit=2: min(min(num_files, os.cpu_count()), 2).
+    expected_iobound_limited = min(min(3, os.cpu_count()), 2)
+    assert (
+        len(
+            list(
+                filter(
+                    lambda e: e.args == (expected_iobound_limited,),
+                    tpe.call_args_list,
+                )
+            )
+        )
+        == 2
+    )
 
 
 def test_strip_stage_prefix_from_dst_file_name_for_download():
