@@ -16,10 +16,6 @@ import subprocess
 import sys
 import textwrap
 
-import pytest
-
-_HAS_GIL_INTROSPECTION = hasattr(sys, "_is_gil_enabled")
-
 
 def _run_in_subprocess(script: str) -> subprocess.CompletedProcess[str]:
     """Run ``script`` in a fresh interpreter for a deterministic first-import measurement.
@@ -36,16 +32,12 @@ def _run_in_subprocess(script: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-@pytest.mark.skipif(
-    not _HAS_GIL_INTROSPECTION,
-    reason="sys._is_gil_enabled() requires Python 3.13+",
-)
-def test_connector_import_does_not_emit_gil_reenable_warning() -> None:
+def test_connector_import_does_not_emit_gil_reenable_warning(gil_disabled) -> None:
     """Importing the connector must not emit a RuntimeWarning about the GIL.
 
     C extensions declaring ``Py_MOD_GIL_USED`` cause CPython to re-enable the
-    GIL at import time and emit such a warning. On GIL-enabled builds the
-    warning never fires, but the test still exercises the import path.
+    GIL at import time and emit such a warning. Only meaningful on a
+    free-threaded build (on a GIL build the warning can never fire).
     """
     proc = _run_in_subprocess(
         """
@@ -78,17 +70,10 @@ def test_connector_import_does_not_emit_gil_reenable_warning() -> None:
     )
 
 
-@pytest.mark.skipif(
-    not _HAS_GIL_INTROSPECTION or sys._is_gil_enabled(),
-    reason="requires a free-threaded interpreter with the GIL disabled "
-    "(e.g. `python3.14t` or `python3.14 -X gil=0`)",
-)
-def test_connector_import_leaves_gil_disabled_on_freethreaded_build() -> None:
-    """On a free-threaded build, the GIL must remain disabled after import.
-
-    Stronger than the warning check: catches paths that re-enable the GIL
-    without emitting a RuntimeWarning.
-    """
+def test_connector_import_leaves_gil_disabled_on_freethreaded_build(
+    gil_disabled,
+) -> None:
+    """On a free-threaded build, the GIL must remain disabled after import."""
     proc = _run_in_subprocess(
         """
         import sys
@@ -107,16 +92,8 @@ def test_connector_import_leaves_gil_disabled_on_freethreaded_build() -> None:
     )
 
 
-@pytest.mark.skipif(
-    not _HAS_GIL_INTROSPECTION or not sys._is_gil_enabled(),
-    reason="requires a GIL-enabled interpreter (e.g. python3.14, " "not python3.14t)",
-)
-def test_connector_import_on_gil_build_leaves_gil_enabled() -> None:
-    """On a GIL-enabled build, importing the connector must not disable the GIL.
-
-    Catches the symmetric regression where ``freethreading_compatible``
-    accidentally affects a non-free-threaded interpreter.
-    """
+def test_connector_import_on_gil_build_leaves_gil_enabled(gil_enabled) -> None:
+    """On a GIL-enabled build, importing the connector must not disable the GIL."""
     proc = _run_in_subprocess(
         """
         import sys
