@@ -560,21 +560,17 @@ def test_timestamp_force_microsecond_precision(conn_cnx, date_type, fetch_method
     overflow_date = "9999-12-31 00:00:00.000000000"
 
     def fill_table(cursor: SnowflakeCursor, date: str, amount: int, start_id: int = 0):
-        cursor.execute(
-            f"""
+        cursor.execute(f"""
             INSERT INTO test_timestamp_mixed_batches (id, dt)
             SELECT seq4() + {start_id}, '{date}'::{date_type}(9)
             FROM TABLE(GENERATOR(ROWCOUNT => {amount}))
-            """
-        )
+            """)
 
     with conn_cnx() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            f"""
+        cursor.execute(f"""
             CREATE TEMPORARY TABLE test_timestamp_mixed_batches (id INT, dt {date_type}(9))
-            """
-        )
+            """)
 
         # Fill first batch with normal dates
         fill_table(cursor, normal_date, over_single_chunk_size)
@@ -900,9 +896,7 @@ def validate_pandas(
                         assert abs(c_case - c_new) < epsilon, (
                             "{} row, {} column: original value is {}, "
                             "new value is {}, epsilon is {} \
-                        values are not equal".format(
-                                i, j, cases[i], c_new, epsilon
-                            )
+                        values are not equal".format(i, j, cases[i], c_new, epsilon)
                         )
 
 
@@ -1521,13 +1515,10 @@ def assert_pandas_batch_types(
     assert batch.dtypes is not None
 
     pandas_dtypes = batch.dtypes
+    # pd.string is represented as an np.object
+    # np.dtype string is not the same as pd.string (python)
     for pandas_dtype, expected_type in zip(pandas_dtypes, expected_types):
-        actual_type = pandas_dtype.type
-        expected_numpy_type = numpy.dtype(expected_type).type
-        # pandas 3+ uses native str (not numpy.object_) as the type for string dtype
-        if actual_type is str and expected_numpy_type is numpy.object_:
-            continue
-        assert_dtype_equal(actual_type, expected_numpy_type)
+        assert_dtype_equal(pandas_dtype.type, numpy.dtype(expected_type).type)
 
 
 def test_pandas_dtypes(conn_cnx):
@@ -1629,13 +1620,7 @@ def test_fetch_with_pandas_nullable_types(conn_cnx):
         [pandas.Float64Dtype(), pandas.Float64Dtype(), pandas.Float64Dtype()],
         index=["1.0::FLOAT", "'NAN'::FLOAT", "NULL::FLOAT"],
     )
-    # pandas 3+ coerces NaN to pd.NA in nullable Float64Dtype, so NaN and NULL both show as <NA>
-    _pandas_major = int(pandas.__version__.split(".")[0])
-    if _pandas_major >= 3:
-        expected_df_to_string = """   1.0::FLOAT  'NAN'::FLOAT  NULL::FLOAT
-0         1.0          <NA>         <NA>"""
-    else:
-        expected_df_to_string = """   1.0::FLOAT  'NAN'::FLOAT  NULL::FLOAT
+    expected_df_to_string = """   1.0::FLOAT  'NAN'::FLOAT  NULL::FLOAT
 0         1.0           NaN         <NA>"""
     with conn_cnx() as cnx_table:
         # fetch dataframe with new arrow support
