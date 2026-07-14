@@ -219,13 +219,7 @@ jobs:
       - name: Run tests
        # To run a single test on GHA use the below command:
 #        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
-        run: |
-          ENVS=`echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,sso}-ci | sed 's/ /,/g'`
-          if [[ "${PYTHON_VERSION}" == 3.14* ]]; then
-            python -m tox run -x "testenv.commands_pre=python -m pip install --no-deps pandas>=3.0.0" -e $ENVS
-          else
-            python -m tox run -e $ENVS
-          fi
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,sso}-ci | sed 's/ /,/g'`
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
