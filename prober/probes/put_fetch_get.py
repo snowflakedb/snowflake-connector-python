@@ -1,6 +1,7 @@
 import csv
 import os
 import random
+import re
 import sys
 
 from faker import Faker
@@ -9,7 +10,6 @@ from probes.login import connect
 from probes.registry import prober_function
 
 import snowflake.connector
-from snowflake.connector.util_text import random_string
 
 # Initialize logger
 logger = initialize_logger(__name__)
@@ -55,20 +55,63 @@ def get_python_version() -> str:
     """
     Returns the Python version being used.
 
+    Prefers the value pinned by the deployment via the PROBER_PYTHON_VERSION
+    environment variable (set by entrypoint.sh from the testing matrix) so
+    that resource names and metric labels match the deployment matrix
+    exactly (e.g. "3.13.4"). Falls back to runtime introspection
+    (major.minor only) when the variable is not set.
+
     Returns:
-        str: The Python version in the format 'major.minor'.
+        str: The Python version string.
     """
-    return f"{sys.version_info.major}.{sys.version_info.minor}"
+    return (
+        os.environ.get("PROBER_PYTHON_VERSION")
+        or f"{sys.version_info.major}.{sys.version_info.minor}"
+    )
 
 
 def get_driver_version() -> str:
     """
     Returns the version of the Snowflake connector.
 
+    Prefers the value pinned by the deployment via the PROBER_DRIVER_VERSION
+    environment variable (set by entrypoint.sh from the testing matrix).
+    Falls back to the installed package version when the variable is not set.
+
     Returns:
-        str: The version of the Snowflake connector.
+        str: The connector version string.
     """
-    return snowflake.connector.__version__
+    return os.environ.get("PROBER_DRIVER_VERSION") or snowflake.connector.__version__
+
+
+def _sanitize_identifier_part(value: str) -> str:
+    """
+    Converts a free-form string (e.g. "3.15.0.dev0+abc") into a fragment that
+    is safe to embed in an unquoted Snowflake identifier.
+    """
+    return re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_").lower()
+
+
+def get_resource_suffix(name_suffix: str = "") -> str:
+    """
+    Builds a deterministic suffix from the Python and driver versions so each
+    (python_version, driver_version[, probe_variant]) combination owns a single
+    stable Snowflake object name. Combined with ``CREATE OR REPLACE`` this
+    bounds the resources the prober can leak: a crashed run is reclaimed on the
+    next invocation instead of accumulating new random-suffixed objects.
+
+    Args:
+        name_suffix: Optional discriminator (e.g. ``"fail_closed"``) to keep
+            different probe variants from colliding when they run against the
+            same schema.
+    """
+    parts = [
+        f"py{_sanitize_identifier_part(get_python_version())}",
+        f"drv{_sanitize_identifier_part(get_driver_version())}",
+    ]
+    if name_suffix:
+        parts.append(_sanitize_identifier_part(name_suffix))
+    return "_".join(parts)
 
 
 def setup_schema(
@@ -158,15 +201,20 @@ def setup_warehouse(
 def create_data_table(
     cursor: snowflake.connector.cursor.SnowflakeCursor,
     metric_name: str = "cloudprober_driver_python_create_table",
+    name_suffix: str = "",
 ) -> str:
     """
     Creates a data table in Snowflake with the specified schema.
+
+    The table name is deterministic per (python_version, driver_version,
+    name_suffix); ``CREATE OR REPLACE`` ensures a leftover table from a
+    previously aborted run is overwritten rather than accumulating.
 
     Returns:
         str: The name of the created table.
     """
     try:
-        table_name = random_string(10, "test_data_")
+        table_name = f"test_data_{get_resource_suffix(name_suffix)}"
         create_table_query = f"""
         CREATE OR REPLACE TABLE {table_name} (
             id INT,
@@ -198,15 +246,20 @@ def create_data_table(
 def create_data_stage(
     cursor: snowflake.connector.cursor.SnowflakeCursor,
     metric_name: str = "cloudprober_driver_python_create_stage",
+    name_suffix: str = "",
 ) -> str:
     """
     Creates a stage in Snowflake for data upload.
+
+    The stage name is deterministic per (python_version, driver_version,
+    name_suffix); ``CREATE OR REPLACE`` ensures a leftover stage from a
+    previously aborted run is overwritten rather than accumulating.
 
     Returns:
         str: The name of the created stage.
     """
     try:
-        stage_name = random_string(10, "test_data_stage_")
+        stage_name = f"test_data_stage_{get_resource_suffix(name_suffix)}"
         create_stage_query = f"CREATE OR REPLACE STAGE {stage_name};"
 
         cursor.execute(create_stage_query)

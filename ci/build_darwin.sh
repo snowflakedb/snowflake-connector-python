@@ -2,8 +2,8 @@
 #
 # Build Snowflake Python Connector on Mac
 # NOTES:
-#   - To compile only a specific version(s) pass in versions like: `./build_darwin.sh "3.9 3.10"`
-PYTHON_VERSIONS="${1:-3.9 3.10 3.11 3.12 3.13 3.14}"
+#   - To compile only a specific version(s) pass in versions like: `./build_darwin.sh "3.10 3.11"`
+PYTHON_VERSIONS="${1:-3.10 3.11 3.12 3.13 3.14}"
 
 THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONNECTOR_DIR="$(dirname "${THIS_DIR}")"
@@ -36,7 +36,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
 
     log "[Info] ===== Starting build for Python ${PYTHON_VERSION} ====="
 
-    # Select the matching pyenv-installed version (e.g. 3.9 -> 3.9.21)
+    # Select the matching pyenv-installed version (e.g. 3.10 -> 3.10.15)
     if command -v pyenv &> /dev/null; then
         PYENV_MATCH=$(pyenv versions --bare | grep "^${PYTHON_VERSION//./\\.}" | head -1)
         if [ -n "$PYENV_MATCH" ]; then

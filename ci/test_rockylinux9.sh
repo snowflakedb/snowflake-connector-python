@@ -2,12 +2,12 @@
 #
 # Test Snowflake Connector in Rocky Linux 9
 # NOTES:
-#   - Versions to be tested should be passed in as the first argument, e.g: "3.9 3.11". If omitted 3.9 + 3.11 + 3.12 will be assumed.
+#   - Versions to be tested should be passed in as the first argument, e.g: "3.10 3.11". If omitted 3.11 + 3.12 will be assumed.
 #   - This script assumes that ../dist has the wheel(s) built for all versions to be tested
 #   - This is the script that test_rockylinux9_docker.sh runs inside of the docker container
 
 
-PYTHON_VERSIONS="${1:-3.9 3.11 3.12}"
+PYTHON_VERSIONS="${1:-3.11 3.12}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 
@@ -42,7 +42,7 @@ fi
 
 # Fetch wiremock
 WIREMOCK_VERSION=3.11.0
-if [[ -n "$JENKINS_HOME" ]]; then
+if [[ -n "$JENKINS_HOME" && "$JENKINS_HOME" != "false" ]]; then
     WIREMOCK_BASE_URL=https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/development-maven-virtual
 else
     WIREMOCK_BASE_URL=https://repo1.maven.org/maven2

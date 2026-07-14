@@ -2,7 +2,6 @@
 conda install conda-build
 conda install conda-verify
 conda install diffutils
-conda build ci/anaconda/recipe/ --python 3.9
 conda build ci/anaconda/recipe/ --python 3.10
 conda build ci/anaconda/recipe/ --python 3.11
 conda build ci/anaconda/recipe/ --python 3.12

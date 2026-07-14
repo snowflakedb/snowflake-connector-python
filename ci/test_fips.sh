@@ -17,18 +17,18 @@ fi
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # shellcheck disable=SC1090
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
-CONNECTOR_WHL="$(ls $CONNECTOR_DIR/dist/*cp39*manylinux2014*.whl | sort -r | head -n 1)"
+CONNECTOR_WHL="$(ls $CONNECTOR_DIR/dist/*cp311*manylinux2014*.whl | sort -r | head -n 1)"
 
 # fetch wiremock
 WIREMOCK_VERSION=3.11.0
-if [[ -n "$JENKINS_HOME" ]]; then
+if [[ -n "$JENKINS_HOME" && "$JENKINS_HOME" != "false" ]]; then
     WIREMOCK_BASE_URL=https://artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/artifactory/development-maven-virtual
 else
     WIREMOCK_BASE_URL=https://repo1.maven.org/maven2
 fi
 curl ${WIREMOCK_BASE_URL}/org/wiremock/wiremock-standalone/${WIREMOCK_VERSION}/wiremock-standalone-${WIREMOCK_VERSION}.jar --output "${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar"
 
-python3 -m venv fips_env
+python3.11 -m venv fips_env
 source fips_env/bin/activate
 pip install -U setuptools pip
 

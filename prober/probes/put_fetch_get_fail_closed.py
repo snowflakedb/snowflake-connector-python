@@ -63,13 +63,17 @@ def perform_put_fetch_get_fail_closed(
 
                 logger.error("Creating stage")
                 stage_name = create_data_stage(
-                    cur, "cloudprober_driver_python_create_stage_fail_closed"
+                    cur,
+                    "cloudprober_driver_python_create_stage_fail_closed",
+                    name_suffix="fail_closed",
                 )
                 logger.error(f"Stage {stage_name} created")
 
                 logger.error("Creating table")
                 table_name = create_data_table(
-                    cur, "cloudprober_driver_python_create_table_fail_closed"
+                    cur,
+                    "cloudprober_driver_python_create_table_fail_closed",
+                    name_suffix="fail_closed",
                 )
                 logger.error(f"Table {table_name} created")
 

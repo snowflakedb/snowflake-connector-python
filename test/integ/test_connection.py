@@ -1869,8 +1869,10 @@ def test_disable_telemetry(conn_cnx, caplog):
             with conn.cursor() as cur:
                 cur.execute("select 1").fetchall()
             assert (
-                len(conn._telemetry._log_batch) == 5
-            )  # 4 events are import package, minicore import, fetch first, fetch last
+                len(conn._telemetry._log_batch) == 6
+            )  # 6 events: import package, nanoarrow import, minicore import,
+            # client_connection_identifier_shape (SNOW-3548350; remove with
+            # the emission, target 2026-11-30), fetch first, fetch last
     assert "POST /telemetry/send" in caplog.text
     caplog.clear()
 
@@ -1893,7 +1895,10 @@ def test_disable_telemetry(conn_cnx, caplog):
     # test disable telemetry in the client
     with caplog.at_level(logging.DEBUG):
         with conn_cnx() as conn:
-            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 3
+            # Bumped from 3 to 4 by SNOW-3351450 (one extra event:
+            # client_connection_identifier_shape). Revert to 3 with the
+            # emission removal (SNOW-3548350, target 2026-11-30).
+            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 4
             conn.telemetry_enabled = False
             with conn.cursor() as cur:
                 cur.execute("select 1").fetchall()
@@ -2680,3 +2685,113 @@ def test_empty_result_stats(conn_cnx):
                     num_dml_duplicates=None,
                 ),
             )
+
+
+def test_fqn_ddl_does_not_pollute_schema_cache(conn_cnx, db_parameters):
+    """SNOW-3665226: a fully-qualified DDL must not populate the connector's
+    cached _schema/_database when the session has none set (finalSchemaName/
+    finalDatabaseName reflect the referenced object, not the session context).
+    """
+    database = db_parameters["database"].upper()
+    schema = db_parameters["schema"].upper()
+    view_name = f'"{database}"."{schema}"."SNOW_3665226_REPRO_VIEW"'
+
+    # Open a session with NO schema so the cache starts as None.
+    with conn_cnx(schema=None) as cnx:
+        with cnx.cursor() as cur:
+            # Sanity-check: cache and server agree before the test.
+            assert cnx._schema is None
+            db_before = cnx._database
+            assert db_before is not None  # database was set at connect time
+            server_schema_before = cur.execute("SELECT CURRENT_SCHEMA()").fetchone()[0]
+            assert server_schema_before is None
+
+            # Touch a fully-qualified object — this must not change the session context.
+            try:
+                cur.execute(f"CREATE OR REPLACE TEMP VIEW {view_name} AS SELECT 1 AS x")
+            finally:
+                cur.execute(f"DROP VIEW IF EXISTS {view_name}")
+
+            # Cache must still be None / unchanged — the session context never changed.
+            assert cnx._schema is None, (
+                f"connector cache was polluted: _schema={cnx._schema!r}, "
+                "but no USE SCHEMA was issued"
+            )
+            assert cnx._database == db_before, (
+                f"connector _database was polluted: got {cnx._database!r}, "
+                f"expected {db_before!r}"
+            )
+
+            # Server must also still return NULL for CURRENT_SCHEMA().
+            server_schema_after = cur.execute("SELECT CURRENT_SCHEMA()").fetchone()[0]
+            assert (
+                server_schema_after is None
+            ), f"unexpected server schema: {server_schema_after!r}"
+
+
+def test_fqn_ddl_does_not_pollute_schema_cache_with_active_context(
+    conn_cnx, db_parameters
+):
+    """SNOW-3665226: fully-qualified DDL must not mutate the connector's cached
+    current schema / database when the session *does* have an active schema set.
+
+    Repro variant: connect with an explicit database+schema context, then execute
+    a DDL referencing a fully-qualified object in a *different* schema.  Before
+    the fix the connector would overwrite _schema/_database with the object's
+    schema, causing get_current_schema() to diverge from CURRENT_SCHEMA().
+    """
+    unique = random_string(5).lower()
+    database = db_parameters["database"].upper()
+    session_schema = f"SNOW_3665226_SESSION_{unique}".upper()
+    other_schema = f"SNOW_3665226_OTHER_{unique}".upper()
+
+    # Use a separate bootstrap connection to create two schemas in the existing
+    # test database (avoids needing CREATE DATABASE privilege).
+    with conn_cnx() as bootstrap_cnx:
+        with bootstrap_cnx.cursor() as cur:
+            cur.execute(f"CREATE SCHEMA IF NOT EXISTS {session_schema}")
+            cur.execute(f"CREATE SCHEMA IF NOT EXISTS {other_schema}")
+
+    try:
+        # Connect with the known db+schema as the session context.
+        with conn_cnx(database=database, schema=session_schema) as cnx:
+            with cnx.cursor() as cur:
+                # Sanity-check: cache and server agree before the DDL.
+                assert cnx._database.upper() == database
+                assert cnx._schema.upper() == session_schema
+                server_schema_before = cur.execute(
+                    "SELECT CURRENT_SCHEMA()"
+                ).fetchone()[0]
+                assert server_schema_before.upper() == session_schema
+
+                # Execute DDL targeting a *different* schema (fully-qualified).
+                view_fqn = f'"{database}"."{other_schema}"."SNOW_3665226_VIEW_{unique}"'
+                try:
+                    cur.execute(
+                        f"CREATE OR REPLACE TEMP VIEW {view_fqn} AS SELECT 1 AS x"
+                    )
+                finally:
+                    cur.execute(f"DROP VIEW IF EXISTS {view_fqn}")
+
+                # The connector cache must still reflect the original session context.
+                assert cnx._schema.upper() == session_schema, (
+                    f"connector _schema was polluted: got {cnx._schema!r}, "
+                    f"expected {session_schema!r}"
+                )
+                assert cnx._database.upper() == database, (
+                    f"connector _database was polluted: got {cnx._database!r}, "
+                    f"expected {database!r}"
+                )
+
+                # Server must also still report the original schema.
+                server_schema_after = cur.execute("SELECT CURRENT_SCHEMA()").fetchone()[
+                    0
+                ]
+                assert (
+                    server_schema_after.upper() == session_schema
+                ), f"unexpected server schema: {server_schema_after!r}"
+    finally:
+        with conn_cnx() as cleanup_cnx:
+            with cleanup_cnx.cursor() as cur:
+                cur.execute(f"DROP SCHEMA IF EXISTS {session_schema}")
+                cur.execute(f"DROP SCHEMA IF EXISTS {other_schema}")
