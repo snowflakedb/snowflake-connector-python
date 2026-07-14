@@ -19,7 +19,7 @@ from snowflake.connector.aio._wif_util import (
     WorkloadIdentityAttestation,
 )
 from snowflake.connector.aio.auth import AuthByWorkloadIdentity
-from snowflake.connector.errors import ProgrammingError
+from snowflake.connector.errors import MissingDependencyError, ProgrammingError
 
 from ...csp_helpers import gen_dummy_access_token, gen_dummy_id_token
 from ...helpers import apply_auth_class_update_body_async, create_mock_auth_body
@@ -524,3 +524,230 @@ async def test_explicit_azure_uses_explicit_client_id_if_set(
     await auth_class.prepare(conn=None)
 
     assert fake_azure_metadata_service.requested_client_id == "custom-client-id"
+
+
+async def test_azure_impersonation_raises_error_if_multi_hop():
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=["client-id-1", "client-id-2"],
+    )
+    with pytest.raises(ProgrammingError) as excinfo:
+        await auth_class.prepare(conn=None)
+    assert "single-hop" in str(excinfo.value)
+
+
+@mock.patch("snowflake.connector.aio._session_manager.SessionManager.post")
+async def test_azure_impersonation_raises_error_if_mi_token_missing_tid(
+    mock_post_request,
+    fake_azure_vm_metadata_service,
+):
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=["some-sp-client-id"],
+    )
+    with pytest.raises(ProgrammingError) as excinfo:
+        await auth_class.prepare(conn=None)
+    assert "tid" in str(excinfo.value)
+    mock_post_request.assert_not_called()
+
+
+@mock.patch("snowflake.connector.aio._session_manager.SessionManager.post")
+async def test_azure_impersonation_calls_correct_api_and_populates_auth_data(
+    mock_post_request,
+    fake_azure_vm_metadata_service,
+):
+    tenant_id = "2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
+    fake_azure_vm_metadata_service.tid = tenant_id
+    sp_client_id = "some-sp-client-id"
+    sp_token = gen_dummy_id_token(
+        sub="sp-subject", iss=f"https://sts.windows.net/{tenant_id}"
+    )
+
+    class AsyncResponse:
+        def __init__(self, content):
+            self.content = mock.Mock()
+            self.content.read = AsyncMock(return_value=content)
+
+        def raise_for_status(self):
+            pass
+
+    mock_post_request.return_value = AsyncResponse(
+        json.dumps({"access_token": sp_token}).encode("utf-8")
+    )
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=[sp_client_id],
+    )
+    await auth_class.prepare(conn=None)
+
+    mi_token = fake_azure_vm_metadata_service.token
+    decoded_mi = jwt.decode(mi_token, options={"verify_signature": False})
+    assert decoded_mi["aud"] == "api://AzureADTokenExchange"
+
+    mock_post_request.assert_called_once_with(
+        url=f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
+        data={
+            "grant_type": "client_credentials",
+            "client_id": sp_client_id,
+            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            "client_assertion": mi_token,
+            "scope": "api://fd3f753b-eed3-462c-b6a7-a4b5bb650aad/.default",
+        },
+    )
+
+    assert (
+        auth_class.assertion_content
+        == '{"_provider":"AZURE","iss":"https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd","sub":"sp-subject"}'
+    )
+    assert await extract_api_data(auth_class) == {
+        "AUTHENTICATOR": "WORKLOAD_IDENTITY",
+        "PROVIDER": "AZURE",
+        "TOKEN": sp_token,
+        "CLIENT_ENVIRONMENT": {"WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH": 1},
+    }
+
+
+@mock.patch("snowflake.connector.aio._session_manager.SessionManager.post")
+async def test_azure_impersonation_raises_error_if_entra_api_fails(
+    mock_post_request,
+    fake_azure_vm_metadata_service,
+):
+    fake_azure_vm_metadata_service.tid = "2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
+
+    mock_post_request.side_effect = aiohttp.ClientError()
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=["some-sp-client-id"],
+    )
+    with pytest.raises(ProgrammingError) as excinfo:
+        await auth_class.prepare(conn=None)
+    assert "Error fetching SP token" in str(excinfo.value)
+
+
+@mock.patch("snowflake.connector.aio._session_manager.SessionManager.post")
+async def test_azure_impersonation_raises_error_if_access_token_missing_in_response(
+    mock_post_request,
+    fake_azure_vm_metadata_service,
+):
+    fake_azure_vm_metadata_service.tid = "2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
+
+    class AsyncResponse:
+        def __init__(self, content):
+            self.content = mock.Mock()
+            self.content.read = AsyncMock(return_value=content)
+
+        def raise_for_status(self):
+            pass
+
+    mock_post_request.return_value = AsyncResponse(json.dumps({}).encode("utf-8"))
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=["some-sp-client-id"],
+    )
+    with pytest.raises(ProgrammingError) as excinfo:
+        await auth_class.prepare(conn=None)
+    assert "No access token found" in str(excinfo.value)
+
+
+# -- Azure AKS Tests --
+
+
+@mock.patch("snowflake.connector.aio._wif_util.os.path.exists", return_value=True)
+@mock.patch(
+    "snowflake.connector.aio._wif_util.azure_identity_aio.WorkloadIdentityCredential"
+)
+async def test_aks_path_plumbs_mi_token_to_api(mock_wic, _mock_exists, monkeypatch):
+    tenant_id = "2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
+    mi_token = gen_dummy_id_token(
+        sub="611ab25b-2e81-4e18-92a7-b21f2bebb269",
+        iss=f"https://sts.windows.net/{tenant_id}",
+    )
+    mock_wic.return_value.get_token = AsyncMock(return_value=mock.Mock(token=mi_token))
+    mock_wic.return_value.close = AsyncMock()
+    monkeypatch.setenv("AZURE_CLIENT_ID", "fake-client-id")
+    monkeypatch.setenv("AZURE_TENANT_ID", tenant_id)
+    monkeypatch.setenv("AZURE_FEDERATED_TOKEN_FILE", "/var/run/secrets/token")
+
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
+    await auth_class.prepare(conn=None)
+
+    assert (
+        auth_class.assertion_content
+        == f'{{"_provider":"AZURE","iss":"https://sts.windows.net/{tenant_id}","sub":"611ab25b-2e81-4e18-92a7-b21f2bebb269"}}'
+    )
+    assert await extract_api_data(auth_class) == {
+        "AUTHENTICATOR": "WORKLOAD_IDENTITY",
+        "PROVIDER": "AZURE",
+        "TOKEN": mi_token,
+        "CLIENT_ENVIRONMENT": {"WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH": 0},
+    }
+
+
+async def test_aks_env_vars_partially_set_falls_back_to_imds(
+    fake_azure_vm_metadata_service,
+    monkeypatch,
+):
+    # Only AZURE_CLIENT_ID is set; is_aks requires all three env vars and the token file to exist.
+    monkeypatch.setenv("AZURE_CLIENT_ID", "fake-client-id")
+
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
+    await auth_class.prepare(conn=None)
+
+    assert (await extract_api_data(auth_class))[
+        "TOKEN"
+    ] == fake_azure_vm_metadata_service.token
+
+
+async def test_aks_token_file_missing_falls_back_to_imds(
+    fake_azure_vm_metadata_service,
+    monkeypatch,
+):
+    # All three env vars are set but the token file doesn't exist; is_aks=False, falls back to IMDS.
+    monkeypatch.setenv("AZURE_CLIENT_ID", "fake-client-id")
+    monkeypatch.setenv("AZURE_TENANT_ID", "fake-tenant-id")
+    monkeypatch.setenv("AZURE_FEDERATED_TOKEN_FILE", "/var/run/secrets/token")
+
+    with mock.patch(
+        "snowflake.connector.aio._wif_util.os.path.exists", return_value=False
+    ):
+        auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
+        await auth_class.prepare(conn=None)
+
+    assert (await extract_api_data(auth_class))[
+        "TOKEN"
+    ] == fake_azure_vm_metadata_service.token
+
+
+@mock.patch("snowflake.connector.aio._wif_util.os.path.exists", return_value=True)
+@mock.patch("snowflake.connector.aio._wif_util.installed_azure_identity", False)
+async def test_aks_missing_azure_identity_dependency_raises_error(
+    _mock_exists, monkeypatch
+):
+    monkeypatch.setenv("AZURE_CLIENT_ID", "fake-client-id")
+    monkeypatch.setenv("AZURE_TENANT_ID", "fake-tenant-id")
+    monkeypatch.setenv("AZURE_FEDERATED_TOKEN_FILE", "/var/run/secrets/token")
+
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
+    with pytest.raises(MissingDependencyError) as excinfo:
+        await auth_class.prepare(conn=None)
+    assert "azure-identity" in str(excinfo.value)
+
+
+@mock.patch("snowflake.connector.aio._wif_util.os.path.exists", return_value=True)
+async def test_aks_impersonation_path_raises_error(_mock_exists, monkeypatch):
+    monkeypatch.setenv("AZURE_CLIENT_ID", "fake-client-id")
+    monkeypatch.setenv("AZURE_TENANT_ID", "fake-tenant-id")
+    monkeypatch.setenv("AZURE_FEDERATED_TOKEN_FILE", "/var/run/secrets/token")
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AZURE,
+        impersonation_path=["some-sp-client-id"],
+    )
+    with pytest.raises(ProgrammingError) as excinfo:
+        await auth_class.prepare(conn=None)
+    assert "workload_identity_impersonation_path is not supported on AKS" in str(
+        excinfo.value
+    )

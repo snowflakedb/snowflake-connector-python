@@ -24,9 +24,14 @@ from snowflake.connector import (
     ProgrammingError,
 )
 
+from .._connection_identifier_shape import (
+    ConnectionIdentifierShape,
+    build_shape_telemetry_message,
+)
 from .._query_context_cache import QueryContextCache
 from ..compat import IS_LINUX, quote, urlencode
 from ..config_manager import CONFIG_MANAGER, _get_default_connection_params
+from ..connection import _DISABLE_CONNECTION_SHAPE_ENV
 from ..connection import DEFAULT_CONFIGURATION as DEFAULT_CONFIGURATION_SYNC
 from ..connection import SnowflakeConnection as SnowflakeConnectionSync
 from ..connection import _get_private_bytes_from_file
@@ -451,6 +456,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     not in (
                         AttestationProvider.GCP,
                         AttestationProvider.AWS,
+                        AttestationProvider.AZURE,
                     )
                 ):
                     Error.errorhandler_wrapper(
@@ -458,7 +464,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                         None,
                         ProgrammingError,
                         {
-                            "msg": "workload_identity_impersonation_path is currently only supported for GCP and AWS.",
+                            "msg": "workload_identity_impersonation_path is currently only supported for GCP, AWS, and AZURE.",
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
@@ -782,6 +788,42 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 )
             )
 
+    async def _log_connection_identifier_shape(self) -> None:
+        """Async counterpart to ``SnowflakeConnectionSync._log_connection_identifier_shape``.
+
+        The sync implementation reaches for ``self._log_telemetry`` directly,
+        which is overridden as an awaitable on the async class — so the sync
+        method's call to ``self._log_telemetry(...)`` would return an
+        unawaited coroutine here. This override mirrors the sync logic and
+        awaits the emission instead.
+
+        TODO(SNOW-3548350): remove with the telemetry emission
+        (target: 2026-11-30).
+        """
+        # See sync sibling for the strict (no ``strip``) semantics.
+        if os.environ.get(_DISABLE_CONNECTION_SHAPE_ENV, "").lower() == "true":
+            logger.debug(
+                "connection-identifier-shape telemetry disabled via %s",
+                _DISABLE_CONNECTION_SHAPE_ENV,
+            )
+            return
+        shape: ConnectionIdentifierShape | None = getattr(
+            self, "_connection_identifier_shape", None
+        )
+        if shape is None:
+            logger.debug(
+                "connection-identifier-shape telemetry skipped: shape not captured"
+            )
+            return
+        ts = get_time_millis()
+        await self._log_telemetry(
+            TelemetryData.from_telemetry_data_dict(
+                from_dict=build_shape_telemetry_message(shape),
+                timestamp=ts,
+                connection=self,
+            )
+        )
+
     async def _next_sequence_counter(self) -> int:
         """Gets next sequence counter. Used internally."""
         async with self._lock_sequence_counter:
@@ -1042,9 +1084,14 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             ret["data"] = {}
         if _update_current_object:
             data = ret["data"]
-            if "finalDatabaseName" in data and data["finalDatabaseName"] is not None:
+            is_context_switch = sql.strip().upper().startswith("USE ")
+            if data.get("finalDatabaseName") is not None and (
+                self._database is not None or is_context_switch
+            ):
                 self._database = data["finalDatabaseName"]
-            if "finalSchemaName" in data and data["finalSchemaName"] is not None:
+            if data.get("finalSchemaName") is not None and (
+                self._schema is not None or is_context_switch
+            ):
                 self._schema = data["finalSchemaName"]
             if "finalWarehouseName" in data and data["finalWarehouseName"] is not None:
                 self._warehouse = data["finalWarehouseName"]
@@ -1098,6 +1145,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             await self.__open_connection()
         self._telemetry = TelemetryClient(self._rest)
         await self._log_telemetry_imported_packages()
+        await self._log_connection_identifier_shape()
 
     def cursor(self, cursor_class: type[CursorCls] = SnowflakeCursor) -> CursorCls:
         logger.debug("cursor")

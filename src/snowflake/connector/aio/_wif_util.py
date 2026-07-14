@@ -5,16 +5,21 @@ import logging
 import os
 from base64 import b64encode
 
+import jwt
+
 from snowflake.connector.options import (
     aioboto3,
     aiobotocore,
+    azure_identity_aio,
     botocore,
     installed_aioboto,
+    installed_azure_identity,
 )
 
-from ..errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
+from ..errorcode import ER_INVALID_WIF_SETTINGS, ER_WIF_CREDENTIALS_NOT_FOUND
 from ..errors import MissingDependencyError, ProgrammingError
 from ..wif_util import (
+    AZURE_WIF_FEDERATION_AUDIENCE,
     DEFAULT_ENTRA_SNOWFLAKE_RESOURCE,
     SNOWFLAKE_AUDIENCE,
     AttestationProvider,
@@ -27,9 +32,27 @@ from ._session_manager import SessionManager, SessionManagerFactory
 
 logger = logging.getLogger(__name__)
 
-GCP_METADATA_SERVICE_ACCOUNT_BASE_URL = (
-    "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default"
-)
+GCP_METADATA_SERVICE_ACCOUNT_BASE_URL = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default"
+
+
+async def get_azure_mi_token_via_aks(resource: str) -> str:
+    """Gets an Azure MI access token via AsyncWorkloadIdentityCredential on AKS."""
+    if not installed_azure_identity:
+        raise MissingDependencyError(
+            "azure-identity (install with: pip install 'snowflake-connector-python[azure]')"
+        )
+    logger.debug(
+        "Detected AKS workload identity environment, using WorkloadIdentityCredential"
+    )
+    try:
+        async with azure_identity_aio.WorkloadIdentityCredential() as credential:
+            token = await credential.get_token(f"{resource}/.default")
+            return token.token
+    except Exception as e:
+        raise ProgrammingError(
+            msg=f"Error fetching Azure MI token via WorkloadIdentityCredential: {e}. Ensure the application is running on AKS with workload identity configured.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
 
 
 async def get_aws_region() -> str:
@@ -227,63 +250,155 @@ async def create_gcp_attestation(
     )
 
 
+async def get_azure_sp_token_via_impersonation(
+    mi_token: str,
+    sp_client_id: str,
+    snowflake_entra_resource: str,
+    session_manager: SessionManager,
+) -> str:
+    """Exchanges a managed identity token for a service principal token via the Entra ID token endpoint."""
+    # Azure requires the MI and the app registration to be in the same tenant, so the
+    # tid claim from the MI token is always the correct tenant for the token exchange endpoint.
+    tenant_id = jwt.decode(mi_token, options={"verify_signature": False}).get("tid")
+    if not tenant_id:
+        raise ProgrammingError(
+            msg="MI token is missing 'tid' claim; cannot determine tenant ID for impersonation.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+    response_text = None
+    try:
+        res = await session_manager.post(
+            url=f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": sp_client_id,
+                "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                "client_assertion": mi_token,
+                "scope": f"{snowflake_entra_resource}/.default",
+            },
+        )
+        content = await res.content.read()
+        response_text = content.decode("utf-8")
+        response_data = json.loads(response_text)
+        res.raise_for_status()
+    except Exception as e:
+        raise ProgrammingError(
+            msg=f"Error fetching SP token for Azure client_id '{sp_client_id}': {e}. Response: {response_text}",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+
+    sp_token = response_data.get("access_token")
+    if not sp_token:
+        raise ProgrammingError(
+            msg=f"No access token found in Entra ID response for client_id '{sp_client_id}'.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+    return sp_token
+
+
 async def create_azure_attestation(
     snowflake_entra_resource: str,
     session_manager: SessionManager | None = None,
+    impersonation_path: list[str] | None = None,
 ) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for Azure.
 
     If the application isn't running on Azure or no credentials were found, raises an error.
     """
-    headers = {"Metadata": "true"}
-    url_without_query_string = "http://169.254.169.254/metadata/identity/oauth2/token"
-    query_params = f"api-version=2018-02-01&resource={snowflake_entra_resource}"
-
-    # Check if running in Azure Functions environment
-    identity_endpoint = os.environ.get("IDENTITY_ENDPOINT")
-    identity_header = os.environ.get("IDENTITY_HEADER")
-    is_azure_functions = identity_endpoint is not None
-
-    if is_azure_functions:
-        if not identity_header:
+    # AKS Workload Identity path: the three env vars are injected by the AKS webhook,
+    # and the token file is mounted by the Azure Workload Identity webhook.
+    # Checking file existence (rather than KUBERNETES_SERVICE_HOST) correctly handles
+    # pods with enableServiceLinks=false and avoids false positives on non-AKS K8s.
+    _federated_token_file = os.environ.get("AZURE_FEDERATED_TOKEN_FILE", "")
+    is_aks = all(
+        [
+            os.environ.get("AZURE_CLIENT_ID"),
+            os.environ.get("AZURE_TENANT_ID"),
+            _federated_token_file,
+            os.path.exists(_federated_token_file),
+        ]
+    )
+    if is_aks:
+        if impersonation_path:
             raise ProgrammingError(
-                msg="Managed identity is not enabled on this Azure function.",
+                msg="workload_identity_impersonation_path is not supported on AKS.",
+                errno=ER_INVALID_WIF_SETTINGS,
+            )
+        jwt_str = await get_azure_mi_token_via_aks(snowflake_entra_resource)
+    else:
+        if impersonation_path:
+            if len(impersonation_path) != 1:
+                raise ProgrammingError(
+                    msg="Azure WIF impersonation only supports a single service principal (single-hop). impersonation_path must contain exactly one client_id.",
+                    errno=ER_INVALID_WIF_SETTINGS,
+                )
+        resource = (
+            AZURE_WIF_FEDERATION_AUDIENCE
+            if impersonation_path
+            else snowflake_entra_resource
+        )
+
+        headers = {"Metadata": "true"}
+        url_without_query_string = (
+            "http://169.254.169.254/metadata/identity/oauth2/token"
+        )
+        query_params = f"api-version=2018-02-01&resource={resource}"
+
+        # Check if running in Azure Functions environment
+        identity_endpoint = os.environ.get("IDENTITY_ENDPOINT")
+        identity_header = os.environ.get("IDENTITY_HEADER")
+        is_azure_functions = identity_endpoint is not None
+
+        if is_azure_functions:
+            if not identity_header:
+                raise ProgrammingError(
+                    msg="Managed identity is not enabled on this Azure function.",
+                    errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+                )
+
+            # Azure Functions uses a different endpoint, headers and API version.
+            url_without_query_string = identity_endpoint
+            headers = {"X-IDENTITY-HEADER": identity_header}
+            query_params = f"api-version=2019-08-01&resource={resource}"
+
+        # Allow configuring an explicit client ID, which may be used in Azure Functions,
+        # if there are user-assigned identities, or multiple managed identities available.
+        managed_identity_client_id = os.environ.get("MANAGED_IDENTITY_CLIENT_ID")
+        if managed_identity_client_id:
+            query_params += f"&client_id={managed_identity_client_id}"
+
+        response_text = None
+        try:
+            res = await session_manager.request(
+                method="GET",
+                url=f"{url_without_query_string}?{query_params}",
+                headers=headers,
+            )
+
+            content = await res.content.read()
+            response_text = content.decode("utf-8")
+            response_data = json.loads(response_text)
+            res.raise_for_status()
+        except Exception as e:
+            raise ProgrammingError(
+                msg=f"Error fetching Azure metadata: {e}. Response: {response_text}. Ensure the application is running on Azure.",
                 errno=ER_WIF_CREDENTIALS_NOT_FOUND,
             )
 
-        # Azure Functions uses a different endpoint, headers and API version.
-        url_without_query_string = identity_endpoint
-        headers = {"X-IDENTITY-HEADER": identity_header}
-        query_params = f"api-version=2019-08-01&resource={snowflake_entra_resource}"
+        jwt_str = response_data.get("access_token")
+        if not jwt_str:
+            raise ProgrammingError(
+                msg="No access token found in Azure metadata service response.",
+                errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+            )
 
-    # Allow configuring an explicit client ID, which may be used in Azure Functions,
-    # if there are user-assigned identities, or multiple managed identities available.
-    managed_identity_client_id = os.environ.get("MANAGED_IDENTITY_CLIENT_ID")
-    if managed_identity_client_id:
-        query_params += f"&client_id={managed_identity_client_id}"
-
-    try:
-        res = await session_manager.request(
-            method="GET",
-            url=f"{url_without_query_string}?{query_params}",
-            headers=headers,
-        )
-
-        content = await res.content.read()
-        response_text = content.decode("utf-8")
-        response_data = json.loads(response_text)
-    except Exception as e:
-        raise ProgrammingError(
-            msg=f"Error fetching Azure metadata: {e}. Ensure the application is running on Azure.",
-            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-        )
-
-    jwt_str = response_data.get("access_token")
-    if not jwt_str:
-        raise ProgrammingError(
-            msg="No access token found in Azure metadata service response.",
-            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-        )
+        if impersonation_path:
+            jwt_str = await get_azure_sp_token_via_impersonation(
+                jwt_str,
+                impersonation_path[0],
+                snowflake_entra_resource,
+                session_manager,
+            )
 
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     return WorkloadIdentityAttestation(
@@ -312,7 +427,9 @@ async def create_attestation(
     if provider == AttestationProvider.AWS:
         return await create_aws_attestation(impersonation_path)
     elif provider == AttestationProvider.AZURE:
-        return await create_azure_attestation(entra_resource, session_manager)
+        return await create_azure_attestation(
+            entra_resource, session_manager, impersonation_path
+        )
     elif provider == AttestationProvider.GCP:
         return await create_gcp_attestation(session_manager, impersonation_path)
     elif provider == AttestationProvider.OIDC:

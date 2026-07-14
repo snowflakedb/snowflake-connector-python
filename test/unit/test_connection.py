@@ -5,6 +5,7 @@ import json
 import logging
 import stat
 import sys
+import uuid
 from pathlib import Path
 from secrets import token_urlsafe
 from textwrap import dedent
@@ -632,6 +633,7 @@ def test_otel_error_message(caplog, mock_post_requests):
             "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
         ),
         ("workload_identity_impersonation_path", ["subject-b", "subject-c"]),
+        ("workload_identity_aws_use_outbound_token", True),
     ],
 )
 def test_cannot_set_dependent_params_without_wlid_authenticator(
@@ -684,10 +686,8 @@ def test_workload_identity_provider_is_required_for_wif_authenticator(
     "provider_param",
     [
         # Strongly-typed values.
-        AttestationProvider.AZURE,
         AttestationProvider.OIDC,
         # String values.
-        "AZURE",
         "OIDC",
     ],
 )
@@ -709,7 +709,7 @@ def test_workload_identity_impersonation_path_errors_for_unsupported_providers(
                 ],
             )
         assert (
-            "workload_identity_impersonation_path is currently only supported for GCP and AWS."
+            "workload_identity_impersonation_path is currently only supported for GCP, AWS, and AZURE."
             in str(excinfo.value)
         )
 
@@ -1022,3 +1022,76 @@ def test_server_session_keep_alive_false_calls_async_check(mock_post_requests):
 
     # Verify delete_session WAS called (since async queries are finished and keep_alive=False)
     delete_session_mock.assert_called_once()
+
+
+def _run_cmd_query_with_final_names(
+    conn: SnowflakeConnection, sql: str, final_db: str | None, final_schema: str | None
+) -> None:
+    """Drive ``cmd_query`` with a mocked server response carrying
+    finalDatabaseName / finalSchemaName so the cache-update guard runs against a
+    controlled response. Caches are mutated in place per the guard logic."""
+    conn._rest.request = mock.MagicMock(
+        return_value={
+            "success": True,
+            "data": {
+                "finalDatabaseName": final_db,
+                "finalSchemaName": final_schema,
+            },
+        }
+    )
+    # _no_results=True skips query-context plumbing; the cache-update logic under
+    # test runs regardless of that flag.
+    conn.cmd_query(sql, 0, uuid.uuid4(), _no_results=True)
+
+
+@pytest.mark.skipolddriver
+def test_fqn_ddl_does_not_pollute_none_database_cache(mock_post_requests):
+    """SNOW-3665226: when the session has no current database (e.g. the user has
+    no default namespace), a fully-qualified DDL's finalDatabaseName /
+    finalSchemaName reflect the *referenced* object, not the session context, and
+    must NOT overwrite the connector's ``None`` cache.
+
+    This is the mocked counterpart to the integ test: the integ test exercises
+    the schema side on real accounts (which have no default schema), while this
+    unit test locks in the database side, which can't be driven end-to-end on
+    accounts that carry a default database.
+    """
+    conn = fake_connector()
+    try:
+        # Simulate a session with no current namespace at all.
+        conn._database = None
+        conn._schema = None
+
+        # A fully-qualified DDL returns the referenced object's namespace in
+        # final*Name — this must be ignored while the cache is None.
+        _run_cmd_query_with_final_names(
+            conn,
+            'CREATE OR REPLACE VIEW "OTHER_DB"."OTHER_SCHEMA"."V" AS SELECT 1',
+            final_db="OTHER_DB",
+            final_schema="OTHER_SCHEMA",
+        )
+        assert conn._database is None
+        assert conn._schema is None
+
+        # A genuine context switch (USE ...) must still update the None caches,
+        # otherwise the guard would wrongly suppress real changes.
+        _run_cmd_query_with_final_names(
+            conn,
+            "USE SCHEMA OTHER_DB.OTHER_SCHEMA",
+            final_db="OTHER_DB",
+            final_schema="OTHER_SCHEMA",
+        )
+        assert conn._database == "OTHER_DB"
+        assert conn._schema == "OTHER_SCHEMA"
+
+        # Once a context is set, subsequent final*Name values refresh the cache
+        # as before (pre-existing behaviour is unchanged).
+        _run_cmd_query_with_final_names(
+            conn,
+            "SELECT 1",
+            final_db="OTHER_DB",
+            final_schema="NEW_SCHEMA",
+        )
+        assert conn._schema == "NEW_SCHEMA"
+    finally:
+        conn.close()

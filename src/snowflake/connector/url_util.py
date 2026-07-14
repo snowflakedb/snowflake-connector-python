@@ -11,21 +11,17 @@ from .vendored import requests
 logger = getLogger(__name__)
 
 
-URL_VALIDATOR = re.compile(
-    "^http(s?)\\:\\/\\/[0-9a-zA-Z]([-.\\w]*[0-9a-zA-Z@:])*(:(0-9)*)*(\\/?)([a-zA-Z0-9\\-\\.\\?\\,\\&\\(\\)\\/\\\\\\+&%\\$#_=@:]*)?$"
-)
-
-
 def is_valid_url(url: str) -> bool:
-    """Confirms if the provided URL is a valid HTTP/ HTTPs URL
-
-    Args:
-        url: the URL that needs to be validated
-
-    Returns:
-        true/ false depending on whether the URL is valid or not
-    """
-    return bool(URL_VALIDATOR.match(url))
+    """Confirms if the provided URL is a valid HTTP/HTTPS URL."""
+    if not isinstance(url, str):
+        return False
+    if any(c <= "\x20" for c in url):
+        return False
+    try:
+        parsed = urllib.parse.urlparse(url)
+        return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+    except ValueError:
+        return False
 
 
 def url_encode_str(target: str | None) -> str:
