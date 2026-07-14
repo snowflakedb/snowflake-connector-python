@@ -73,7 +73,7 @@ async def _check_multi_statement_results(
 
 async def test_multi_statement_basic(conn_cnx, skip_to_last_set: bool):
     """Selects fixed integer data using statement level parameters."""
-    async with conn_cnx() as con:
+    async with conn_cnx(paramstyle="pyformat") as con:
         async with con.cursor() as cur:
             statement_params = dict()
             await cur.execute(
@@ -144,7 +144,7 @@ async def test_binding_multi(conn_cnx, style: str, skip_to_last_set: bool):
 @pytest.mark.parametrize("cursor_class", [SnowflakeCursor, DictCursor])
 async def test_async_exec_multi(conn_cnx, cursor_class, skip_to_last_set: bool):
     """Tests whether async execution query works within a multi-statement"""
-    async with conn_cnx() as con:
+    async with conn_cnx(paramstyle="pyformat") as con:
         async with con.cursor(cursor_class) as cur:
             await cur.execute_async(
                 "select 1; select 2; select count(*) from table(generator(timeLimit => 1)); select 'b';",
@@ -153,7 +153,7 @@ async def test_async_exec_multi(conn_cnx, cursor_class, skip_to_last_set: bool):
             q_id = cur.sfqid
             assert con.is_still_running(await con.get_query_status(q_id))
         await _wait_while_query_running_async(con, q_id, sleep_time=1)
-    async with conn_cnx() as con:
+    async with conn_cnx(paramstyle="pyformat") as con:
         async with con.cursor(cursor_class) as cur:
             await _wait_until_query_success_async(
                 con, q_id, num_checks=3, sleep_per_check=1
@@ -318,7 +318,7 @@ async def test_executemany_multi(conn_cnx, skip_to_last_set: bool):
     """Tests executemany with multi-statement optimizations enabled through the num_statements parameter."""
     table1 = random_string(5, "test_executemany_multi_")
     table2 = random_string(5, "test_executemany_multi_")
-    async with conn_cnx() as con:
+    async with conn_cnx(paramstyle="pyformat") as con:
         async with con.cursor() as cur:
             await cur.execute(
                 f"create temp table {table1} (aa number); create temp table {table2} (bb number);",
