@@ -86,6 +86,9 @@ def extract_values_clause(sql: str) -> str | None:
 COMMENT_PATTERN_RE = re.compile(r"^\s*\-\-")
 EMPTY_LINE_RE = re.compile(r"^\s*$")
 
+# Tokens that start a single-line comment running to the end of the line.
+COMMENTS = ("--", "//")
+
 _logger = logging.getLogger(__name__)
 
 
@@ -212,7 +215,9 @@ def split_statements(
                     statement.append((line[col0 : col + 1], True))
                     col += 1
                     col0 = col
-                elif line[col:].startswith("--"):
+                elif line[col:].startswith(COMMENTS) and not line[col0:].startswith(
+                    "file://"
+                ):
                     statement.append((line[col0:col], True))
                     if not remove_comments:
                         # keep the comment
