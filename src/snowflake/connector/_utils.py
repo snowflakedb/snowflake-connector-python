@@ -109,30 +109,29 @@ def get_application_path() -> str:
         return "unknown"
 
 
-_SPCS_TOKEN_ENV_VAR_NAME = "SF_SPCS_TOKEN_PATH"
-_SPCS_TOKEN_DEFAULT_PATH = "/snowflake/session/spcs_token"
+_SPCS_ENV_VAR = "SNOWFLAKE_RUNNING_INSIDE_SPCS"
+_SPCS_TOKEN_PATH = "/snowflake/session/spcs_token"
 
 
 def get_spcs_token() -> str | None:
-    """Return the SPCS token read from the configured path, or None.
+    """Return the SPCS token if running inside an SPCS container, or None.
 
-    The path is determined by the SF_SPCS_TOKEN_PATH environment variable,
-    falling back to ``/snowflake/session/spcs_token`` when unset.
+    The token is only read when the SNOWFLAKE_RUNNING_INSIDE_SPCS environment
+    variable is set.  The file at /snowflake/session/spcs_token is read as
+    UTF-8 text and leading/trailing whitespace is stripped.
 
-    Any I/O errors or missing/empty files are treated as \"no token\" and
-    will not cause authentication to fail.
+    Any read failure is logged as a warning and None is returned.
     """
-    path = os.getenv(_SPCS_TOKEN_ENV_VAR_NAME) or _SPCS_TOKEN_DEFAULT_PATH
+    if not os.environ.get(_SPCS_ENV_VAR):
+        return None
     try:
-        if not os.path.isfile(path):
-            return None
-        with open(path, encoding="utf-8") as f:
+        with open(_SPCS_TOKEN_PATH, encoding="utf-8") as f:
             token = f.read().strip()
         if not token:
             return None
         return token
-    except Exception as exc:  # pragma: no cover - best-effort logging only
-        logger.debug("Failed to read SPCS token from %s: %s", path, exc)
+    except Exception as exc:
+        logger.warning("Failed to read SPCS token from %s: %s", _SPCS_TOKEN_PATH, exc)
         return None
 
 
