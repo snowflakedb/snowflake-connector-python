@@ -8,7 +8,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - Upcoming Release
+  - Fixed sdist to only install the minicore binary matching the current platform (SNOW-3526469). Previous 4.x releases copied every platform's minicore `.so`/`.dylib`/`.dll` into the install prefix, breaking downstream packagers (e.g. Homebrew) whose audits reject foreign-arch binaries.
+  - Added one in-band telemetry record per successful login describing which connection-identifier fields the user supplied (`account_provided`, `account_with_region`, `account_org_provided`, `region_provided`, `host_provided`). No hostname or account value is included. This is gated by the existing server-side `CLIENT_TELEMETRY_ENABLED` parameter and can additionally be disabled locally by setting `SF_TELEMETRY_DISABLE_CONNECTION_SHAPE=true`. The telemetry collection is time-boxed and will be removed in a future release.
+
+- v4.5.0(May 12,2026)
   - Fixed `write_pandas` temp stage name collisions (SNOW-3481510). The old PRNG could produce identical name sequences in forked processes (e.g. Notebook kernels), causing `CREATE TEMPORARY STAGE` to fail with "Object already exists".
+  - Replaced third-party download URLs in CI scripts and Dockerfiles with Snowflake Artifactory to improve supply-chain security.
   - Fixed a security bug in Okta SAML authentication where `_is_prefix_equal()` compared `url1`'s port against itself instead of `url2`'s port, allowing an attacker to redirect credentials to a different port on the same hostname. Also fixed the default port fallback to use `int` instead of `str` for correct comparison when one URL omits the port.
   - Fixed `executemany` with `paramstyle="pyformat"` to correctly locate the VALUES clause using a balanced-parentheses parser instead of a greedy regex. This fixes incorrect behaviour with nested function calls such as SQLAlchemy `@compiles VARIANT` patterns (e.g. `PARSE_JSON(%(col)s)`) and subquery-form INSERTs (SNOW-298756).
   - Added ECDSA key support (ES256, ES384, ES512) for key-pair authentication.
