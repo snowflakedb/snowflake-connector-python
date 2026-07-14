@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash -e -l
 #
 # Test Snowflake Connector on a Darwin Jenkins slave
 # NOTES:
