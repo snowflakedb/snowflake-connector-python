@@ -110,6 +110,7 @@ def mock_post_requests(monkeypatch):
 
     return request_body
 
+
 async def test_connect_client_prefetch_threads_zero_clamps_to_one(mock_post_requests):
     async with fake_db_conn(client_prefetch_threads=0) as conn:
         assert conn.client_prefetch_threads == 1
