@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - NEXT_RELEASE(TBD)
   - Added support for Python 3.14t (free-threaded).
     - **Note:** Python 3.14t CI testing excludes `win_arm64` (no `cryptography` wheels available) and `mitmproxy` proxy tests on all platforms (transitive dependencies `aioquic`/`pylsqpack` lack free-threaded-compatible wheels).
+  - Fixed a bug where `client_prefetch_threads=0` could fall back to the default thread count instead of following the existing lower-bound correction, and aligned async `client_prefetch_threads` validation with the sync path.
 
 - v4.7.0(Jul 2,2026)
   - Fixed `python-connector.log` not rotating on Windows, and every record being logged twice, when easy logging is enabled via `config.toml` (SNOW-3680325).
@@ -26,7 +27,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v4.6.0(May 28,2026)
   - Dropped support for Python 3.9. The minimum supported version is now Python 3.10.
   - Fixed sdist to only install the minicore binary matching the current platform (SNOW-3526469). Previous 4.x releases copied every platform's minicore `.so`/`.dylib`/`.dll` into the install prefix, breaking downstream packagers (e.g. Homebrew) whose audits reject foreign-arch binaries.
-  - Fixed a bug where `client_prefetch_threads=0` could fall back to the default thread count instead of following the existing lower-bound correction, and aligned async `client_prefetch_threads` validation with the sync path.
   - Added one in-band telemetry record per successful login describing which connection-identifier fields the user supplied (`account_provided`, `account_with_region`, `account_org_provided`, `region_provided`, `host_provided`). No hostname or account value is included. This is gated by the existing server-side `CLIENT_TELEMETRY_ENABLED` parameter and can additionally be disabled locally by setting `SF_TELEMETRY_DISABLE_CONNECTION_SHAPE=true`. The telemetry collection is time-boxed and will be removed in a future release.
   - Bumped up vendored `urllib3` to `2.7.0`
 
