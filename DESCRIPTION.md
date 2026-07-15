@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v3.18.1(July 15,2026)
-  - N/A
+  - Improved verification of TLS connections (SNOW-3675579).
 
 - v3.18.0(October 03,2025)
   - Added support for pandas conversion for Day-time and Year-Month Interval types

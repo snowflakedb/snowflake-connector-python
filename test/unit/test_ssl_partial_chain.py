@@ -38,6 +38,10 @@ def test_wrapper_injects_pyopenssl_context(monkeypatch):
     # Patch underlying urllib3 ssl_wrap_socket used by our wrapper
     monkeypatch.setattr(ssw.ssl_, "ssl_wrap_socket", fake_ssl_wrap_socket)
 
+    # This test only exercises context injection, not TLS hostname verification;
+    # the faked socket performs no real handshake, so skip the peer-cert check.
+    monkeypatch.setattr(ssw, "_verify_hostname_after_handshake", lambda *a, **k: None)
+
     # Call our wrapper without providing ssl_context; it should inject one
     ssw.ssl_wrap_socket_with_ocsp(
         sock=None,
