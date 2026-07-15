@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import stat
 import sys
 from abc import ABC, abstractmethod
@@ -42,21 +43,78 @@ class _InvalidTokenKeyError(Exception):
 
 @dataclass
 class TokenKey:
-    user: str
-    host: str
-    tokenType: TokenType
+    """Key identifying a cached token.
 
-    def string_key(self) -> str:
-        if len(self.host) == 0:
-            raise _InvalidTokenKeyError("Invalid key, host is empty")
-        if len(self.user) == 0:
-            raise _InvalidTokenKeyError("Invalid key, user is empty")
-        return f"{self.host.upper()}:{self.user.upper()}:{self.tokenType.value}"
+    All five fields are required. Raw (un-normalized) values are acceptable;
+    ``build_cache_key`` normalizes them before hashing.
 
-    def hash_key(self) -> str:
-        m = hashlib.sha256()
-        m.update(self.string_key().encode(encoding="utf-8"))
-        return m.hexdigest()
+    Fields:
+        token_type: The type of token being cached.
+        idp: IdP / token-endpoint URL. For MFA and external-browser flows this
+            equals the Snowflake server URL.
+        snowflake: Snowflake server URL.
+        username: Snowflake login name.
+        role: Snowflake role. Must be an empty string (not None) for MFA flows.
+    """
+
+    token_type: TokenType
+    idp: str
+    snowflake: str
+    username: str
+    role: str
+
+
+def normalize_url(url: str) -> str:
+    """Strip scheme and userinfo, drop query/fragment, trim root slash, uppercase."""
+    s = re.sub(r"^https?://", "", url)
+    at = s.find("@")
+    if at >= 0:
+        s = s[at + 1 :]
+    s = s.split("?")[0].split("#")[0]
+    s = s.rstrip("/")
+    return s.upper()
+
+
+def normalize_identifier(identifier: str) -> str:
+    """Uppercase unquoted segments; preserve double-quoted segments verbatim."""
+    result = []
+    in_quotes = False
+    for ch in identifier:
+        if ch == '"':
+            in_quotes = not in_quotes
+            result.append(ch)
+        elif in_quotes:
+            result.append(ch)
+        else:
+            result.append(ch.upper())
+    return "".join(result)
+
+
+def build_cache_key(key: TokenKey) -> str:
+    """Build the versioned, uniformly-hashed v2 cache key.
+
+    Format: ``SnowflakeTokenCache.v2.<sha256hex(canonical_json)>``
+
+    The canonical JSON is compact (no whitespace) with keys sorted
+    lexicographically, serialized to UTF-8. Hashing occurs exactly once here;
+    cache backends store and retrieve the returned string verbatim.
+    """
+    if not key.snowflake:
+        raise _InvalidTokenKeyError("snowflake URL must not be empty")
+    if not key.username:
+        raise _InvalidTokenKeyError("username must not be empty")
+
+    key_data = {
+        "idp": normalize_url(key.idp),
+        "role": normalize_identifier(key.role),
+        "snowflake": normalize_url(key.snowflake),
+        "token_type": key.token_type.value,
+        "username": normalize_identifier(key.username),
+    }
+
+    canonical = json.dumps(key_data, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return f"SnowflakeTokenCache.v2.{digest}"
 
 
 def _warn(warning: str) -> None:
@@ -72,7 +130,9 @@ class TokenCache(ABC):
     - Linux: Uses JSON file in ~/.cache/snowflake/ with 0o600 permissions
     - Fallback: NoopTokenCache (no caching) if secure storage unavailable
 
-    Tokens are keyed by (host, user, token_type) to support multiple accounts.
+    Tokens are keyed by a versioned, SHA-256-hashed canonical-JSON key (v2 format)
+    built from (token_type, idp, snowflake, username, role) to avoid collisions
+    across multi-account and multi-role scenarios.
     """
 
     @staticmethod
@@ -154,6 +214,12 @@ class FileTokenCache(TokenCache):
 
     Security: File must have 0o600 permissions and be owned by current user.
     Uses file locks to prevent concurrent access corruption.
+
+    JSON map keys are the full ``SnowflakeTokenCache.v2.<sha256hex>`` strings
+    produced by ``build_cache_key``; hashing is performed once before dispatch.
+    Note: the filename (``credential_cache_v1.json``) is unchanged for
+    backward compatibility; the ``v2`` in the key prefix refers to the
+    key-format version, not the file format.
     """
 
     @staticmethod
@@ -178,12 +244,13 @@ class FileTokenCache(TokenCache):
 
     def store(self, key: TokenKey, token: str) -> None:
         try:
+            final_key = build_cache_key(key)
             FileTokenCache.validate_cache_dir(
                 self.cache_dir, self._skip_file_permissions_check
             )
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
-                cache["tokens"][key.hash_key()] = token
+                cache["tokens"][final_key] = token
                 self._write_cache_file(cache)
         except _FileTokenCacheError as e:
             self.logger.error(f"Failed to store token: {e=}")
@@ -194,12 +261,13 @@ class FileTokenCache(TokenCache):
 
     def retrieve(self, key: TokenKey) -> str | None:
         try:
+            final_key = build_cache_key(key)
             FileTokenCache.validate_cache_dir(
                 self.cache_dir, self._skip_file_permissions_check
             )
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
-                token = cache["tokens"].get(key.hash_key(), None)
+                token = cache["tokens"].get(final_key, None)
                 if isinstance(token, str):
                     return token
                 else:
@@ -216,12 +284,13 @@ class FileTokenCache(TokenCache):
 
     def remove(self, key: TokenKey) -> None:
         try:
+            final_key = build_cache_key(key)
             FileTokenCache.validate_cache_dir(
                 self.cache_dir, self._skip_file_permissions_check
             )
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
-                cache["tokens"].pop(key.hash_key(), None)
+                cache["tokens"].pop(final_key, None)
                 self._write_cache_file(cache)
         except _FileTokenCacheError as e:
             self.logger.error(f"Failed to remove token: {e=}")
@@ -398,14 +467,13 @@ class KeyringTokenCache(TokenCache):
     - macOS: Stores tokens in Keychain
     - Windows: Stores tokens in Windows Credential Manager
 
-    All tokens share a single keyring service name so that on macOS they fall
-    under one Keychain ACL entry, requiring only a single "Allow" prompt
-    instead of one per token. The keyring *account* field stores a SHA-256 hash
-    of ``{HOST}:{USER}:{TOKEN_TYPE}`` to avoid exposing plaintext identifiers
-    in the OS credential store.
+    The v2 cache key (``SnowflakeTokenCache.v2.<sha256hex>``) is used as both
+    the keyring service name and the account field, ensuring a single Keychain
+    ACL entry per token and no plaintext identifiers in the OS credential store.
 
     For backward compatibility, :meth:`retrieve` also checks the legacy layout
-    where the service was the full string key and the account was the username.
+    where the service was ``{HOST}:{USER}:{TOKEN_TYPE}`` and the account was the
+    uppercase username; matching entries are silently migrated to v2 on first use.
     """
 
     SERVICE_NAME = "com.snowflake.connector.python"
@@ -415,61 +483,58 @@ class KeyringTokenCache(TokenCache):
 
     def store(self, key: TokenKey, token: str) -> None:
         try:
-            keyring.set_password(
-                self.SERVICE_NAME,
-                key.hash_key(),
-                token,
-            )
+            final_key = build_cache_key(key)
+            keyring.set_password(final_key, key.username.upper(), token)
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Could not store {key.tokenType} in keyring, {e=}")
+            self.logger.error(f"Could not store {key.token_type} in keyring, {e=}")
         except keyring.errors.KeyringError as ke:
             self.logger.error("Could not store token in keyring, %s", str(ke))
 
     def retrieve(self, key: TokenKey) -> str | None:
         try:
-            token = keyring.get_password(
-                self.SERVICE_NAME,
-                key.hash_key(),
-            )
+            final_key = build_cache_key(key)
+            token = keyring.get_password(final_key, key.username.upper())
             if token is not None:
                 return token
             return self._retrieve_legacy(key)
         except keyring.errors.KeyringError as ke:
             self.logger.error(
                 "Could not retrieve {} from secure storage : {}".format(
-                    key.tokenType.value, str(ke)
+                    key.token_type.value, str(ke)
                 )
             )
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Could not retrieve {key.tokenType} from keyring, {e=}")
+            self.logger.error(
+                f"Could not retrieve {key.token_type} from keyring, {e=}"
+            )
 
     def _retrieve_legacy(self, key: TokenKey) -> str | None:
-        """Try to read from the old per-token-type service layout and migrate."""
+        """Try to read from the old per-token-type service layout and migrate to v2."""
+        legacy_service = (
+            f"{key.snowflake.upper()}:{key.username.upper()}:{key.token_type.value}"
+        )
         try:
-            token = keyring.get_password(
-                key.string_key(),
-                key.user.upper(),
-            )
+            token = keyring.get_password(legacy_service, key.username.upper())
         except (keyring.errors.KeyringError, _InvalidTokenKeyError):
             return None
         if token is None:
             return None
         self.store(key, token)
         try:
-            keyring.delete_password(key.string_key(), key.user.upper())
+            keyring.delete_password(legacy_service, key.username.upper())
         except Exception:
             pass
-        self.logger.debug("migrated legacy keyring entry for %s", key.tokenType.value)
+        self.logger.debug(
+            "migrated legacy keyring entry for %s", key.token_type.value
+        )
         return token
 
     def remove(self, key: TokenKey) -> None:
         try:
-            keyring.delete_password(
-                self.SERVICE_NAME,
-                key.hash_key(),
-            )
+            final_key = build_cache_key(key)
+            keyring.delete_password(final_key, key.username.upper())
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Could not remove {key.tokenType} from keyring, {e=}")
+            self.logger.error(f"Could not remove {key.token_type} from keyring, {e=}")
         except Exception as ex:
             self.logger.error(
                 "Failed to delete credential in the keyring: err=[%s]", ex

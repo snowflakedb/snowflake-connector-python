@@ -27,6 +27,16 @@ CRED_0 = "cred_0"
 CRED_1 = "cred_1"
 
 
+def make_key(host: str, user: str, cred_type) -> "TokenKey":
+    return TokenKey(
+        token_type=cred_type,
+        idp=host,
+        snowflake=host,
+        username=user,
+        role="",
+    )
+
+
 @pytest.mark.skipolddriver
 def test_basic_store(tmpdir, monkeypatch):
     monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
@@ -35,13 +45,13 @@ def test_basic_store(tmpdir, monkeypatch):
     assert cache.cache_dir == pathlib.Path(tmpdir)
     cache.cache_file().unlink(missing_ok=True)
 
-    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-    cache.store(TokenKey(HOST_1, USER_1, CRED_TYPE_1), CRED_1)
-    cache.store(TokenKey(HOST_0, USER_1, CRED_TYPE_1), CRED_1)
+    cache.store(make_key(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    cache.store(make_key(HOST_1, USER_1, CRED_TYPE_1), CRED_1)
+    cache.store(make_key(HOST_0, USER_1, CRED_TYPE_1), CRED_1)
 
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
-    assert cache.retrieve(TokenKey(HOST_1, USER_1, CRED_TYPE_1)) == CRED_1
-    assert cache.retrieve(TokenKey(HOST_0, USER_1, CRED_TYPE_1)) == CRED_1
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    assert cache.retrieve(make_key(HOST_1, USER_1, CRED_TYPE_1)) == CRED_1
+    assert cache.retrieve(make_key(HOST_0, USER_1, CRED_TYPE_1)) == CRED_1
 
     cache.cache_file().unlink(missing_ok=True)
 
@@ -51,15 +61,15 @@ def test_delete_specific_item(tmpdir, monkeypatch):
     cache = FileTokenCache.make()
     assert cache
     cache.cache_file().unlink(missing_ok=True)
-    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_1), CRED_1)
+    cache.store(make_key(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    cache.store(make_key(HOST_0, USER_0, CRED_TYPE_1), CRED_1)
 
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_1)) == CRED_1
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_1)) == CRED_1
 
-    cache.remove(TokenKey(HOST_0, USER_0, CRED_TYPE_0))
-    assert not cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0))
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_1)) == CRED_1
+    cache.remove(make_key(HOST_0, USER_0, CRED_TYPE_0))
+    assert not cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0))
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_1)) == CRED_1
     cache.cache_file().unlink(missing_ok=True)
 
 
@@ -71,9 +81,9 @@ def test_malformed_json_cache(tmpdir, monkeypatch):
     cache.cache_file().touch(0o600)
     invalid_json = "[}"
     cache.cache_file().write_text(invalid_json)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
-    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) is None
+    cache.store(make_key(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
 
 
 def test_malformed_utf_cache(tmpdir, monkeypatch):
@@ -84,9 +94,9 @@ def test_malformed_utf_cache(tmpdir, monkeypatch):
     cache.cache_file().touch(0o600)
     invalid_utf_sequence = bytes.fromhex("c0af")
     cache.cache_file().write_bytes(invalid_utf_sequence)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
-    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) is None
+    cache.store(make_key(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
 
 
 def test_cache_dir_is_not_a_directory(tmpdir, monkeypatch):
@@ -159,9 +169,9 @@ def test_cache_file_incorrect_permissions(tmpdir, monkeypatch):
     assert cache
     cache.cache_file().unlink(missing_ok=True)
     cache.cache_file().touch(0o777)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
-    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) is None
+    cache.store(make_key(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) is None
     assert len(cache.cache_file().read_text("utf-8")) == 0
     cache.cache_file().unlink()
 
@@ -174,9 +184,9 @@ def test_cache_file_incorrect_permission_with_skip_file_permissions_check(
     assert cache
     cache.cache_file().unlink(missing_ok=True)
     cache.cache_file().touch(0o777)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
-    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) is None
+    cache.store(make_key(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
     assert len(cache.cache_file().read_text("utf-8")) > 0
     cache.cache_file().unlink()
 
@@ -196,8 +206,8 @@ def test_cache_dir_xdg_cache_home(tmpdir, monkeypatch):
         cache.lock_file()
         == pathlib.Path(str(tmpdir)) / "snowflake" / "credential_cache_v1.json.lck"
     )
-    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    cache.store(make_key(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
     cache.cache_file().unlink()
 
 
@@ -223,18 +233,18 @@ def test_cache_dir_home(tmpdir, monkeypatch):
         / "snowflake"
         / "credential_cache_v1.json.lck"
     )
-    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    cache.store(make_key(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
 
 
 def test_file_lock(tmpdir, monkeypatch):
     monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
     cache = FileTokenCache.make()
     assert cache
-    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    cache.store(make_key(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
     cache.lock_file().mkdir(0o700)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) is None
     assert cache.lock_file().exists()
     cache.lock_file().rmdir()
 
@@ -243,11 +253,11 @@ def test_file_lock_stale(tmpdir, monkeypatch):
     monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
     cache = FileTokenCache.make()
     assert cache
-    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    cache.store(make_key(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
     cache.lock_file().mkdir(0o700)
     time.sleep(1)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
     assert not cache.lock_file().exists()
 
 
@@ -257,9 +267,9 @@ def test_file_missing_tokens_field(tmpdir, monkeypatch):
     assert cache
     cache.cache_file().touch(0o600)
     cache.cache_file().write_text("{}")
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
-    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) is None
+    cache.store(make_key(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
     cache.cache_file().unlink()
 
 
@@ -269,7 +279,7 @@ def test_file_tokens_is_not_dict(tmpdir, monkeypatch):
     assert cache
     cache.cache_file().touch(0o600)
     cache.cache_file().write_text('{ "tokens": [] }')
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
-    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) is None
+    cache.store(make_key(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
     cache.cache_file().unlink()

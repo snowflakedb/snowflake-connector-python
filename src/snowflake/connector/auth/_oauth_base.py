@@ -40,7 +40,8 @@ class _OAuthTokensMixin:
     Access tokens: Short-lived (typically 10 minutes), cached to avoid immediate re-auth.
     Refresh tokens: Long-lived (hours/days), used to obtain new access tokens silently.
 
-    Tokens are cached per (user, IDP host) to support multiple OAuth providers/accounts.
+    Tokens are cached per (idp, snowflake, username, role) using the v2 cache key to
+    support multiple OAuth providers and multi-role scenarios without collision.
     """
 
     def __init__(
@@ -48,6 +49,8 @@ class _OAuthTokensMixin:
         token_cache: TokenCache | None,
         refresh_token_enabled: bool,
         idp_host: str,
+        snowflake_host: str = "",
+        role: str = "",
     ) -> None:
         self._access_token = None
         self._refresh_token_enabled = refresh_token_enabled
@@ -55,6 +58,8 @@ class _OAuthTokensMixin:
             self._refresh_token = None
         self._token_cache = token_cache
         self._idp_host = idp_host
+        self._snowflake_host = snowflake_host
+        self._role = role
         self._tokens_loaded_from_cache = False  # Prevents re-loading tokens from cache
         if self._token_cache:
             logger.debug("token cache is going to be used if needed")
@@ -93,17 +98,25 @@ class _OAuthTokensMixin:
         return self._access_token is not None
 
     def _get_access_token_cache_key(self) -> TokenKey | None:
-        return (
-            TokenKey(self._user, self._idp_host, TokenType.OAUTH_ACCESS_TOKEN)
-            if self._token_cache and self._user
-            else None
+        if not (self._token_cache and self._user):
+            return None
+        return TokenKey(
+            token_type=TokenType.OAUTH_ACCESS_TOKEN,
+            idp=self._token_request_url,
+            snowflake=self._snowflake_host,
+            username=self._user,
+            role=self._role or "",
         )
 
     def _get_refresh_token_cache_key(self) -> TokenKey | None:
-        return (
-            TokenKey(self._user, self._idp_host, TokenType.OAUTH_REFRESH_TOKEN)
-            if self._refresh_token_enabled and self._token_cache and self._user
-            else None
+        if not (self._refresh_token_enabled and self._token_cache and self._user):
+            return None
+        return TokenKey(
+            token_type=TokenType.OAUTH_REFRESH_TOKEN,
+            idp=self._token_request_url,
+            snowflake=self._snowflake_host,
+            username=self._user,
+            role=self._role or "",
         )
 
     def _invalidate_refresh_token(self) -> None:
@@ -162,6 +175,8 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         token_cache: TokenCache | None,
         refresh_token_enabled: bool,
         is_snowflake_as_idp: bool = False,
+        snowflake_host: str = "",
+        role: str = "",
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -169,7 +184,9 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             self,
             token_cache=token_cache,
             refresh_token_enabled=refresh_token_enabled,
-            idp_host=urllib.parse.urlparse(token_request_url).hostname,
+            idp_host=urllib.parse.urlparse(token_request_url).hostname or "",
+            snowflake_host=snowflake_host,
+            role=role,
         )
         self._client_id = client_id
         self._client_secret = client_secret
