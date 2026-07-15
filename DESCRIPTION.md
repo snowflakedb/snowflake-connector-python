@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - NEXT_RELEASE(TBD)
   - Added support for Python 3.14t (free-threaded).
     - **Note:** Python 3.14t CI testing excludes `win_arm64` (no `cryptography` wheels available) and `mitmproxy` proxy tests on all platforms (transitive dependencies `aioquic`/`pylsqpack` lack free-threaded-compatible wheels).
+  - Refined structured error handler typing and improved handling of non-Snowflake exceptions by re-raising generic Python exceptions directly instead of routing them through structured handlers.
 
 - v4.7.0(Jul 2,2026)
   - Fixed `python-connector.log` not rotating on Windows, and every record being logged twice, when easy logging is enabled via `config.toml` (SNOW-3680325).
@@ -40,7 +41,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added support for AWS outbound JWT token attestation for Workload Identity Federation (WIF). This can be enabled by setting the `SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN` environment variable to `true`. Note: This environment variable will be removed in a future release.
   - Removed dynamic class deserialization from the OCSP response validation cache to prevent arbitrary code execution via crafted cache files (SNOW-2439940). The `SNOWFLAKE_ENABLE_CUSTOM_REVOCATION_ERRORS` environment variable is now a no-op.
   - Updated SPCS token injection to gate on `SNOWFLAKE_RUNNING_INSIDE_SPCS` environment variable, trim whitespace, and remove configurable token path.
-  - Refined structured error handler typing and improved handling of non-Snowflake exceptions by re-raising generic Python exceptions directly instead of routing them through structured handlers.
   - GCP WIF attestation now uses hostname `metadata.google.internal` instead of the IPv4 link-local address, so it works on IPv6-only GCP VMs.
   - Fixed a bug where `write_pandas()` with `auto_create_table=False` and `overwrite=True` would execute `CREATE TABLE IF NOT EXISTS`, which required unnecessary `OWNERSHIP` privilege on the table. Now only `TRUNCATE TABLE` is executed in this case. Note: users who relied on the table being implicitly created despite `auto_create_table=False` should set `auto_create_table=True` instead.
   - Added validation of the `account` connection parameter so malformed identifiers (for example path-like values or labels outside letters, digits, `_`, and `-`) are rejected with `ProgrammingError` before login (SNOW-1902886).
