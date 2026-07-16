@@ -1541,7 +1541,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             for param in seqparams:
                 self.execute(command, params=param, _do_reset=False, **kwargs)
         else:
-            if re.search(";/s*$", command) is None:
+            if not command.endswith(";"):
                 command = command + "; "
             if self._connection.is_pyformat and not kwargs.get(
                 "_force_qmark_paramstyle", False
