@@ -128,17 +128,15 @@ def test_build_cache_key_rejects_empty_username():
 
 
 def test_golden_hash():
-    """Assert byte-exact parity with the cross-driver golden vector in 00-INDEX.md §3.
+    """Assert that the cache key hash is stable and must not change between releases.
 
-    The golden vector uses uppercase content inside the double-quoted identifier
-    segments (e.g. ``"FIRST LAST"``) because those represent Snowflake quoted
-    identifiers whose content was already uppercased before caching.
-    ``normalize_identifier`` preserves quoted segments verbatim, so the content
-    inside quotes must already be in the correct case before normalization.
+    Quoted identifier segments (e.g. ``"FIRST LAST"``) contain uppercase content
+    because ``normalize_identifier`` preserves them verbatim — the content inside
+    quotes must already be in the correct case before normalization is called.
     """
     idp_raw = "https://login.microsoftonline.com:443/tenant-id/oauth2/v2.0"
     snowflake_raw = "https://myorg-myaccount.privatelink.snowflakecomputing.com"
-    # Quoted segments have uppercase content — this matches the Rust golden key.
+    # Quoted segments have uppercase content because normalize_identifier preserves them verbatim.
     username_raw = '"FIRST LAST"@long-corporate-domain.example.com'
     role_raw = '"ANALYST ROLE WITH SPACES":north_america:prod:readonly'
 
