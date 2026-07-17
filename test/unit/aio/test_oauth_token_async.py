@@ -20,6 +20,7 @@ import snowflake.connector.errors
 from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
 from ...test_utils.wiremock.wiremock_utils import WiremockClient
+from ..test_oauth_token import oauth_redirect_uri  # noqa: F401
 from ..test_oauth_token import omit_oauth_urls_check  # noqa: F401
 
 logger = logging.getLogger(__name__)
@@ -139,7 +140,8 @@ async def test_oauth_code_successful_flow_async(
     wiremock_generic_mappings_dir,
     webbrowser_mock_sync,
     monkeypatch,
-    omit_oauth_urls_check,  # noqa: F811
+    omit_oauth_urls_check,  # noqa: F811,
+    oauth_redirect_uri,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -165,7 +167,7 @@ async def test_oauth_code_successful_flow_async(
                 oauth_client_secret="testClientSecret",
                 oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                oauth_redirect_uri=oauth_redirect_uri,
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
             )
@@ -181,7 +183,8 @@ async def test_oauth_code_invalid_state_async(
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock_sync,
     monkeypatch,
-    omit_oauth_urls_check,  # noqa: F811
+    omit_oauth_urls_check,  # noqa: F811,
+    oauth_redirect_uri,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -202,7 +205,7 @@ async def test_oauth_code_invalid_state_async(
                     role="ANALYST",
                     oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                     oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                    oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                    oauth_redirect_uri=oauth_redirect_uri,
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                 )
@@ -218,6 +221,7 @@ async def test_oauth_code_scope_error_async(
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock_sync,
     monkeypatch,
+    oauth_redirect_uri,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -237,7 +241,7 @@ async def test_oauth_code_scope_error_async(
                     role="ANALYST",
                     oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                     oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                    oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                    oauth_redirect_uri=oauth_redirect_uri,
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                 )
@@ -254,7 +258,8 @@ async def test_oauth_code_token_request_error_async(
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock_sync,
     monkeypatch,
-    omit_oauth_urls_check,  # noqa: F811
+    omit_oauth_urls_check,  # noqa: F811,
+    oauth_redirect_uri,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -276,7 +281,7 @@ async def test_oauth_code_token_request_error_async(
                         role="ANALYST",
                         oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                         oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                        oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                        oauth_redirect_uri=oauth_redirect_uri,
                         host=wiremock_client.wiremock_host,
                         port=wiremock_client.wiremock_http_port,
                     )
@@ -293,7 +298,8 @@ async def test_oauth_code_browser_timeout_async(
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock_sync,
     monkeypatch,
-    omit_oauth_urls_check,  # noqa: F811
+    omit_oauth_urls_check,  # noqa: F811,
+    oauth_redirect_uri,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -315,7 +321,7 @@ async def test_oauth_code_browser_timeout_async(
                     role="ANALYST",
                     oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                     oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                    oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                    oauth_redirect_uri=oauth_redirect_uri,
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                     external_browser_timeout=2,
@@ -335,7 +341,8 @@ async def test_oauth_code_custom_urls_async(
     wiremock_generic_mappings_dir,
     webbrowser_mock_sync,
     monkeypatch,
-    omit_oauth_urls_check,  # noqa: F811
+    omit_oauth_urls_check,  # noqa: F811,
+    oauth_redirect_uri,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -361,7 +368,7 @@ async def test_oauth_code_custom_urls_async(
                 role="ANALYST",
                 oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/tokenrequest",
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/authorization",
-                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                oauth_redirect_uri=oauth_redirect_uri,
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
             )
@@ -378,7 +385,8 @@ async def test_oauth_code_local_application_custom_urls_successful_flow_async(
     wiremock_generic_mappings_dir,
     webbrowser_mock_sync,
     monkeypatch,
-    omit_oauth_urls_check,  # noqa: F811
+    omit_oauth_urls_check,  # noqa: F811,
+    oauth_redirect_uri,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -405,7 +413,7 @@ async def test_oauth_code_local_application_custom_urls_successful_flow_async(
                 role="ANALYST",
                 oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/tokenrequest",
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/authorization",
-                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                oauth_redirect_uri=oauth_redirect_uri,
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
             )
@@ -422,7 +430,8 @@ async def test_oauth_code_successful_refresh_token_flow_async(
     wiremock_generic_mappings_dir,
     monkeypatch,
     temp_cache_async,
-    omit_oauth_urls_check,  # noqa: F811
+    omit_oauth_urls_check,  # noqa: F811,
+    oauth_redirect_uri,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -466,7 +475,7 @@ async def test_oauth_code_successful_refresh_token_flow_async(
         oauth_client_secret="testClientSecret",
         oauth_token_request_url=token_request_url,
         oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-        oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+        oauth_redirect_uri=oauth_redirect_uri,
         host=wiremock_client.wiremock_host,
         port=wiremock_client.wiremock_http_port,
         oauth_enable_refresh_tokens=True,
@@ -491,7 +500,8 @@ async def test_oauth_code_expired_refresh_token_flow_async(
     webbrowser_mock_sync,
     monkeypatch,
     temp_cache_async,
-    omit_oauth_urls_check,  # noqa: F811
+    omit_oauth_urls_check,  # noqa: F811,
+    oauth_redirect_uri,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -545,7 +555,7 @@ async def test_oauth_code_expired_refresh_token_flow_async(
                 oauth_client_secret="testClientSecret",
                 oauth_token_request_url=token_request_url,
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                oauth_redirect_uri=oauth_redirect_uri,
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
                 oauth_enable_refresh_tokens=True,
@@ -836,6 +846,7 @@ async def test_client_credentials_flow_via_explicit_proxy(
     webbrowser_mock_sync,
     monkeypatch,
     omit_oauth_urls_check,  # noqa: F811
+    oauth_redirect_uri,  # noqa: F811
 ) -> None:
     from snowflake.connector.aio import SnowflakeConnection
 
@@ -868,7 +879,7 @@ async def test_client_credentials_flow_via_explicit_proxy(
                 oauth_client_secret="testClientSecret",
                 oauth_token_request_url=f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/token-request",
                 oauth_authorization_url=f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/authorize",
-                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                oauth_redirect_uri=oauth_redirect_uri,
                 host=target_wm.wiremock_host,
                 port=target_wm.wiremock_http_port,
             )

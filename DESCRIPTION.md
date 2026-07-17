@@ -9,10 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - NEXT_RELEASE(TBD)
   - Fixed token cache key collisions for multi-account (shared IdP) and multi-role scenarios by switching to a versioned, SHA256-hashed canonical-JSON key applied uniformly across macOS/Windows keyring and the Linux file backend (SNOW-3784431). The new key is threaded through both the sync and async authentication paths, and existing cache entries from the two prior key layouts are transparently migrated to the new format on first use.
+
+- v4.7.1(Jul 15,2026)
   - Added support for Python 3.14t (free-threaded).
     - **Note:** Python 3.14t CI testing excludes `win_arm64` (no `cryptography` wheels available) and `mitmproxy` proxy tests on all platforms (transitive dependencies `aioquic`/`pylsqpack` lack free-threaded-compatible wheels).
-
-- v4.7.0(Jul 2,2026)
+  - Improved verification of TLS connections (SNOW-3675579).
   - Fixed `python-connector.log` not rotating on Windows, and every record being logged twice, when easy logging is enabled via `config.toml` (SNOW-3680325).
     - **Note:** As part of this fix, easy logging no longer calls `logging.basicConfig()` and therefore no longer configures the root logger. `python-connector.log` now captures only the `snowflake.connector`, `botocore`, and `boto3`.
   - Improved URL validation reliability by replacing the hand-rolled regex in `is_valid_url()` with `urllib.parse.urlparse` (SNOW-3392651).
