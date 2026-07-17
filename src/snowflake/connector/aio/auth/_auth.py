@@ -29,12 +29,16 @@ from ...errors import (
 from ...network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
+    CREDENTIAL_REJECTION_GS_CODES,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
     OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
-from ...sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+from ...sqlstate import (
+    SQLSTATE_AUTHORIZATION_FAILURE,
+    SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+)
 from ...token_cache import TokenType
 from ._no_auth import AuthNoAuth
 
@@ -334,8 +338,12 @@ class Auth(AuthSync):
                         port=self._rest._port,
                         message=ret["message"],
                     ),
-                    "errno": ER_FAILED_TO_CONNECT_TO_DB,
-                    "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                    "errno": int(errno),
+                    "sqlstate": (
+                        SQLSTATE_AUTHORIZATION_FAILURE
+                        if str(errno) in CREDENTIAL_REJECTION_GS_CODES
+                        else SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+                    ),
                 },
             )
         else:
