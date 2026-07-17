@@ -12,7 +12,12 @@ from snowflake.connector.compat import IS_LINUX
 pytestmark = pytest.mark.skipif(not IS_LINUX, reason="Testing on linux only")
 
 try:
-    from snowflake.connector.token_cache import FileTokenCache, TokenKey, TokenType
+    from snowflake.connector.token_cache import (
+        FileTokenCache,
+        TokenKey,
+        TokenType,
+        _legacy_hash_key,
+    )
 
     CRED_TYPE_0 = TokenType.ID_TOKEN
     CRED_TYPE_1 = TokenType.MFA_TOKEN
@@ -282,4 +287,30 @@ def test_file_tokens_is_not_dict(tmpdir, monkeypatch):
     assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) is None
     cache.store(make_key(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
     assert cache.retrieve(make_key(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    cache.cache_file().unlink()
+
+
+def test_retrieve_migrates_legacy_hash_key(tmpdir, monkeypatch):
+    """Tokens stored under the pre-v2 sha256(string_key) key are migrated to v2."""
+    import json
+
+    from snowflake.connector.token_cache import build_cache_key
+
+    monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
+    cache = FileTokenCache.make()
+    assert cache
+    cache.cache_file().unlink(missing_ok=True)
+
+    key = make_key(HOST_0, USER_0, CRED_TYPE_0)
+    legacy_key = _legacy_hash_key(key)
+    cache.cache_file().touch(0o600)
+    cache.cache_file().write_text(json.dumps({"tokens": {legacy_key: CRED_0}}))
+
+    # Retrieval finds the legacy entry and returns it.
+    assert cache.retrieve(key) == CRED_0
+
+    # The entry is migrated: now stored under the v2 key and legacy key removed.
+    tokens = json.loads(cache.cache_file().read_text("utf-8"))["tokens"]
+    assert tokens.get(build_cache_key(key)) == CRED_0
+    assert legacy_key not in tokens
     cache.cache_file().unlink()

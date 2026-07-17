@@ -9,6 +9,8 @@ from snowflake.connector.token_cache import (
     KeyringTokenCache,
     TokenKey,
     TokenType,
+    _legacy_hash_key,
+    _legacy_string_key,
     build_cache_key,
 )
 
@@ -65,19 +67,50 @@ class TestRetrieve:
         assert cache.retrieve(KEY) == "tok123"
         mock_keyring.get_password.assert_called_once_with(FINAL_KEY, ACCOUNT)
 
-    def test_falls_back_to_legacy_and_migrates(self, cache, mock_keyring):
-        legacy_service = f"{KEY.snowflake.upper()}:{KEY.username.upper()}:{KEY.token_type.value}"
+    def test_falls_back_to_hash_layout_and_migrates(self, cache, mock_keyring):
+        """Immediately-prior layout: SERVICE_NAME + sha256(string_key) account."""
+        legacy_hash = _legacy_hash_key(KEY)
+        # v2 miss, then hash-layout hit on the first legacy lookup.
         mock_keyring.get_password.side_effect = [None, "legacy_tok"]
         result = cache.retrieve(KEY)
         assert result == "legacy_tok"
         mock_keyring.get_password.assert_has_calls(
             [
                 call(FINAL_KEY, ACCOUNT),
-                call(legacy_service, ACCOUNT),
+                call(cache.SERVICE_NAME, legacy_hash),
             ]
         )
-        mock_keyring.set_password.assert_called_once_with(FINAL_KEY, ACCOUNT, "legacy_tok")
-        mock_keyring.delete_password.assert_called_once_with(legacy_service, ACCOUNT)
+        mock_keyring.set_password.assert_called_once_with(
+            FINAL_KEY, ACCOUNT, "legacy_tok"
+        )
+        mock_keyring.delete_password.assert_called_once_with(
+            cache.SERVICE_NAME, legacy_hash
+        )
+
+    def test_falls_back_to_string_layout_and_migrates(self, cache, mock_keyring):
+        """Oldest layout: string_key service + uppercase username account."""
+        legacy_hash = _legacy_hash_key(KEY)
+        legacy_string = _legacy_string_key(KEY)
+        # v2 miss, hash-layout miss, then string-layout hit.
+        mock_keyring.get_password.side_effect = [None, None, "legacy_tok"]
+        result = cache.retrieve(KEY)
+        assert result == "legacy_tok"
+        mock_keyring.get_password.assert_has_calls(
+            [
+                call(FINAL_KEY, ACCOUNT),
+                call(cache.SERVICE_NAME, legacy_hash),
+                call(legacy_string, ACCOUNT),
+            ]
+        )
+        mock_keyring.set_password.assert_called_once_with(
+            FINAL_KEY, ACCOUNT, "legacy_tok"
+        )
+        mock_keyring.delete_password.assert_called_once_with(legacy_string, ACCOUNT)
+
+    def test_oauth_legacy_string_key_uses_idp_host(self, cache, mock_keyring):
+        """OAuth legacy keys must be built from the IdP hostname, not the SF host."""
+        legacy_string = _legacy_string_key(KEY)
+        assert legacy_string == "IDP.EXAMPLE.COM:ALICE:OAUTH_ACCESS_TOKEN"
 
     def test_returns_none_when_not_found_anywhere(self, cache, mock_keyring):
         mock_keyring.get_password.return_value = None

@@ -8,6 +8,7 @@ import os
 import re
 import stat
 import sys
+import urllib.parse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -117,6 +118,32 @@ def build_cache_key(key: TokenKey) -> str:
     return f"SnowflakeTokenCache.v2.{digest}"
 
 
+def _legacy_string_key(key: TokenKey) -> str:
+    """Reconstruct the pre-v2 ``{HOST}:{USER}:{TOKEN_TYPE}`` string key.
+
+    OAuth tokens historically keyed on the IdP hostname
+    (``urlparse(token_request_url).hostname``); all other flows keyed on the
+    Snowflake host. Used only to locate and migrate legacy cache entries.
+    """
+    if key.token_type in (
+        TokenType.OAUTH_ACCESS_TOKEN,
+        TokenType.OAUTH_REFRESH_TOKEN,
+    ):
+        host = urllib.parse.urlparse(key.idp).hostname or key.idp
+    else:
+        host = key.snowflake
+    if not host:
+        raise _InvalidTokenKeyError("Invalid key, host is empty")
+    if not key.username:
+        raise _InvalidTokenKeyError("Invalid key, user is empty")
+    return f"{host.upper()}:{key.username.upper()}:{key.token_type.value}"
+
+
+def _legacy_hash_key(key: TokenKey) -> str:
+    """SHA-256 hex of the legacy string key (the pre-v2 ``hash_key`` layout)."""
+    return hashlib.sha256(_legacy_string_key(key).encode("utf-8")).hexdigest()
+
+
 def _warn(warning: str) -> None:
     logger.warning(warning)
     print("Warning: " + warning, file=sys.stderr)
@@ -220,6 +247,10 @@ class FileTokenCache(TokenCache):
     Note: the filename (``credential_cache_v1.json``) is unchanged for
     backward compatibility; the ``v2`` in the key prefix refers to the
     key-format version, not the file format.
+
+    For backward compatibility, :meth:`retrieve` also checks the legacy layout
+    where the map key was ``sha256("{HOST}:{USER}:{TOKEN_TYPE}")``; matching
+    entries are silently migrated to the v2 key on first use.
     """
 
     @staticmethod
@@ -267,11 +298,23 @@ class FileTokenCache(TokenCache):
             )
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
-                token = cache["tokens"].get(final_key, None)
+                tokens = cache["tokens"]
+                token = tokens.get(final_key, None)
                 if isinstance(token, str):
                     return token
-                else:
-                    return None
+                # Legacy v1 fallback: entries keyed by sha256("{HOST}:{USER}:{TYPE}").
+                legacy_key = _legacy_hash_key(key)
+                legacy_token = tokens.get(legacy_key, None)
+                if isinstance(legacy_token, str):
+                    tokens[final_key] = legacy_token
+                    tokens.pop(legacy_key, None)
+                    self._write_cache_file(cache)
+                    self.logger.debug(
+                        "migrated legacy file cache entry for %s",
+                        key.token_type.value,
+                    )
+                    return legacy_token
+                return None
         except _FileTokenCacheError as e:
             self.logger.error(f"Failed to retrieve token: {e=}")
             return None
@@ -467,13 +510,21 @@ class KeyringTokenCache(TokenCache):
     - macOS: Stores tokens in Keychain
     - Windows: Stores tokens in Windows Credential Manager
 
-    The v2 cache key (``SnowflakeTokenCache.v2.<sha256hex>``) is used as both
-    the keyring service name and the account field, ensuring a single Keychain
-    ACL entry per token and no plaintext identifiers in the OS credential store.
+    The v2 cache key (``SnowflakeTokenCache.v2.<sha256hex>``) is used as the
+    keyring service name, and the uppercase username is used as the account
+    field. This ensures a distinct entry per token dimension while still
+    letting related tokens share Keychain visibility per account.
 
-    For backward compatibility, :meth:`retrieve` also checks the legacy layout
-    where the service was ``{HOST}:{USER}:{TOKEN_TYPE}`` and the account was the
-    uppercase username; matching entries are silently migrated to v2 on first use.
+    For backward compatibility, :meth:`retrieve` also checks two legacy layouts
+    and silently migrates matching entries to v2 on first use:
+
+    - hash layout (immediately prior): service ``com.snowflake.connector.python``
+      with account ``sha256("{HOST}:{USER}:{TOKEN_TYPE}")``
+    - string layout (oldest): service ``{HOST}:{USER}:{TOKEN_TYPE}`` with account
+      equal to the uppercase username
+
+    For OAuth tokens the legacy ``HOST`` is the IdP hostname; for other flows it
+    is the Snowflake host.
     """
 
     SERVICE_NAME = "com.snowflake.connector.python"
@@ -509,25 +560,43 @@ class KeyringTokenCache(TokenCache):
             )
 
     def _retrieve_legacy(self, key: TokenKey) -> str | None:
-        """Try to read from the old per-token-type service layout and migrate to v2."""
-        legacy_service = (
-            f"{key.snowflake.upper()}:{key.username.upper()}:{key.token_type.value}"
-        )
+        """Read from pre-v2 keyring layouts and migrate matching entries to v2.
+
+        Two historical layouts are checked, newest first:
+        - hash layout: service ``SERVICE_NAME``, account ``sha256(string_key)``
+        - string layout: service ``string_key``, account uppercase username
+
+        where ``string_key`` is ``{HOST}:{USER}:{TOKEN_TYPE}`` (HOST being the
+        IdP hostname for OAuth tokens and the Snowflake host otherwise).
+        """
         try:
-            token = keyring.get_password(legacy_service, key.username.upper())
-        except (keyring.errors.KeyringError, _InvalidTokenKeyError):
+            legacy_string_key = _legacy_string_key(key)
+            legacy_hash_key = _legacy_hash_key(key)
+        except _InvalidTokenKeyError:
             return None
-        if token is None:
-            return None
-        self.store(key, token)
-        try:
-            keyring.delete_password(legacy_service, key.username.upper())
-        except Exception:
-            pass
-        self.logger.debug(
-            "migrated legacy keyring entry for %s", key.token_type.value
-        )
-        return token
+
+        account = key.username.upper()
+        lookups = [
+            (self.SERVICE_NAME, legacy_hash_key),
+            (legacy_string_key, account),
+        ]
+        for service, acct in lookups:
+            try:
+                token = keyring.get_password(service, acct)
+            except (keyring.errors.KeyringError, _InvalidTokenKeyError):
+                continue
+            if token is None:
+                continue
+            self.store(key, token)
+            try:
+                keyring.delete_password(service, acct)
+            except Exception:
+                pass
+            self.logger.debug(
+                "migrated legacy keyring entry for %s", key.token_type.value
+            )
+            return token
+        return None
 
     def remove(self, key: TokenKey) -> None:
         try:
