@@ -125,7 +125,13 @@ async def test_mfa_cache(mockSnowflakeRestfulPostRequest):
         from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
         TokenCache.make().remove(
-            TokenKey(conn_cfg["host"], conn_cfg["user"], TokenType.MFA_TOKEN)
+            TokenKey(
+                token_type=TokenType.MFA_TOKEN,
+                idp=conn_cfg["host"],
+                snowflake=conn_cfg["host"],
+                username=conn_cfg["user"],
+                role="",
+            )
         )
 
         # first connection, no mfa token cache

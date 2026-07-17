@@ -91,9 +91,9 @@ class TestOAuthTokenCacheLoading:
         """Verify both access and refresh tokens are loaded."""
 
         def mock_retrieve(key: TokenKey):
-            if key.tokenType == TokenType.OAUTH_ACCESS_TOKEN:
+            if key.token_type == TokenType.OAUTH_ACCESS_TOKEN:
                 return "test_access_token"
-            elif key.tokenType == TokenType.OAUTH_REFRESH_TOKEN:
+            elif key.token_type == TokenType.OAUTH_REFRESH_TOKEN:
                 return "test_refresh_token"
             return None
 

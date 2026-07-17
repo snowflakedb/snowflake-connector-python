@@ -410,7 +410,13 @@ class Auth:
                 # raise an exception for reauth without id_token
                 self._rest.id_token = None
                 self._delete_temporary_credential(
-                    self._rest._host, user, TokenType.ID_TOKEN
+                    TokenKey(
+                        token_type=TokenType.ID_TOKEN,
+                        idp=self._rest._host,
+                        snowflake=self._rest._host,
+                        username=user,
+                        role=role or "",
+                    )
                 )
                 raise ReauthenticationRequest(
                     ProgrammingError(
@@ -446,7 +452,13 @@ class Auth:
 
             if isinstance(auth_instance, AuthByUsrPwdMfa):
                 self._delete_temporary_credential(
-                    self._rest._host, user, TokenType.MFA_TOKEN
+                    TokenKey(
+                        token_type=TokenType.MFA_TOKEN,
+                        idp=self._rest._host,
+                        snowflake=self._rest._host,
+                        username=user,
+                        role="",
+                    )
                 )
             Error.errorhandler_wrapper(
                 self._rest._connection,
@@ -514,7 +526,7 @@ class Auth:
                 mfa_token=ret["data"].get("mfaToken"),
             )
             self.write_temporary_credentials(
-                self._rest._host, user, session_parameters, ret
+                self._rest._host, user, session_parameters, ret, role=role or ""
             )
             if ret["data"] and "sessionId" in ret["data"]:
                 self._rest._connection._session_id = ret["data"].get("sessionId")
@@ -531,19 +543,15 @@ class Auth:
             self._rest._connection._update_parameters(session_parameters)
             return session_parameters
 
-    def _read_temporary_credential(
-        self,
-        host: str,
-        user: str,
-        cred_type: TokenType,
-    ) -> str | None:
-        return self.get_token_cache().retrieve(TokenKey(host, user, cred_type))
+    def _read_temporary_credential(self, key: TokenKey) -> str | None:
+        return self.get_token_cache().retrieve(key)
 
     def read_temporary_credentials(
         self,
         host: str,
         user: str,
         session_parameters: dict[str, Any],
+        role: str = "",
     ) -> None:
         """Attempt to load cached credentials to skip interactive authentication.
 
@@ -557,31 +565,33 @@ class Auth:
         """
         if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
             self._rest.id_token = self._read_temporary_credential(
-                host,
-                user,
-                TokenType.ID_TOKEN,
+                TokenKey(
+                    token_type=TokenType.ID_TOKEN,
+                    idp=host,
+                    snowflake=host,
+                    username=user,
+                    role=role,
+                )
             )
 
         if session_parameters.get(PARAMETER_CLIENT_REQUEST_MFA_TOKEN, False):
             self._rest.mfa_token = self._read_temporary_credential(
-                host,
-                user,
-                TokenType.MFA_TOKEN,
+                TokenKey(
+                    token_type=TokenType.MFA_TOKEN,
+                    idp=host,
+                    snowflake=host,
+                    username=user,
+                    role="",
+                )
             )
 
-    def _write_temporary_credential(
-        self,
-        host: str,
-        user: str,
-        cred_type: TokenType,
-        cred: str | None,
-    ) -> None:
+    def _write_temporary_credential(self, key: TokenKey, cred: str | None) -> None:
         if not cred:
             logger.debug(
                 "no credential is given when try to store temporary credential"
             )
             return
-        self.get_token_cache().store(TokenKey(host, user, cred_type), cred)
+        self.get_token_cache().store(key, cred)
 
     def write_temporary_credentials(
         self,
@@ -589,6 +599,7 @@ class Auth:
         user: str,
         session_parameters: dict[str, Any],
         response: dict[str, Any],
+        role: str = "",
     ) -> None:
         """Cache credentials received from successful authentication for future use.
 
@@ -604,18 +615,30 @@ class Auth:
             )
         ):
             self._write_temporary_credential(
-                host, user, TokenType.ID_TOKEN, response["data"].get("idToken")
+                TokenKey(
+                    token_type=TokenType.ID_TOKEN,
+                    idp=host,
+                    snowflake=host,
+                    username=user,
+                    role=role,
+                ),
+                response["data"].get("idToken"),
             )
 
         if session_parameters.get(PARAMETER_CLIENT_REQUEST_MFA_TOKEN, False):
             self._write_temporary_credential(
-                host, user, TokenType.MFA_TOKEN, response["data"].get("mfaToken")
+                TokenKey(
+                    token_type=TokenType.MFA_TOKEN,
+                    idp=host,
+                    snowflake=host,
+                    username=user,
+                    role="",
+                ),
+                response["data"].get("mfaToken"),
             )
 
-    def _delete_temporary_credential(
-        self, host: str, user: str, cred_type: TokenType
-    ) -> None:
-        self.get_token_cache().remove(TokenKey(host, user, cred_type))
+    def _delete_temporary_credential(self, key: TokenKey) -> None:
+        self.get_token_cache().remove(key)
 
     def get_token_cache(self) -> TokenCache:
         if self._token_cache is None:

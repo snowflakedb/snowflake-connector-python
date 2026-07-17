@@ -104,18 +104,20 @@ def webbrowser_mock_sync() -> Mock:
 def temp_cache_async():
     """Async-compatible temporary cache."""
 
+    from snowflake.connector.token_cache import build_cache_key
+
     class TemporaryCache(TokenCache):
         def __init__(self):
             self._cache = {}
 
         def store(self, key: TokenKey, token: str) -> None:
-            self._cache[(key.user, key.host, key.tokenType)] = token
+            self._cache[build_cache_key(key)] = token
 
         def retrieve(self, key: TokenKey) -> str:
-            return self._cache.get((key.user, key.host, key.tokenType))
+            return self._cache.get(build_cache_key(key))
 
         def remove(self, key: TokenKey) -> None:
-            self._cache.pop((key.user, key.host, key.tokenType))
+            self._cache.pop(build_cache_key(key), None)
 
     tmp_cache = TemporaryCache()
     # Patch both sync and async versions to be safe since async Auth inherits from sync Auth
@@ -446,11 +448,20 @@ async def test_oauth_code_successful_refresh_token_flow_async(
         wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
     )
     user = "testUser"
+    token_request_url = f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request"
     access_token_key = TokenKey(
-        user, wiremock_client.wiremock_host, TokenType.OAUTH_ACCESS_TOKEN
+        token_type=TokenType.OAUTH_ACCESS_TOKEN,
+        idp=token_request_url,
+        snowflake=wiremock_client.wiremock_host,
+        username=user,
+        role="ANALYST",
     )
     refresh_token_key = TokenKey(
-        user, wiremock_client.wiremock_host, TokenType.OAUTH_REFRESH_TOKEN
+        token_type=TokenType.OAUTH_REFRESH_TOKEN,
+        idp=token_request_url,
+        snowflake=wiremock_client.wiremock_host,
+        username=user,
+        role="ANALYST",
     )
     temp_cache_async.store(access_token_key, "expired-access-token-123")
     temp_cache_async.store(refresh_token_key, "refresh-token-123")
@@ -462,7 +473,7 @@ async def test_oauth_code_successful_refresh_token_flow_async(
         protocol="http",
         role="ANALYST",
         oauth_client_secret="testClientSecret",
-        oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+        oauth_token_request_url=token_request_url,
         oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
         oauth_redirect_uri=oauth_redirect_uri,
         host=wiremock_client.wiremock_host,
@@ -515,11 +526,20 @@ async def test_oauth_code_expired_refresh_token_flow_async(
     )
 
     user = "testUser"
+    token_request_url = f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request"
     access_token_key = TokenKey(
-        user, wiremock_client.wiremock_host, TokenType.OAUTH_ACCESS_TOKEN
+        token_type=TokenType.OAUTH_ACCESS_TOKEN,
+        idp=token_request_url,
+        snowflake=wiremock_client.wiremock_host,
+        username=user,
+        role="ANALYST",
     )
     refresh_token_key = TokenKey(
-        user, wiremock_client.wiremock_host, TokenType.OAUTH_REFRESH_TOKEN
+        token_type=TokenType.OAUTH_REFRESH_TOKEN,
+        idp=token_request_url,
+        snowflake=wiremock_client.wiremock_host,
+        username=user,
+        role="ANALYST",
     )
     temp_cache_async.store(access_token_key, "expired-access-token-123")
     temp_cache_async.store(refresh_token_key, "expired-refresh-token-123")
@@ -533,7 +553,7 @@ async def test_oauth_code_expired_refresh_token_flow_async(
                 protocol="http",
                 role="ANALYST",
                 oauth_client_secret="testClientSecret",
-                oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+                oauth_token_request_url=token_request_url,
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
                 oauth_redirect_uri=oauth_redirect_uri,
                 host=wiremock_client.wiremock_host,
@@ -584,11 +604,20 @@ async def test_client_creds_successful_flow_async(
         wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
     )
     user = "testUser"
+    token_request_url = f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request"
     access_token_key = TokenKey(
-        user, wiremock_client.wiremock_host, TokenType.OAUTH_ACCESS_TOKEN
+        token_type=TokenType.OAUTH_ACCESS_TOKEN,
+        idp=token_request_url,
+        snowflake=wiremock_client.wiremock_host,
+        username=user,
+        role="ANALYST",
     )
     refresh_token_key = TokenKey(
-        user, wiremock_client.wiremock_host, TokenType.OAUTH_REFRESH_TOKEN
+        token_type=TokenType.OAUTH_REFRESH_TOKEN,
+        idp=token_request_url,
+        snowflake=wiremock_client.wiremock_host,
+        username=user,
+        role="ANALYST",
     )
     temp_cache_async.store(access_token_key, "unused-access-token-123")
     temp_cache_async.store(refresh_token_key, "unused-refresh-token-123")
@@ -601,7 +630,7 @@ async def test_client_creds_successful_flow_async(
             account="testAccount",
             protocol="http",
             role="ANALYST",
-            oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+            oauth_token_request_url=token_request_url,
             host=wiremock_client.wiremock_host,
             port=wiremock_client.wiremock_http_port,
             oauth_enable_refresh_tokens=True,
@@ -681,11 +710,20 @@ async def test_client_creds_expired_refresh_token_flow_async(
     )
 
     user = "testUser"
+    token_request_url = f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request"
     access_token_key = TokenKey(
-        user, wiremock_client.wiremock_host, TokenType.OAUTH_ACCESS_TOKEN
+        token_type=TokenType.OAUTH_ACCESS_TOKEN,
+        idp=token_request_url,
+        snowflake=wiremock_client.wiremock_host,
+        username=user,
+        role="ANALYST",
     )
     refresh_token_key = TokenKey(
-        user, wiremock_client.wiremock_host, TokenType.OAUTH_REFRESH_TOKEN
+        token_type=TokenType.OAUTH_REFRESH_TOKEN,
+        idp=token_request_url,
+        snowflake=wiremock_client.wiremock_host,
+        username=user,
+        role="ANALYST",
     )
     temp_cache_async.store(access_token_key, "expired-access-token-123")
     temp_cache_async.store(refresh_token_key, "expired-refresh-token-123")
@@ -697,7 +735,7 @@ async def test_client_creds_expired_refresh_token_flow_async(
         protocol="http",
         role="ANALYST",
         oauth_client_secret="testClientSecret",
-        oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+        oauth_token_request_url=token_request_url,
         host=wiremock_client.wiremock_host,
         port=wiremock_client.wiremock_http_port,
         oauth_enable_refresh_tokens=True,
