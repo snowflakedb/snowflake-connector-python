@@ -150,6 +150,8 @@ def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
             "message": None,
             "data": None,
         }
+    else:
+        ret = {}
 
     mock_cnt += 1
     return ret
