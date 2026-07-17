@@ -14,7 +14,7 @@
         "equalTo": "S256"
       },
       "redirect_uri": {
-        "equalTo": "http://localhost:8009/snowflake/oauth-redirect"
+        "equalTo": "http://localhost:{{OAUTH_REDIRECT_PORT}}/snowflake/oauth-redirect"
       },
       "code_challenge": {
         "matches": ".*"
@@ -31,7 +31,7 @@
   "response": {
     "status": 302,
     "headers": {
-      "Location": "http://localhost:8009/snowflake/oauth-redirect?code=123&state=abc123"
+      "Location": "http://localhost:{{OAUTH_REDIRECT_PORT}}/snowflake/oauth-redirect?code=123&state=abc123"
     }
   }
 }

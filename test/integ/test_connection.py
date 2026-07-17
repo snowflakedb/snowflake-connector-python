@@ -6,6 +6,7 @@ import logging
 import os
 import pathlib
 import queue
+import socket
 import stat
 import tempfile
 import threading
@@ -433,13 +434,16 @@ def test_invalid_account_timeout(conn_cnx):
 def test_invalid_proxy(conn_cnx):
     http_proxy = os.environ.get("HTTP_PROXY")
     https_proxy = os.environ.get("HTTPS_PROXY")
+    with socket.socket() as _s:
+        _s.bind(("localhost", 0))
+        proxy_port = str(_s.getsockname()[1])
     with pytest.raises(OperationalError):
         with conn_cnx(
             protocol="http",
             account="testaccount",
             login_timeout=5,
             proxy_host="localhost",
-            proxy_port="3333",
+            proxy_port=proxy_port,
         ):
             pass
     # NOTE environment variable is set ONLY FOR THE OLD DRIVER if the proxy parameter is specified.
@@ -465,13 +469,16 @@ def test_invalid_proxy(conn_cnx):
 def test_invalid_proxy_not_impacting_env_vars(conn_cnx):
     http_proxy = os.environ.get("HTTP_PROXY")
     https_proxy = os.environ.get("HTTPS_PROXY")
+    with socket.socket() as _s:
+        _s.bind(("localhost", 0))
+        proxy_port = str(_s.getsockname()[1])
     with pytest.raises(OperationalError):
         with conn_cnx(
             protocol="http",
             account="testaccount",
             login_timeout=5,
             proxy_host="localhost",
-            proxy_port="3333",
+            proxy_port=proxy_port,
         ):
             pass
     # Proxy environment variables should not change

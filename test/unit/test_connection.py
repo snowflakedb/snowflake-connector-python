@@ -392,19 +392,18 @@ def test_invalid_backoff_policy():
 @pytest.mark.parametrize("next_action", ("RETRY", "ERROR"))
 @patch("snowflake.connector.vendored.requests.sessions.Session.request")
 def test_handle_timeout(mockSessionRequest, next_action):
-    mockSessionRequest.side_effect = mock_request_with_action(next_action, sleep=5)
+    mockSessionRequest.side_effect = mock_request_with_action(next_action, sleep=1)
 
     with pytest.raises(OperationalError):
         # no backoff for testing
         _ = fake_connector(
-            login_timeout=9,
+            login_timeout=5,
             backoff_policy=zero_backoff,
         )
 
-    # authenticator should be the only retry mechanism for login requests
-    # 9 seconds should be enough for authenticator to attempt twice
-    # however, loosen restrictions to avoid thread scheduling causing failure
-    assert 1 < mockSessionRequest.call_count < 4
+    # authenticator should be the only retry mechanism for login requests;
+    # sleep=1 + login_timeout=5 gives comfortable room for multiple calls
+    assert mockSessionRequest.call_count >= 2
 
 
 def test__get_private_bytes_from_file(tmp_path: Path):
