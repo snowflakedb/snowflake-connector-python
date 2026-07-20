@@ -15,6 +15,8 @@ std::unordered_map<std::string, SnowflakeType::Type>
         {"FIXED", SnowflakeType::Type::FIXED},
         {"DECFLOAT", SnowflakeType::Type::DECFLOAT},
         {"FLOAT", SnowflakeType::Type::REAL},
+        {"INTERVAL_YEAR_MONTH", SnowflakeType::Type::INTERVAL_YEAR_MONTH},
+        {"INTERVAL_DAY_TIME", SnowflakeType::Type::INTERVAL_DAY_TIME},
         {"MAP", SnowflakeType::Type::MAP},
         {"OBJECT", SnowflakeType::Type::OBJECT},
         {"REAL", SnowflakeType::Type::REAL},
