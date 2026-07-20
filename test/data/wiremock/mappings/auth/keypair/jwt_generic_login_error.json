@@ -1,0 +1,34 @@
+{
+  "mappings": [
+    {
+      "scenarioName": "Generic JWT login error flow",
+      "requiredScenarioState": "Started",
+      "newScenarioState": "Authentication failed",
+      "request": {
+        "urlPathPattern": "/session/v1/login-request.*",
+        "method": "POST",
+        "bodyPatterns": [
+          {
+            "matchesJsonPath": {
+              "expression": "$.data.AUTHENTICATOR",
+              "equalTo": "SNOWFLAKE_JWT"
+            }
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "data": null,
+          "code": "390401",
+          "message": "Login failed.",
+          "success": false,
+          "headers": null
+        }
+      }
+    }
+  ]
+}
