@@ -406,6 +406,16 @@ def conn_testaccount(request) -> SnowflakeConnection:
     return connection
 
 
+@pytest.fixture(autouse=True)
+def reset_default_paramstyle() -> Generator[None]:
+    """Keep tests isolated from process-global paramstyle changes."""
+    snowflake.connector.paramstyle = "pyformat"
+    try:
+        yield
+    finally:
+        snowflake.connector.paramstyle = "pyformat"
+
+
 @pytest.fixture()
 def conn_cnx() -> Callable[..., ContextManager[SnowflakeConnection]]:
     return db
