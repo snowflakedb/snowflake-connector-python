@@ -1,7 +1,3 @@
-//
-// Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-//
-
 #ifndef PC_ARROWCHUNKITERATOR_HPP
 #define PC_ARROWCHUNKITERATOR_HPP
 
@@ -33,7 +29,8 @@ class CArrowChunkIterator : public CArrowIterator {
    * Constructor
    */
   CArrowChunkIterator(PyObject* context, char* arrow_bytes,
-                      int64_t arrow_bytes_size, PyObject* use_numpy);
+                      int64_t arrow_bytes_size, PyObject* use_numpy,
+                      PyObject* check_error_on_every_column);
 
   /**
    * Destructor
@@ -77,6 +74,10 @@ class CArrowChunkIterator : public CArrowIterator {
 
   /** true if return numpy int64 float64 datetime*/
   bool m_useNumpy;
+
+  /** a flag that ensures running py::checkPyError after each column processing
+   * in order to fail early on first python processing error */
+  bool m_checkErrorOnEveryColumn;
 
   void initColumnConverters();
 };
