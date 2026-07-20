@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 """
 This script is used for end-to-end performance test.
 It tracks the processing time from cursor fetching data till all data are converted to python objects.

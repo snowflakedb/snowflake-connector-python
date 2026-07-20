@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import os
@@ -55,7 +51,7 @@ class TelemetryCaptureFixture:
         self,
         con: SnowflakeConnection,
         propagate: bool = True,
-    ) -> Generator[TelemetryCaptureHandler, None, None]:
+    ) -> Generator[TelemetryCaptureHandler]:
         original_telemetry = con._telemetry
         new_telemetry = TelemetryCaptureHandler(
             original_telemetry,
