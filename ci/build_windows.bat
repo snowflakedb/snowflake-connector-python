@@ -6,14 +6,14 @@
 SET SCRIPT_DIR=%~dp0
 SET CONNECTOR_DIR=%~dp0\..\
 
-set python_versions= 3.8 3.9 3.10 3.11 3.12
+set python_versions= 3.9 3.10 3.11 3.12 3.13
 
 cd %CONNECTOR_DIR%
 
 set venv_dir=%WORKSPACE%\venv-flake8
 if %errorlevel% neq 0 goto :error
 
-py -3.8 -m venv %venv_dir%
+py -3.9 -m venv %venv_dir%
 if %errorlevel% neq 0 goto :error
 
 call %venv_dir%\scripts\activate

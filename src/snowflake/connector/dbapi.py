@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 """This module implements some constructors and singletons as required by the DB API v2.0 (PEP-249)."""
 
 from __future__ import annotations
