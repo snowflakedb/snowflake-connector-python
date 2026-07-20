@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import pathlib
 import socket
 import subprocess
@@ -14,6 +15,35 @@ except ImportError:
 
 WIREMOCK_START_MAX_RETRY_COUNT = 12
 logger = logging.getLogger(__name__)
+
+# Base port for the local OAuth redirect callback server used by the auth code
+# flow tests. Each pytest-xdist worker gets its own port derived from its worker
+# id so that, with SO_REUSEPORT enabled, callbacks intended for one worker's
+# OAuth flow are not delivered by the kernel to a different worker listening on
+# the same port.
+OAUTH_REDIRECT_BASE_PORT = 8009
+OAUTH_REDIRECT_PORT_PLACEHOLDER = "{{OAUTH_REDIRECT_PORT}}"
+
+
+def oauth_redirect_port() -> int:
+    """Return a unique local OAuth redirect port for the current xdist worker.
+
+    Under xdist the worker id looks like ``gw0``, ``gw1`` ... . Without xdist
+    ``PYTEST_XDIST_WORKER`` is unset and we fall back to the base port.
+    """
+    worker_id = os.getenv("PYTEST_XDIST_WORKER")
+    offset = 0
+    if worker_id and worker_id.startswith("gw"):
+        try:
+            offset = int(worker_id[2:])
+        except ValueError:
+            offset = 0
+    return OAUTH_REDIRECT_BASE_PORT + offset
+
+
+def oauth_redirect_uri() -> str:
+    """OAuth redirect URI with a worker-unique port to avoid SO_REUSEPORT races."""
+    return f"http://localhost:{oauth_redirect_port()}/snowflake/oauth-redirect"
 
 
 def _get_mapping_str(mapping: Union[str, dict, pathlib.Path]) -> str:
@@ -90,7 +120,11 @@ class WiremockClient:
         return json.dumps(mapping_dict)
 
     def get_default_placeholders(self) -> dict[str, str]:
-        return self.get_http_placeholders()
+        placeholders = self.get_http_placeholders()
+        # Always substitute the worker-unique OAuth redirect port so mappings
+        # that reference it match regardless of which xdist worker runs them.
+        placeholders[OAUTH_REDIRECT_PORT_PLACEHOLDER] = str(oauth_redirect_port())
+        return placeholders
 
     def _start_wiremock(self):
         self.wiremock_http_port = self._find_free_port(
@@ -197,9 +231,17 @@ class WiremockClient:
     def _replace_placeholders_in_mapping(
         self, mapping_str: str, placeholders: Optional[dict[str, object]]
     ) -> str:
+        # The OAuth redirect port placeholder is always substituted (with a
+        # worker-unique value) so that authorization-code mappings match the
+        # local callback server's port regardless of the xdist worker. Explicit
+        # placeholders take precedence if they also set it.
+        effective: dict[str, object] = {
+            OAUTH_REDIRECT_PORT_PLACEHOLDER: str(oauth_redirect_port())
+        }
         if placeholders:
-            for key, value in placeholders.items():
-                mapping_str = mapping_str.replace(str(key), str(value))
+            effective.update(placeholders)
+        for key, value in effective.items():
+            mapping_str = mapping_str.replace(str(key), str(value))
         return mapping_str
 
     def import_mapping(
