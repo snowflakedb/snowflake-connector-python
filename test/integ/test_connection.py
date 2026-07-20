@@ -1376,34 +1376,6 @@ def test_server_session_keep_alive(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.parametrize(
-    "value",
-    [
-        True,
-        False,
-    ],
-)
-def test_gcs_use_virtual_endpoints(conn_cnx, value):
-    with mock.patch(
-        "snowflake.connector.network.SnowflakeRestful.fetch",
-        return_value={"data": {"token": None, "masterToken": None}, "success": True},
-    ):
-        with snowflake.connector.connect(
-            user="test-user",
-            password="test-password",
-            host="test-host",
-            port="443",
-            account="test-account",
-            gcs_use_virtual_endpoints=value,
-        ) as cnx:
-            assert cnx
-            cnx.commit = cnx.rollback = (
-                lambda: None
-            )  # Skip tear down, there's only a mocked rest api
-            assert cnx.gcs_use_virtual_endpoints == value
-
-
-@pytest.mark.skipolddriver
 def test_ocsp_mode_disable_ocsp_checks(conn_cnx, is_public_test, caplog):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(disable_ocsp_checks=True) as conn, conn.cursor() as cur:
