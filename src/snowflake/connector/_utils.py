@@ -10,7 +10,7 @@ import threading
 import time
 from enum import Enum
 from inspect import stack
-from random import choice
+from secrets import choice
 from threading import Timer
 from uuid import UUID
 

@@ -684,10 +684,8 @@ def test_workload_identity_provider_is_required_for_wif_authenticator(
     "provider_param",
     [
         # Strongly-typed values.
-        AttestationProvider.AZURE,
         AttestationProvider.OIDC,
         # String values.
-        "AZURE",
         "OIDC",
     ],
 )
@@ -709,7 +707,7 @@ def test_workload_identity_impersonation_path_errors_for_unsupported_providers(
                 ],
             )
         assert (
-            "workload_identity_impersonation_path is currently only supported for GCP and AWS."
+            "workload_identity_impersonation_path is currently only supported for GCP, AWS, and AZURE."
             in str(excinfo.value)
         )
 
