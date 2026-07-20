@@ -1,0 +1,29 @@
+{
+  "mappings": [
+    {
+      "scenarioName": "OAuth client credentials flow with token request error",
+      "requiredScenarioState": "Started",
+      "newScenarioState": "Acquired access token",
+      "request": {
+        "urlPathPattern": "/oauth/token-request.*",
+        "method": "POST",
+        "headers": {
+          "Authorization": {
+            "contains": "Basic"
+          },
+          "Content-Type": {
+            "contains": "application/x-www-form-urlencoded; charset=UTF-8"
+          }
+        },
+        "bodyPatterns": [
+          {
+            "contains": "grant_type=client_credentials&scope=session%3Arole%3AANALYST"
+          }
+        ]
+      },
+      "response": {
+        "status": 400
+      }
+    }
+  ]
+}
