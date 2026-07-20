@@ -660,3 +660,24 @@ def test_sql_splitting_various(sql, delimiter, split_stmnts):
             s[0] for s in split_statements(sqlio, delimiter=SQLDelimiter(delimiter))
         )
     assert statements == split_stmnts
+
+
+@pytest.mark.parametrize("comment_prefix", ["--", "//"])
+@pytest.mark.parametrize("remove_comments", [True, False])
+def test_split_with_comment(comment_prefix, remove_comments):
+    query = dedent(
+        f"""
+    use database test_db;
+    use schema public;
+    select
+    c1,
+    c2, {comment_prefix} issue's here?
+    c3
+    from test;
+    select current_timestamp() as ts;
+    """
+    )
+
+    with StringIO(query) as sqlio:
+        statements = list(split_statements(sqlio, remove_comments=remove_comments))
+    assert len(statements) == 4
