@@ -1141,6 +1141,15 @@ def test_client_prefetch_threads_setting(conn_cnx):
         assert conn.client_prefetch_threads == new_thread_count
 
 
+@pytest.mark.skipolddriver
+def test_client_fetch_threads_setting(conn_cnx):
+    """Tests whether client_fetch_threads is None by default and setting the parameter has effect."""
+    with conn_cnx() as conn:
+        assert conn.client_fetch_threads is None
+        conn.client_fetch_threads = 32
+        assert conn.client_fetch_threads == 32
+
+
 @pytest.mark.external
 def test_client_failover_connection_url(conn_cnx):
     with conn_cnx("client_failover") as conn:
