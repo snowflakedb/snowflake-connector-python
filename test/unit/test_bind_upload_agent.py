@@ -12,7 +12,8 @@ def test_bind_upload_agent_uploading_multiple_files():
     rows = [bytes(10)] * 10
     agent = BindUploadAgent(csr, rows, stream_buffer_size=10)
     agent.upload()
-    assert csr.execute.call_count == 11  # 1 for stage creation + 10 files
+    assert csr.execute.call_count == 1  # 1 for stage creation
+    assert csr._upload_stream.call_count == 10  # 10 for 10 files
 
 
 def test_bind_upload_agent_row_size_exceed_buffer_size():
@@ -22,7 +23,8 @@ def test_bind_upload_agent_row_size_exceed_buffer_size():
     rows = [bytes(15)] * 10
     agent = BindUploadAgent(csr, rows, stream_buffer_size=10)
     agent.upload()
-    assert csr.execute.call_count == 11  # 1 for stage creation + 10 files
+    assert csr.execute.call_count == 1  # 1 for stage creation
+    assert csr._upload_stream.call_count == 10  # 10 for 10 files
 
 
 def test_bind_upload_agent_scoped_temp_object():

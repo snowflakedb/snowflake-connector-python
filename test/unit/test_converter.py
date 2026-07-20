@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 from logging import getLogger
 
+import numpy
 import pytest
 
 from snowflake.connector import ProgrammingError
@@ -97,3 +99,37 @@ def test_converter_to_snowflake_bindings_error():
         match=r"Binding data in type \(somethingsomething\) is not supported",
     ):
         converter._somethingsomething_to_snowflake_bindings("Bogus")
+
+
+NANOS_PER_DAY = 24 * 60 * 60 * 10**9
+
+
+@pytest.mark.parametrize("nanos", [0, 1, 999, 1000, 999999, 10**5 * NANOS_PER_DAY - 1])
+def test_day_time_interval_int_to_timedelta(nanos):
+    converter = ArrowConverterContext()
+    assert converter.INTERVAL_DAY_TIME_int_to_timedelta(nanos) == timedelta(
+        microseconds=nanos // 1000
+    )
+    assert converter.INTERVAL_DAY_TIME_int_to_numpy_timedelta(
+        nanos
+    ) == numpy.timedelta64(nanos, "ns")
+
+
+@pytest.mark.parametrize("nanos", [0, 1, 999, 1000, 999999, 10**9 * NANOS_PER_DAY - 1])
+def test_day_time_interval_decimal_to_timedelta(nanos):
+    converter = ArrowConverterContext()
+    nano_bytes = nanos.to_bytes(16, byteorder="little", signed=True)
+    assert converter.INTERVAL_DAY_TIME_decimal_to_timedelta(nano_bytes) == timedelta(
+        microseconds=nanos // 1000
+    )
+    assert converter.INTERVAL_DAY_TIME_decimal_to_numpy_timedelta(
+        nano_bytes
+    ) == numpy.timedelta64(nanos // 1_000_000, "ms")
+
+
+@pytest.mark.parametrize("months", [0, 1, 999, 1000, 999999, 10**9 * 12 - 1])
+def test_year_month_interval_to_timedelta(months):
+    converter = ArrowConverterContext()
+    assert converter.INTERVAL_YEAR_MONTH_to_numpy_timedelta(
+        months
+    ) == numpy.timedelta64(months, "M")

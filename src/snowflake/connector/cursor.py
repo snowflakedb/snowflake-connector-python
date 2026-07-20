@@ -672,7 +672,10 @@ class SnowflakeCursor:
         else:
             # or detect it.
             self._is_file_transfer = get_file_transfer_type(query) is not None
-        logger.debug("is_file_transfer: %s", self._is_file_transfer is not None)
+        logger.debug(
+            "is_file_transfer: %s",
+            self._is_file_transfer if self._is_file_transfer is not None else "None",
+        )
 
         real_timeout = (
             timeout if timeout and timeout > 0 else self._connection.network_timeout
@@ -1459,7 +1462,7 @@ class SnowflakeCursor:
                 bind_stage = None
                 if (
                     bind_size
-                    > self.connection._session_parameters[
+                    >= self.connection._session_parameters[
                         "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"
                     ]
                     > 0
