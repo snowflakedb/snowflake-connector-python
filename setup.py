@@ -1,7 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All rights reserved.
-#
 
 import os
 import sys

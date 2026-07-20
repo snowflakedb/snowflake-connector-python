@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 import io
 import unittest.mock
 from test.unit.mock_utils import mock_connection

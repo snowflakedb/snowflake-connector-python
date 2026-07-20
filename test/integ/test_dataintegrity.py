@@ -1,8 +1,4 @@
 #!/usr/bin/env python -O
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 """Script to test database capabilities and the DB-API interface.
 
 It tests for functionality and data integrity for some of the basic data types. Adapted from a script
