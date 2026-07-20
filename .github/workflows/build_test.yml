@@ -20,7 +20,7 @@ on:
             description: "Test scenario tags"
 
 concurrency:
-  # older builds for the same pull request numer or branch should be cancelled
+  # older builds for the same pull request number or branch should be cancelled
   cancel-in-progress: true
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
 

@@ -11,7 +11,6 @@
           {
             "equalToJson" : {
               "data": {
-                "LOGIN_NAME": "testUser",
                 "AUTHENTICATOR": "PROGRAMMATIC_ACCESS_TOKEN",
                 "TOKEN": "some PAT"
               }
