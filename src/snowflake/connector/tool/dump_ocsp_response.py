@@ -1,38 +1,55 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import logging
+import sys
 import time
-from os import path
+from argparse import ArgumentParser, Namespace
 from time import gmtime, strftime
 
 from asn1crypto import ocsp as asn1crypto_ocsp
 
 from snowflake.connector.compat import urlsplit
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
+from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
+
+
+def _parse_args() -> Namespace:
+    parser = ArgumentParser(
+        prog="dump_ocsp_response",
+        description="Dump OCSP Response for the URLs (an internal tool).",
+    )
+    parser.add_argument(
+        "-o",
+        "--output-file",
+        required=False,
+        help="Dump output file",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--log-level",
+        required=False,
+        help="Log level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+    )
+    parser.add_argument("--log-file", required=False, help="Log file", default=None)
+    parser.add_argument("urls", nargs="+", help="URLs to dump OCSP Response for")
+    return parser.parse_args()
 
 
 def main() -> None:
     """Internal Tool: OCSP response dumper."""
-
-    def help() -> None:
-        print("Dump OCSP Response for the URL. ")
-        print(
-            """
-Usage: {} <url> [<url> ...]
-""".format(
-                path.basename(sys.argv[0])
+    args = _parse_args()
+    if args.log_level:
+        if args.log_file:
+            logging.basicConfig(
+                filename=args.log_file, level=getattr(logging, args.log_level.upper())
             )
-        )
-        sys.exit(2)
-
-    import sys
-
-    if len(sys.argv) < 2:
-        help()
-
-    urls = sys.argv[1:]
-    dump_ocsp_response(urls, output_filename=None)
+        else:
+            logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+    dump_ocsp_response(args.urls, output_filename=args.output_file)
 
 
 def dump_good_status(current_time, single_response) -> None:
@@ -87,7 +104,7 @@ def dump_ocsp_response(urls, output_filename):
         for issuer, subject in cert_data:
             _, _ = ocsp.create_ocsp_request(issuer, subject)
             _, _, _, cert_id, ocsp_response_der = ocsp.validate_by_direct_connection(
-                issuer, subject
+                issuer, subject, OCSPTelemetryData()
             )
             ocsp_response = asn1crypto_ocsp.OCSPResponse.load(ocsp_response_der)
             print("------------------------------------------------------------")
@@ -115,7 +132,7 @@ def dump_ocsp_response(urls, output_filename):
 
         if output_filename:
             SFOCSP.OCSP_CACHE.write_ocsp_response_cache_file(ocsp, output_filename)
-    return SFOCSP.OCSP_CACHE.CACHE
+    return SFOCSP.OCSP_CACHE
 
 
 if __name__ == "__main__":

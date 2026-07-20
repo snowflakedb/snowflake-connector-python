@@ -58,6 +58,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         token_cache: TokenCache | None = None,
         refresh_token_enabled: bool = False,
         external_browser_timeout: int | None = None,
+        enable_single_use_refresh_tokens: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -81,6 +82,7 @@ class AuthByOauthCode(AuthByOAuthBase):
             logger.debug("oauth pkce is going to be used")
         self._verifier: str | None = None
         self._external_browser_timeout = external_browser_timeout
+        self._enable_single_use_refresh_tokens = enable_single_use_refresh_tokens
 
     def _get_oauth_type_id(self) -> str:
         return OAUTH_TYPE_AUTHORIZATION_CODE
@@ -296,6 +298,8 @@ You can close this window now and go back where you started from.
             "code": code,
             "redirect_uri": callback_server.url,
         }
+        if self._enable_single_use_refresh_tokens:
+            fields["enable_single_use_refresh_tokens"] = "true"
         if self._pkce_enabled:
             assert self._verifier is not None
             fields["code_verifier"] = self._verifier
