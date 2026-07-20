@@ -503,10 +503,9 @@ def test_suppress_platform_detection_logs_is_thread_safe():
     """
     import threading
 
-    target = logging.getLogger("snowflake.connector.vendored.urllib3.connectionpool")
-    original = target.level
+    # Snapshot each logger's true starting level to later restore
+    originals = {name: logging.getLogger(name).level for name in _LOGGERS_TO_SUPPRESS}
     try:
-        target.setLevel(logging.NOTSET)
 
         def hammer():
             for _ in range(300):
@@ -519,13 +518,16 @@ def test_suppress_platform_detection_logs_is_thread_safe():
         for t in threads:
             t.join()
 
-        for name in _LOGGERS_TO_SUPPRESS:
-            assert logging.getLogger(name).level == logging.NOTSET, (
-                f"{name} left at level {logging.getLogger(name).level} after concurrent "
-                f"suppression -- the logger-level save/restore raced and muted it"
+        for name, level in originals.items():
+            assert logging.getLogger(name).level == level, (
+                f"{name} left at level {logging.getLogger(name).level} "
+                f"(expected {level}) after concurrent suppression -- the "
+                f"logger-level save/restore raced"
             )
     finally:
-        target.setLevel(original)
+        # Restore every suppressed logger to avoid leaking state.
+        for name, level in originals.items():
+            logging.getLogger(name).setLevel(level)
 
 
 def test_suppress_platform_detection_logs_preserves_original_level():

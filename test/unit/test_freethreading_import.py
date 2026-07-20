@@ -10,6 +10,7 @@ Tests run in a subprocess so import-time side-effects are observable
 from a clean state -- pytest may have already imported the connector
 before any test function runs.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -32,7 +33,9 @@ def _run_in_subprocess(script: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_connector_import_does_not_emit_gil_reenable_warning(gil_disabled) -> None:
+def test_connector_import_does_not_emit_gil_reenable_warning(
+    require_gil_disabled,
+) -> None:
     """Importing the connector must not emit a RuntimeWarning about the GIL.
 
     C extensions declaring ``Py_MOD_GIL_USED`` cause CPython to re-enable the
@@ -71,7 +74,7 @@ def test_connector_import_does_not_emit_gil_reenable_warning(gil_disabled) -> No
 
 
 def test_connector_import_leaves_gil_disabled_on_freethreaded_build(
-    gil_disabled,
+    require_gil_disabled,
 ) -> None:
     """On a free-threaded build, the GIL must remain disabled after import."""
     proc = _run_in_subprocess(
@@ -92,7 +95,7 @@ def test_connector_import_leaves_gil_disabled_on_freethreaded_build(
     )
 
 
-def test_connector_import_on_gil_build_leaves_gil_enabled(gil_enabled) -> None:
+def test_connector_import_on_gil_build_leaves_gil_enabled(require_gil_enabled) -> None:
     """On a GIL-enabled build, importing the connector must not disable the GIL."""
     proc = _run_in_subprocess(
         """

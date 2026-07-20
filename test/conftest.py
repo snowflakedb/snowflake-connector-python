@@ -32,7 +32,7 @@ _HAS_GIL_INTROSPECTION = hasattr(sys, "_is_gil_enabled")
 
 
 @pytest.fixture
-def gil_enabled():
+def require_gil_enabled():
     """Skip unless running on a GIL-enabled interpreter (3.13+ or any <3.13).
 
     Apply this fixture to tests that assert GIL-build behaviour.
@@ -44,7 +44,7 @@ def gil_enabled():
 
 
 @pytest.fixture
-def gil_disabled():
+def require_gil_disabled():
     """Skip unless running on a free-threaded, GIL-disabled interpreter (3.13t+).
 
     Apply this fixture to tests that only make sense with the GIL disabled.

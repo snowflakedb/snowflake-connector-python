@@ -34,8 +34,7 @@ _LOGGERS_TO_SUPPRESS = [
     "urllib3.connectionpool",
 ]
 
-# Guards the process-global logger-level mutation in
-# ``_suppress_platform_detection_logs`` against concurrent connections.
+# Guards the process-global logger-level mutation against concurrent connections.
 _suppress_lock = threading.Lock()
 _suppress_depth = 0
 _suppress_saved_levels: dict[str, int] = {}
@@ -49,12 +48,9 @@ def _suppress_platform_detection_logs():
     This prevents noisy DEBUG logs and stack traces from urllib3 and botocore when detecting
     cloud platforms, which can confuse customers (SNOW-2204396). Our own debug logs are not affected.
 
-    Thread-safe: connections (and therefore ``detect_platforms``) can run concurrently,
-    e.g. on free-threaded builds. Because it mutates process-global logger levels, a naive
-    save/restore races -- a second entrant would capture the already-suppressed level as the
-    "original" and restore the loggers to permanently muted. Guard with a lock and a
-    reference count so the original levels are captured once (first entrant) and restored
-    once (last to exit).
+    Thread-safe: connections can run concurrently because it mutates process-global logger levels
+    Guard with a lock and a reference count so the original levels are captured once by the
+    first entrant and restored once by the last to exit.
     """
     global _suppress_depth
     with _suppress_lock:
