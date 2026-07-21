@@ -1,6 +1,7 @@
 #include "DateConverter.hpp"
 
 #include <memory>
+#include <mutex>
 
 #include "Python/Helpers.hpp"
 
@@ -9,12 +10,14 @@ Logger* DateConverter::logger = new Logger("snowflake.connector.DateConverter");
 
 py::UniqueRef& DateConverter::initPyDatetimeDate() {
   static py::UniqueRef pyDatetimeDate;
-  if (pyDatetimeDate.empty()) {
+  // Serializes the lazy import for free-threaded builds
+  static std::once_flag onceFlag;
+  std::call_once(onceFlag, []() {
     py::UniqueRef pyDatetimeModule;
     py::importPythonModule("datetime", pyDatetimeModule);
     py::importFromModule(pyDatetimeModule, "date", pyDatetimeDate);
     Py_XINCREF(pyDatetimeDate.get());
-  }
+  });
   return pyDatetimeDate;
 }
 
