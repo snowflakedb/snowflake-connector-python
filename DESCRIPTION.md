@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - NEXT_RELEASE(TBD)
+  - Added experimental Python 3.14t (free-threaded CPython) wheel support. **Experimental — not intended for production use.**
   - Fixed `split_statements` treating `//` as SQL instead of a line comment, which could merge multiple statements when a `//` comment contained an apostrophe (SNOW-3772985).
 
 - v4.7.1(Jul 15,2026)
