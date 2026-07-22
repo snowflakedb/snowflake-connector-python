@@ -46,23 +46,25 @@ class _InvalidTokenKeyError(Exception):
 class TokenKey:
     """Key identifying a cached token.
 
-    All five fields are required. Raw (un-normalized) values are acceptable;
-    ``build_cache_key`` normalizes them before hashing.
+    ``snowflake`` and ``username`` are required for all flows.
+    ``idp`` and ``role`` are used only for OAuth flows; they default to ``""``
+    and are ignored by ``build_cache_key`` for MFA and ID token flows.
+    Raw (un-normalized) values are acceptable; ``build_cache_key`` normalizes
+    them before hashing.
 
     Fields:
         token_type: The type of token being cached.
-        idp: IdP / token-endpoint URL. For MFA and external-browser flows this
-            equals the Snowflake server URL.
         snowflake: Snowflake server URL.
         username: Snowflake login name.
-        role: Snowflake role. Must be an empty string (not None) for MFA flows.
+        idp: IdP / token-endpoint URL (OAuth flows only).
+        role: Snowflake role (OAuth flows only).
     """
 
     token_type: TokenType
-    idp: str
     snowflake: str
     username: str
-    role: str
+    idp: str = ""
+    role: str = ""
 
 
 def normalize_url(url: str) -> str:
@@ -91,10 +93,27 @@ def normalize_identifier(identifier: str) -> str:
     return "".join(result)
 
 
+_OAUTH_TYPES: frozenset[str] = frozenset(
+    {
+        "OAUTH_ACCESS_TOKEN",
+        "OAUTH_REFRESH_TOKEN",
+        "DPOP_BUNDLED_ACCESS_TOKEN",
+    }
+)
+
+
 def build_cache_key(key: TokenKey) -> str:
     """Build the versioned, uniformly-hashed v2 cache key.
 
-    Format: ``SnowflakeTokenCache.v2.<sha256hex(canonical_json)>``
+    Format: ``SnowflakeTokenCache.v2.<TOKEN_TYPE>.<sha256hex(canonical_json)>``
+
+    ``keyData`` is flow-dependent and never contains ``token_type``:
+
+    - OAuth (``OAUTH_ACCESS_TOKEN``, ``OAUTH_REFRESH_TOKEN``,
+      ``DPOP_BUNDLED_ACCESS_TOKEN``): 4 fields — ``idp``, ``role``,
+      ``snowflake``, ``username``.
+    - MFA / ID token (``MFA_TOKEN``, ``ID_TOKEN``): 2 fields —
+      ``snowflake``, ``username`` only.
 
     The canonical JSON is compact (no whitespace) with keys sorted
     lexicographically, serialized to UTF-8. Hashing occurs exactly once here;
@@ -105,17 +124,25 @@ def build_cache_key(key: TokenKey) -> str:
     if not key.username:
         raise _InvalidTokenKeyError("username must not be empty")
 
-    key_data = {
-        "idp": normalize_url(key.idp),
-        "role": normalize_identifier(key.role),
-        "snowflake": normalize_url(key.snowflake),
-        "token_type": key.token_type.value,
-        "username": normalize_identifier(key.username),
-    }
+    token_type_value = key.token_type.value
+
+    if token_type_value in _OAUTH_TYPES:
+        key_data: dict[str, str] = {
+            "idp": normalize_url(key.idp or ""),
+            "role": normalize_identifier(key.role or ""),
+            "snowflake": normalize_url(key.snowflake),
+            "username": normalize_identifier(key.username),
+        }
+    else:
+        # MFA_TOKEN, ID_TOKEN — idp and role are not part of the key
+        key_data = {
+            "snowflake": normalize_url(key.snowflake),
+            "username": normalize_identifier(key.username),
+        }
 
     canonical = json.dumps(key_data, sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    return f"SnowflakeTokenCache.v2.{digest}"
+    return f"SnowflakeTokenCache.v2.{token_type_value}.{digest}"
 
 
 def _legacy_string_key(key: TokenKey) -> str:
@@ -157,9 +184,10 @@ class TokenCache(ABC):
     - Linux: Uses JSON file in ~/.cache/snowflake/ with 0o600 permissions
     - Fallback: NoopTokenCache (no caching) if secure storage unavailable
 
-    Tokens are keyed by a versioned, SHA-256-hashed canonical-JSON key (v2 format)
-    built from (token_type, idp, snowflake, username, role) to avoid collisions
-    across multi-account and multi-role scenarios.
+    Tokens are keyed by a versioned, SHA-256-hashed canonical-JSON key (v2 format):
+    ``SnowflakeTokenCache.v2.<TOKEN_TYPE>.<sha256hex>``.  OAuth flows include
+    ``idp`` and ``role`` in the hashed JSON; MFA and ID token flows use only
+    ``snowflake`` and ``username``.
     """
 
     @staticmethod
@@ -242,8 +270,9 @@ class FileTokenCache(TokenCache):
     Security: File must have 0o600 permissions and be owned by current user.
     Uses file locks to prevent concurrent access corruption.
 
-    JSON map keys are the full ``SnowflakeTokenCache.v2.<sha256hex>`` strings
-    produced by ``build_cache_key``; hashing is performed once before dispatch.
+    JSON map keys are the full ``SnowflakeTokenCache.v2.<TOKEN_TYPE>.<sha256hex>``
+    strings produced by ``build_cache_key``; hashing is performed once before
+    dispatch.
     Note: the filename (``credential_cache_v1.json``) is unchanged for
     backward compatibility; the ``v2`` in the key prefix refers to the
     key-format version, not the file format.
@@ -510,9 +539,9 @@ class KeyringTokenCache(TokenCache):
     - macOS: Stores tokens in Keychain
     - Windows: Stores tokens in Windows Credential Manager
 
-    The v2 cache key (``SnowflakeTokenCache.v2.<sha256hex>``) is used as the
-    keyring service name, and the uppercase username is used as the account
-    field. This ensures a distinct entry per token dimension while still
+    The v2 cache key (``SnowflakeTokenCache.v2.<TOKEN_TYPE>.<sha256hex>``) is
+    used as the keyring service name, and the uppercase username is used as the
+    account field. This ensures a distinct entry per token dimension while still
     letting related tokens share Keychain visibility per account.
 
     For backward compatibility, :meth:`retrieve` also checks two legacy layouts
@@ -523,8 +552,8 @@ class KeyringTokenCache(TokenCache):
     - string layout (oldest): service ``{HOST}:{USER}:{TOKEN_TYPE}`` with account
       equal to the uppercase username
 
-    For OAuth tokens the legacy ``HOST`` is the IdP hostname; for other flows it
-    is the Snowflake host.
+    where ``string_key`` is ``{HOST}:{USER}:{TOKEN_TYPE}`` (HOST being the
+    IdP hostname for OAuth tokens and the Snowflake host otherwise).
     """
 
     SERVICE_NAME = "com.snowflake.connector.python"

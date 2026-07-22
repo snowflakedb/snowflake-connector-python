@@ -412,10 +412,8 @@ class Auth:
                 self._delete_temporary_credential(
                     TokenKey(
                         token_type=TokenType.ID_TOKEN,
-                        idp=self._rest._host,
                         snowflake=self._rest._host,
                         username=user,
-                        role=role or "",
                     )
                 )
                 raise ReauthenticationRequest(
@@ -454,10 +452,8 @@ class Auth:
                 self._delete_temporary_credential(
                     TokenKey(
                         token_type=TokenType.MFA_TOKEN,
-                        idp=self._rest._host,
                         snowflake=self._rest._host,
                         username=user,
-                        role="",
                     )
                 )
             Error.errorhandler_wrapper(
@@ -567,10 +563,8 @@ class Auth:
             self._rest.id_token = self._read_temporary_credential(
                 TokenKey(
                     token_type=TokenType.ID_TOKEN,
-                    idp=host,
                     snowflake=host,
                     username=user,
-                    role=role,
                 )
             )
 
@@ -578,10 +572,8 @@ class Auth:
             self._rest.mfa_token = self._read_temporary_credential(
                 TokenKey(
                     token_type=TokenType.MFA_TOKEN,
-                    idp=host,
                     snowflake=host,
                     username=user,
-                    role="",
                 )
             )
 
@@ -617,10 +609,8 @@ class Auth:
             self._write_temporary_credential(
                 TokenKey(
                     token_type=TokenType.ID_TOKEN,
-                    idp=host,
                     snowflake=host,
                     username=user,
-                    role=role,
                 ),
                 response["data"].get("idToken"),
             )
@@ -629,10 +619,8 @@ class Auth:
             self._write_temporary_credential(
                 TokenKey(
                     token_type=TokenType.MFA_TOKEN,
-                    idp=host,
                     snowflake=host,
                     username=user,
-                    role="",
                 ),
                 response["data"].get("mfaToken"),
             )
