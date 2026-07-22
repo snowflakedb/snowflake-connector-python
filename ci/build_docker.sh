@@ -16,15 +16,16 @@ CONTAINER_NAME=build_pyconnector
 arch=$(uname -p)
 
 echo "[Info] Building docker image"
-# Free-threaded builds require manylinux_2_28 (cp314t is not in manylinux2014).
-# On Jenkins this depends on BASE_IMAGE_MANYLINUX2_28 being mirrored in Artifactory.
+# Free-threaded builds use the public manylinux_2_28 image directly (quay.io/pypa).
+# This bypasses Artifactory, so cp314t builds work on Jenkins without waiting for
+# an Artifactory mirror. Standard builds keep using the Artifactory-backed image.
 if [[ "${1}" == *"3.14t"* ]]; then
   if [[ "$arch" == "aarch64" ]]; then
-    BASE_IMAGE=$BASE_IMAGE_MANYLINUX2_28AARCH64
+    BASE_IMAGE=$BASE_IMAGE_MANYLINUX2_28_PUBLIC_AARCH64
     AUDITWHEEL_PLAT=manylinux_2_28_aarch64
     GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-arm64
   else
-    BASE_IMAGE=$BASE_IMAGE_MANYLINUX2_28
+    BASE_IMAGE=$BASE_IMAGE_MANYLINUX2_28_PUBLIC
     AUDITWHEEL_PLAT=manylinux_2_28_x86_64
     GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-amd64
   fi

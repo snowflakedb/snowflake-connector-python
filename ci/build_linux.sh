@@ -59,7 +59,14 @@ source /home/user/multibuild/manylinux_utils.sh
 
 for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Constants and setup
-    PYTHON="$(cpython_path ${PYTHON_VERSION} ${U_WIDTH})/bin/python"
+    # Free-threaded interpreters are stored as cp{base}-cp{base}t in manylinux images
+    # (e.g. cp314-cp314t), not cp{ver}-cp{ver} as cpython_path would produce.
+    if [[ "${PYTHON_VERSION}" == *t ]]; then
+        _BASE="${PYTHON_VERSION%t}"
+        PYTHON="/opt/python/cp${_BASE//./}-cp${PYTHON_VERSION//./}/bin/python"
+    else
+        PYTHON="$(cpython_path ${PYTHON_VERSION} ${U_WIDTH})/bin/python"
+    fi
     BUILD_DIR="${DIST_DIR}/$PYTHON_VERSION"
 
     # Build
