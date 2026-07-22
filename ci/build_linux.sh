@@ -88,7 +88,13 @@ fi
 
     # Generate reqs files
     FULL_PYTHON_VERSION="$(${PYTHON} --version | cut -d' ' -f2-)"
-    REQS_FILE="${BUILD_DIR}/requirements_$(${PYTHON} -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').txt"
+    # Free-threaded Python reports version_info (3, 14) same as regular 3.14, so use
+    # PYTHON_VERSION from the outer loop to distinguish requirements_314t.txt from 314.txt.
+    if [[ "${PYTHON_VERSION}" == *t ]]; then
+        REQS_FILE="${BUILD_DIR}/requirements_${PYTHON_VERSION//./}.txt"
+    else
+        REQS_FILE="${BUILD_DIR}/requirements_$(${PYTHON} -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').txt"
+    fi
     ${PYTHON} -m pip install ${BUILD_DIR}/*.whl
     echo "# Generated on: $(${PYTHON} --version)" >${REQS_FILE}
     echo "# With snowflake-connector-python version: $(${PYTHON} -m pip show snowflake-connector-python | grep ^Version | cut -d' ' -f2-)" >>${REQS_FILE}
