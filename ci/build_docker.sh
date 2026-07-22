@@ -5,10 +5,6 @@
 #   - To compile only a specific version(s) pass in versions like: `./build_docker.sh "3.10 3.11"`
 set -o pipefail
 
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
-}
-
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 source $THIS_DIR/set_base_image.sh
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
@@ -19,12 +15,7 @@ cd $THIS_DIR/docker/connector_build
 CONTAINER_NAME=build_pyconnector
 arch=$(uname -p)
 
-log "[Info] Starting build_docker.sh"
-log "[Info] Host: $(uname -a)"
-log "[Info] Versions arg: '${1:-<default, will use build_linux.sh defaults>}'"
-log "[Info] JENKINS_HOME: ${JENKINS_HOME:-<not set>}"
-log "[Info] BASE_IMAGE_MANYLINUX2014: ${BASE_IMAGE_MANYLINUX2014}"
-
+echo "[Info] Building docker image"
 if [[ "$arch" == "aarch64" ]]; then
   BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014AARCH64
   GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-arm64
@@ -33,12 +24,9 @@ else
   GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-amd64
 fi
 
-log "[Info] Selected Docker base image: ${BASE_IMAGE}"
-log "[Info] Building docker image..."
 docker build --pull -t ${CONTAINER_NAME}:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE --build-arg GOSU_URL="$GOSU_URL" . -f Dockerfile
 
-log "[Info] Docker image built. Launching build container..."
-log "[Info] Building Python Connector"
+echo "[Info] Building Python Connector"
 user_id=$(id -u ${USER})
 docker run \
     -e TERM=vt102 \
