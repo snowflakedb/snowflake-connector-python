@@ -24,6 +24,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added native AKS (Azure Kubernetes Service) workload identity support. When running on AKS with workload identity configured, the connector automatically uses `WorkloadIdentityCredential` to authenticate via the injected service account credentials. OIDC backward compatibility is also supported.
   - Added the `workload_identity_aws_use_outbound_token` connection option (default `false`) to opt into AWS WIF JWT attestation via STS `GetWebIdentityToken` instead of the default SigV4 `GetCallerIdentity` method.
   - Fixed a bug where a fully-qualified DDL statement (e.g. `CREATE VIEW db.schema.obj`) on a session with no current schema would populate the connector's cached `_schema`/`_database` from the referenced object's namespace. This made `get_current_schema()` diverge from the server's `CURRENT_SCHEMA()` and mis-qualified Snowpark temp objects (SNOW-3665226).
+  - Fixed JWT key-pair authentication errors to surface the server's specific error code (e.g. `394304` for fingerprint mismatch, `394303` for clock skew) instead of always reporting the generic `250001`. Auth-rejection failures now also use SQLState `28000` (invalid authorization) instead of `08001` (SNOW-3775156).
 
 - v4.6.0(May 28,2026)
   - Dropped support for Python 3.9. The minimum supported version is now Python 3.10.
