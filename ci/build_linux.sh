@@ -73,7 +73,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Allows the default PYTHON_VERSIONS to include future/free-threaded versions without
     # breaking builds that run in an older image.
     if [[ ! -x "${PYTHON}" ]]; then
-        echo "[WARN] Python not found for ${PYTHON_VERSION} at ${PYTHON} — skipping (use manylinux_2_28 image for free-threaded builds)"
+        echo "[WARN] Python not found for ${PYTHON_VERSION} at ${PYTHON} — skipping"
         continue
     fi
 
