@@ -69,14 +69,6 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     fi
     BUILD_DIR="${DIST_DIR}/$PYTHON_VERSION"
 
-    # Skip gracefully when the interpreter isn't in this container (e.g. 3.14t in manylinux2014).
-    # Allows the default PYTHON_VERSIONS to include future/free-threaded versions without
-    # breaking builds that run in an older image.
-    if [[ ! -x "${PYTHON}" ]]; then
-        echo "[WARN] Python not found for ${PYTHON_VERSION} at ${PYTHON} — skipping"
-        continue
-    fi
-
     # Build
     echo "[Info] Building for ${PYTHON_VERSION} with $PYTHON"
     # Clean up possible build artifacts
