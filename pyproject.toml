@@ -4,9 +4,9 @@ requires = [
     # and may be stricter than the version required in `setup.py`
     "setuptools>=40.6.0",
     "wheel",
-    # cython>=3.1 is required for the `freethreading_compatible` directive
+    # cython>=3.2.8 is required for the `freethreading_compatible` directive
     # used by src/snowflake/connector/nanoarrow_cpp/ArrowIterator/nanoarrow_arrow_iterator.pyx
-    "cython>=3.1",
+    "cython>=3.2.8",
 ]
 
 [tool.cibuildwheel]
