@@ -74,9 +74,9 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
 arch=$(uname -p)
 auditwheel show ${BUILD_DIR}/*.whl
 if [[ $arch == x86_64 ]]; then
-  auditwheel repair --plat manylinux2014_x86_64 ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
+  auditwheel repair --plat ${AUDITWHEEL_PLAT:-manylinux2014_x86_64} ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 else
-  auditwheel repair --plat manylinux2014_aarch64 ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
+  auditwheel repair --plat ${AUDITWHEEL_PLAT:-manylinux2014_aarch64} ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 fi
 
     # Generate reqs files
