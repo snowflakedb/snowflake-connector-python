@@ -101,10 +101,8 @@ def test_normalize_identifier_empty():
 def test_build_cache_key_rejects_empty_snowflake():
     key = TokenKey(
         token_type=TokenType.MFA_TOKEN,
-        idp="https://example.com",
         snowflake="",
         username="user",
-        role="",
     )
     with pytest.raises(_InvalidTokenKeyError):
         build_cache_key(key)
@@ -113,10 +111,8 @@ def test_build_cache_key_rejects_empty_snowflake():
 def test_build_cache_key_rejects_empty_username():
     key = TokenKey(
         token_type=TokenType.MFA_TOKEN,
-        idp="https://example.com",
         snowflake="https://example.snowflakecomputing.com",
         username="",
-        role="",
     )
     with pytest.raises(_InvalidTokenKeyError):
         build_cache_key(key)
@@ -127,35 +123,88 @@ def test_build_cache_key_rejects_empty_username():
 # ---------------------------------------------------------------------------
 
 
-def test_golden_hash():
-    """Assert that the cache key hash is stable and must not change between releases.
-
-    Quoted identifier segments (e.g. ``"FIRST LAST"``) contain uppercase content
-    because ``normalize_identifier`` preserves them verbatim — the content inside
-    quotes must already be in the correct case before normalization is called.
-    """
-    idp_raw = "https://login.microsoftonline.com:443/tenant-id/oauth2/v2.0"
-    snowflake_raw = "https://myorg-myaccount.privatelink.snowflakecomputing.com"
-    # Quoted segments have uppercase content because normalize_identifier preserves them verbatim.
-    username_raw = '"FIRST LAST"@long-corporate-domain.example.com'
-    role_raw = '"ANALYST ROLE WITH SPACES":north_america:prod:readonly'
-
+def test_oauth_golden_hash():
+    """Vector A — OAuth (DPoP) flow.  Hash must never change between releases."""
     canonical = json.dumps(
         {
-            "idp": normalize_url(idp_raw),
-            "role": normalize_identifier(role_raw),
-            "snowflake": normalize_url(snowflake_raw),
-            "token_type": "DPOP_BUNDLED_ACCESS_TOKEN",
-            "username": normalize_identifier(username_raw),
+            "idp": normalize_url(
+                "https://login.microsoftonline.com:443/tenant-id/oauth2/v2.0"
+            ),
+            "role": normalize_identifier(
+                '"Analyst Role With Spaces":north_america:prod:readonly'
+            ),
+            "snowflake": normalize_url(
+                "https://myorg-myaccount.privatelink.snowflakecomputing.com"
+            ),
+            "username": normalize_identifier(
+                '"First Last"@long-corporate-domain.example.com'
+            ),
         },
         sort_keys=True,
         separators=(",", ":"),
     )
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    assert f"SnowflakeTokenCache.v2.{digest}" == (
-        "SnowflakeTokenCache.v2."
-        "75ff2ad65a68afb402f125f62894697673c5ef3d863aba466d16b7a81053d1f4"
+    assert f"SnowflakeTokenCache.v2.DPOP_BUNDLED_ACCESS_TOKEN.{digest}" == (
+        "SnowflakeTokenCache.v2.DPOP_BUNDLED_ACCESS_TOKEN."
+        "be782aa7c9abf8698adc9e6de61b954ccec7d9202899b44c2eb4e1dfa4313d5f"
     )
+
+
+def test_mfa_golden_hash():
+    """Vector B — MFA flow.  Hash must never change between releases."""
+    key = TokenKey(
+        token_type=TokenType.MFA_TOKEN,
+        snowflake="https://myorg-myaccount.privatelink.snowflakecomputing.com",
+        username='"First Last"@long-corporate-domain.example.com',
+    )
+    assert build_cache_key(key) == (
+        "SnowflakeTokenCache.v2.MFA_TOKEN."
+        "a508fa2858a6e22e9fdbc90b4149a3ff666d1acbb286c85ff179499ac92d75c8"
+    )
+
+
+# ---------------------------------------------------------------------------
+# build_cache_key — structural assertions
+# ---------------------------------------------------------------------------
+
+
+def test_mfa_key_has_no_idp_or_role():
+    """MFA keyData must contain exactly snowflake and username — no idp, role, or token_type."""
+    key = TokenKey(
+        token_type=TokenType.MFA_TOKEN,
+        snowflake="https://myorg.snowflakecomputing.com",
+        username="alice",
+    )
+    # Reconstruct the canonical JSON that build_cache_key hashes and verify its shape.
+    canonical = json.dumps(
+        {
+            "snowflake": normalize_url("https://myorg.snowflakecomputing.com"),
+            "username": normalize_identifier("alice"),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    assert build_cache_key(key) == f"SnowflakeTokenCache.v2.MFA_TOKEN.{digest}"
+
+
+def test_mfa_vs_oauth_key_differ_for_same_user_and_host():
+    """MFA and OAuth produce different keys for the same user/host (different prefix + field set)."""
+    snowflake = "https://org.snowflakecomputing.com"
+    username = "alice"
+    mfa_key = TokenKey(
+        token_type=TokenType.MFA_TOKEN,
+        snowflake=snowflake,
+        username=username,
+    )
+    oauth_key = TokenKey(
+        token_type=TokenType.OAUTH_ACCESS_TOKEN,
+        snowflake=snowflake,
+        username=username,
+        idp="https://idp.example.com/oauth2",
+        role="analyst",
+    )
+    assert build_cache_key(mfa_key) != build_cache_key(oauth_key)
 
 
 # ---------------------------------------------------------------------------
@@ -172,16 +221,14 @@ def test_build_cache_key_prefix():
         role="analyst",
     )
     result = build_cache_key(key)
-    assert result.startswith("SnowflakeTokenCache.v2.")
+    assert result.startswith("SnowflakeTokenCache.v2.OAUTH_ACCESS_TOKEN.")
 
 
 def test_build_cache_key_hash_is_lowercase_hex():
     key = TokenKey(
         token_type=TokenType.ID_TOKEN,
-        idp="https://host.example.com",
         snowflake="https://host.example.com",
         username="bob",
-        role="",
     )
     suffix = build_cache_key(key).split(".")[-1]
     assert suffix == suffix.lower()
@@ -232,17 +279,13 @@ def test_different_token_type_yields_different_key():
 def test_mfa_empty_role_yields_stable_distinct_key():
     mfa_key = TokenKey(
         token_type=TokenType.MFA_TOKEN,
-        idp="https://org.snowflakecomputing.com",
         snowflake="https://org.snowflakecomputing.com",
         username="alice",
-        role="",
     )
     id_token_key = TokenKey(
         token_type=TokenType.ID_TOKEN,
-        idp="https://org.snowflakecomputing.com",
         snowflake="https://org.snowflakecomputing.com",
         username="alice",
-        role="",
     )
     mfa_result = build_cache_key(mfa_key)
     assert mfa_result == build_cache_key(mfa_key)

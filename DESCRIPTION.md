@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - NEXT_RELEASE(TBD)
-  - Fixed token cache key collisions for multi-account (shared IdP) and multi-role scenarios by switching to a versioned, SHA256-hashed canonical-JSON key applied uniformly across macOS/Windows keyring and the Linux file backend (SNOW-3784431). The new key is threaded through both the sync and async authentication paths, and existing cache entries from the two prior key layouts are transparently migrated to the new format on first use.
+  - Fixed token cache key collisions for multi-account (shared IdP) and multi-role scenarios by switching to a versioned, SHA256-hashed canonical-JSON key with the token type in the key prefix, applied uniformly across macOS/Windows keyring and the Linux file backend (SNOW-3784431). MFA and ID token keys use only the Snowflake host and username; OAuth keys additionally include the full token-endpoint URL and role. Existing cache entries from prior key layouts are transparently migrated on first use.
   - Fixed a bug where a TLS handshake terminated by the peer (`SSLError` containing `SysCallError(-1, 'Unexpected EOF')`) was classified as non-retryable and surfaced as an `OperationalError`, unlike `ECONNRESET`. Such handshake `Unexpected EOF` errors are now retried, on both the sync and async request paths (SNOW-4058589).
 
 - v4.7.3(Sep 3,2026)
