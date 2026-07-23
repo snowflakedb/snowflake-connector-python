@@ -4,7 +4,9 @@ requires = [
     # and may be stricter than the version required in `setup.py`
     "setuptools>=40.6.0",
     "wheel",
-    "cython",
+    # cython>=3.1 is required for the `freethreading_compatible` directive
+    # used by src/snowflake/connector/nanoarrow_cpp/ArrowIterator/nanoarrow_arrow_iterator.pyx
+    "cython>=3.1",
 ]
 
 [tool.cibuildwheel]
@@ -12,6 +14,13 @@ test-skip = "*"
 manylinux-x86_64-image = "manylinux2014"
 environment = {AUDITWHEEL_PLAT="manylinux2014_$(uname -m)"}
 build-verbosity = 1
+# Opt in to free-threaded CPython wheel builds (cp313t, cp314t, ...).
+# Without this, cibuildwheel silently skips every `cp*t-*` target even when
+# the matrix and CIBW_BUILD env var ask for them. Requires cibuildwheel>=2.20.
+# Paired with the `freethreading_compatible` Cython directive in
+# src/snowflake/connector/nanoarrow_cpp/ArrowIterator/nanoarrow_arrow_iterator.pyx
+# so the produced wheel actually keeps the GIL disabled at import time.
+enable = ["cpython-freethreading"]
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
