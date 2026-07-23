@@ -32,10 +32,18 @@ class TokenType(Enum):
     - OAUTH_REFRESH_TOKEN: Long-lived OAuth token to obtain new access tokens
     """
 
-    ID_TOKEN = "ID_TOKEN"
-    MFA_TOKEN = "MFA_TOKEN"
-    OAUTH_ACCESS_TOKEN = "OAUTH_ACCESS_TOKEN"
-    OAUTH_REFRESH_TOKEN = "OAUTH_REFRESH_TOKEN"
+    ID_TOKEN = "IdToken"
+    MFA_TOKEN = "MfaToken"
+    OAUTH_ACCESS_TOKEN = "OauthAccessToken"
+    OAUTH_REFRESH_TOKEN = "OauthRefreshToken"
+
+
+_LEGACY_TOKEN_TYPE_VALUES: dict[TokenType, str] = {
+    TokenType.ID_TOKEN: "ID_TOKEN",
+    TokenType.MFA_TOKEN: "MFA_TOKEN",
+    TokenType.OAUTH_ACCESS_TOKEN: "OAUTH_ACCESS_TOKEN",
+    TokenType.OAUTH_REFRESH_TOKEN: "OAUTH_REFRESH_TOKEN",
+}
 
 
 class _InvalidTokenKeyError(Exception):
@@ -68,36 +76,28 @@ class TokenKey:
 
 
 def normalize_url(url: str) -> str:
-    """Strip scheme and userinfo, drop query/fragment, trim root slash, uppercase."""
+    """Strip scheme and userinfo, drop query/fragment, trim root slash, lowercase."""
     s = re.sub(r"^https?://", "", url)
     at = s.find("@")
     if at >= 0:
         s = s[at + 1 :]
     s = s.split("?")[0].split("#")[0]
     s = s.rstrip("/")
-    return s.upper()
+    return s.lower()
 
 
 def normalize_identifier(identifier: str) -> str:
-    """Uppercase unquoted segments; preserve double-quoted segments verbatim."""
-    result = []
-    in_quotes = False
-    for ch in identifier:
-        if ch == '"':
-            in_quotes = not in_quotes
-            result.append(ch)
-        elif in_quotes:
-            result.append(ch)
-        else:
-            result.append(ch.upper())
-    return "".join(result)
+    """Return verbatim if the value contains any double-quote character; otherwise lowercase."""
+    if '"' in identifier:
+        return identifier
+    return identifier.lower()
 
 
 _OAUTH_TYPES: frozenset[str] = frozenset(
     {
-        "OAUTH_ACCESS_TOKEN",
-        "OAUTH_REFRESH_TOKEN",
-        "DPOP_BUNDLED_ACCESS_TOKEN",
+        "OauthAccessToken",
+        "OauthRefreshToken",
+        "DpopBundledAccessToken",
     }
 )
 
@@ -105,14 +105,14 @@ _OAUTH_TYPES: frozenset[str] = frozenset(
 def build_cache_key(key: TokenKey) -> str:
     """Build the versioned, uniformly-hashed v2 cache key.
 
-    Format: ``SnowflakeTokenCache.v2.<TOKEN_TYPE>.<sha256hex(canonical_json)>``
+    Format: ``SnowflakeTokenCache.v2.<TokenType>.<sha256hex(canonical_json)>``
 
     ``keyData`` is flow-dependent and never contains ``token_type``:
 
-    - OAuth (``OAUTH_ACCESS_TOKEN``, ``OAUTH_REFRESH_TOKEN``,
-      ``DPOP_BUNDLED_ACCESS_TOKEN``): 4 fields — ``idp``, ``role``,
+    - OAuth (``OauthAccessToken``, ``OauthRefreshToken``,
+      ``DpopBundledAccessToken``): 4 fields — ``idp``, ``role``,
       ``snowflake``, ``username``.
-    - MFA / ID token (``MFA_TOKEN``, ``ID_TOKEN``): 2 fields —
+    - MFA / ID token (``MfaToken``, ``IdToken``): 2 fields —
       ``snowflake``, ``username`` only.
 
     The canonical JSON is compact (no whitespace) with keys sorted
@@ -163,7 +163,8 @@ def _legacy_string_key(key: TokenKey) -> str:
         raise _InvalidTokenKeyError("Invalid key, host is empty")
     if not key.username:
         raise _InvalidTokenKeyError("Invalid key, user is empty")
-    return f"{host.upper()}:{key.username.upper()}:{key.token_type.value}"
+    legacy_type = _LEGACY_TOKEN_TYPE_VALUES.get(key.token_type, key.token_type.value)
+    return f"{host.upper()}:{key.username.upper()}:{legacy_type}"
 
 
 def _legacy_hash_key(key: TokenKey) -> str:
@@ -185,7 +186,7 @@ class TokenCache(ABC):
     - Fallback: NoopTokenCache (no caching) if secure storage unavailable
 
     Tokens are keyed by a versioned, SHA-256-hashed canonical-JSON key (v2 format):
-    ``SnowflakeTokenCache.v2.<TOKEN_TYPE>.<sha256hex>``.  OAuth flows include
+    ``SnowflakeTokenCache.v2.<TokenType>.<sha256hex>``.  OAuth flows include
     ``idp`` and ``role`` in the hashed JSON; MFA and ID token flows use only
     ``snowflake`` and ``username``.
     """
@@ -270,7 +271,7 @@ class FileTokenCache(TokenCache):
     Security: File must have 0o600 permissions and be owned by current user.
     Uses file locks to prevent concurrent access corruption.
 
-    JSON map keys are the full ``SnowflakeTokenCache.v2.<TOKEN_TYPE>.<sha256hex>``
+    JSON map keys are the full ``SnowflakeTokenCache.v2.<TokenType>.<sha256hex>``
     strings produced by ``build_cache_key``; hashing is performed once before
     dispatch.
     Note: the filename (``credential_cache_v1.json``) is unchanged for
@@ -539,7 +540,7 @@ class KeyringTokenCache(TokenCache):
     - macOS: Stores tokens in Keychain
     - Windows: Stores tokens in Windows Credential Manager
 
-    The v2 cache key (``SnowflakeTokenCache.v2.<TOKEN_TYPE>.<sha256hex>``) is
+    The v2 cache key (``SnowflakeTokenCache.v2.<TokenType>.<sha256hex>``) is
     used as the keyring service name, and the uppercase username is used as the
     account field. This ensures a distinct entry per token dimension while still
     letting related tokens share Keychain visibility per account.
