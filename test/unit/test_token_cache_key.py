@@ -21,44 +21,44 @@ from snowflake.connector.token_cache import (
 
 
 def test_normalize_url_strips_https_scheme():
-    assert normalize_url("https://example.com") == "EXAMPLE.COM"
+    assert normalize_url("https://example.com") == "example.com"
 
 
 def test_normalize_url_strips_http_scheme():
-    assert normalize_url("http://example.com") == "EXAMPLE.COM"
+    assert normalize_url("http://example.com") == "example.com"
 
 
 def test_normalize_url_no_scheme():
-    assert normalize_url("example.com") == "EXAMPLE.COM"
+    assert normalize_url("example.com") == "example.com"
 
 
 def test_normalize_url_preserves_port_and_path():
     assert (
         normalize_url("https://login.microsoftonline.com:443/tenant-id/oauth2/v2.0")
-        == "LOGIN.MICROSOFTONLINE.COM:443/TENANT-ID/OAUTH2/V2.0"
+        == "login.microsoftonline.com:443/tenant-id/oauth2/v2.0"
     )
 
 
 def test_normalize_url_strips_userinfo():
-    assert normalize_url("https://user:pass@example.com/path") == "EXAMPLE.COM/PATH"
+    assert normalize_url("https://user:pass@example.com/path") == "example.com/path"
 
 
 def test_normalize_url_drops_query_and_fragment():
-    assert normalize_url("https://example.com/path?q=1#frag") == "EXAMPLE.COM/PATH"
+    assert normalize_url("https://example.com/path?q=1#frag") == "example.com/path"
 
 
 def test_normalize_url_trims_root_trailing_slash():
-    assert normalize_url("https://example.com/") == "EXAMPLE.COM"
+    assert normalize_url("https://example.com/") == "example.com"
 
 
 def test_normalize_url_keeps_non_root_trailing_slash_stripped():
-    assert normalize_url("https://example.com/path/") == "EXAMPLE.COM/PATH"
+    assert normalize_url("https://example.com/path/") == "example.com/path"
 
 
-def test_normalize_url_uppercases():
+def test_normalize_url_lowercases():
     assert (
         normalize_url("https://myorg-myaccount.privatelink.snowflakecomputing.com")
-        == "MYORG-MYACCOUNT.PRIVATELINK.SNOWFLAKECOMPUTING.COM"
+        == "myorg-myaccount.privatelink.snowflakecomputing.com"
     )
 
 
@@ -67,26 +67,37 @@ def test_normalize_url_uppercases():
 # ---------------------------------------------------------------------------
 
 
-def test_normalize_identifier_unquoted_uppercased():
-    assert normalize_identifier("north_america") == "NORTH_AMERICA"
+def test_normalize_identifier_unquoted_lowercased():
+    assert normalize_identifier("north_america") == "north_america"
+
+
+def test_normalize_identifier_unquoted_uppercased_input_lowercased():
+    assert normalize_identifier("ANALYST_ROLE") == "analyst_role"
 
 
 def test_normalize_identifier_quoted_segment_verbatim():
     assert normalize_identifier('"First Last"') == '"First Last"'
 
 
-def test_normalize_identifier_mixed():
+def test_normalize_identifier_mixed_verbatim():
+    """Value containing a double-quote anywhere is returned entirely verbatim."""
     assert (
         normalize_identifier('"First Last"@long-corporate-domain.example.com')
-        == '"First Last"@LONG-CORPORATE-DOMAIN.EXAMPLE.COM'
+        == '"First Last"@long-corporate-domain.example.com'
     )
 
 
-def test_normalize_identifier_role_with_quoted_spaces():
+def test_normalize_identifier_role_with_quoted_spaces_verbatim():
+    """Value containing a double-quote anywhere is returned entirely verbatim."""
     assert (
         normalize_identifier('"Analyst Role With Spaces":north_america:prod:readonly')
-        == '"Analyst Role With Spaces":NORTH_AMERICA:PROD:READONLY'
+        == '"Analyst Role With Spaces":north_america:prod:readonly'
     )
+
+
+def test_normalize_identifier_quote_not_at_position_zero_verbatim():
+    """A quote that does NOT appear at position 0 still triggers the verbatim path."""
+    assert normalize_identifier('prefix-"segment"') == 'prefix-"segment"'
 
 
 def test_normalize_identifier_empty():
@@ -144,9 +155,9 @@ def test_oauth_golden_hash():
         separators=(",", ":"),
     )
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    assert f"SnowflakeTokenCache.v2.DPOP_BUNDLED_ACCESS_TOKEN.{digest}" == (
-        "SnowflakeTokenCache.v2.DPOP_BUNDLED_ACCESS_TOKEN."
-        "be782aa7c9abf8698adc9e6de61b954ccec7d9202899b44c2eb4e1dfa4313d5f"
+    assert f"SnowflakeTokenCache.v2.DpopBundledAccessToken.{digest}" == (
+        "SnowflakeTokenCache.v2.DpopBundledAccessToken."
+        "741b6d66d252666d6821bfd19e0151511cf4efdaaeba2b3c87673aa4de6d2c0b"
     )
 
 
@@ -158,8 +169,8 @@ def test_mfa_golden_hash():
         username='"First Last"@long-corporate-domain.example.com',
     )
     assert build_cache_key(key) == (
-        "SnowflakeTokenCache.v2.MFA_TOKEN."
-        "a508fa2858a6e22e9fdbc90b4149a3ff666d1acbb286c85ff179499ac92d75c8"
+        "SnowflakeTokenCache.v2.MfaToken."
+        "10c5dde84bb8f584c0df06ea826d418c4f580e08f9db10187c0cb5e2a732a0d6"
     )
 
 
@@ -185,7 +196,7 @@ def test_mfa_key_has_no_idp_or_role():
         separators=(",", ":"),
     )
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    assert build_cache_key(key) == f"SnowflakeTokenCache.v2.MFA_TOKEN.{digest}"
+    assert build_cache_key(key) == f"SnowflakeTokenCache.v2.MfaToken.{digest}"
 
 
 def test_mfa_vs_oauth_key_differ_for_same_user_and_host():
@@ -221,7 +232,7 @@ def test_build_cache_key_prefix():
         role="analyst",
     )
     result = build_cache_key(key)
-    assert result.startswith("SnowflakeTokenCache.v2.OAUTH_ACCESS_TOKEN.")
+    assert result.startswith("SnowflakeTokenCache.v2.OauthAccessToken.")
 
 
 def test_build_cache_key_hash_is_lowercase_hex():
