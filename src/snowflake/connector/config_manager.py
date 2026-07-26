@@ -4,6 +4,7 @@ import itertools
 import logging
 import os
 import stat
+import sys
 import warnings
 from collections.abc import Iterable
 from operator import methodcaller
@@ -11,8 +12,10 @@ from pathlib import Path
 from typing import Any, Callable, Literal, NamedTuple, TypeVar
 from warnings import warn
 
-import tomlkit
-from tomlkit.items import Table
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.constants import CONFIG_FILE, CONNECTIONS_FILE
@@ -193,9 +196,6 @@ class ConfigOption:
         loaded_var: str | _T = env_var
         if self.parse_str is not None:
             loaded_var = self.parse_str(env_var)
-        if isinstance(loaded_var, (Table, tomlkit.TOMLDocument)):
-            # If we got a TOML table we probably want it in dictionary form
-            return True, loaded_var.value
         return True, loaded_var
 
     def _get_config(self) -> Any:
@@ -217,16 +217,13 @@ class ConfigOption:
         for k in self._nest_path[1:]:
             try:
                 e = e[k]
-            except tomlkit.exceptions.NonExistentKey:
+            except KeyError:
                 raise MissingConfigOptionError(  # TOOO: maybe a child Exception for missing option?
                     f"Configuration option '{self.option_name}' is not defined anywhere, "
                     "have you forgotten to set it in a configuration file, "
                     "or environmental variable?"
                 )
 
-        if isinstance(e, (Table, tomlkit.TOMLDocument)):
-            # If we got a TOML table we probably want it in dictionary form
-            return e.value
         return e
 
 
@@ -298,7 +295,7 @@ class ConfigManager:
         self._options: dict[str, ConfigOption] = dict()
         self._sub_managers: dict[str, ConfigManager] = dict()
         # Dictionary to cache read in config file
-        self.conf_file_cache: tomlkit.TOMLDocument | None = None
+        self.conf_file_cache: dict[str, Any] | None = None
         # Information necessary to be able to nest elements
         #  and add options in O(1)
         self._root_manager: ConfigManager = self
@@ -334,7 +331,7 @@ class ConfigManager:
                 "ConfigManager is trying to read config file, but it doesn't "
                 "have one"
             )
-        read_config_file = tomlkit.TOMLDocument()
+        read_config_file: dict[str, Any] = {}
 
         # Read in all of the config slices
         config_slice_options = ConfigSliceOptions(
@@ -409,7 +406,8 @@ class ConfigManager:
                     warn(f"Bad owner or permissions on {str(filep)}{chmod_message}")
             LOGGER.debug(f"reading configuration file from {str(filep)}")
             try:
-                read_config_piece = tomlkit.parse(filep.read_text())
+                with open(filep, "rb") as f:
+                    read_config_piece = tomllib.load(f)
             except Exception as e:
                 raise ConfigSourceError(
                     "An unknown error happened while loading " f"'{str(filep)}'"
@@ -522,7 +520,7 @@ CONFIG_MANAGER = ConfigManager(
 )
 CONFIG_MANAGER.add_option(
     name="connections",
-    parse_str=tomlkit.parse,
+    parse_str=tomllib.loads,
     default=dict(),
 )
 CONFIG_MANAGER.add_option(

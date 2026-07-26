@@ -75,7 +75,9 @@ requirements:
     - filelock >=3.5,<4
     - sortedcontainers >=2.4.0
     - platformdirs >=2.6.0,<5.0.0
-    - tomlkit
+    {% if py == 310 %}
+    - tomli >=1.2.1
+    {% endif %}
     - boto3 >=1.24
     - botocore >=1.24
 test:
