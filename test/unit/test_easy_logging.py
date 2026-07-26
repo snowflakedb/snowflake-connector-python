@@ -11,7 +11,7 @@ from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 try:
-    import tomlkit
+    import tomli_w
 
     from snowflake.connector import EasyLoggingConfigPython
     from snowflake.connector.config_manager import CONFIG_MANAGER
@@ -91,7 +91,7 @@ def config_file_setup(
     try:
         # create temp config file
         with open(temp_config_file, "w") as f:
-            f.write(tomlkit.dumps(configs[param]))
+            f.write(tomli_w.dumps(configs[param]))
         yield
     finally:
         # remove created dir and file, including log paths and config file paths

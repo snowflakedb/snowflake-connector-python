@@ -6,6 +6,7 @@ import re
 import shutil
 import stat
 import string
+import sys
 import warnings
 from pathlib import Path
 from test.randomize import random_string
@@ -15,6 +16,11 @@ from unittest import mock
 
 import pytest
 from pytest import raises
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from snowflake.connector.compat import IS_WINDOWS
 
@@ -109,11 +115,9 @@ def test_simple_config_read(tmp_files):
         name="test",
         file_path=config_file,
     )
-    from tomlkit import parse
-
     TEST_PARSER.add_option(
         name="connections",
-        parse_str=parse,
+        parse_str=tomllib.loads,
     )
     settings_parser = ConfigManager(
         name="settings",
@@ -162,11 +166,9 @@ def test_simple_config_read_sliced(tmp_files):
             ),
         ),
     )
-    from tomlkit import parse
-
     TEST_PARSER.add_option(
         name="connections",
-        parse_str=parse,
+        parse_str=tomllib.loads,
     )
     settings_parser = ConfigManager(
         name="settings",
@@ -419,9 +421,9 @@ def test_explicit_env_name(monkeypatch):
         name="test_parser",
     )
 
-    from tomlkit import parse
-
-    TEST_PARSER.add_option(name="connections", parse_str=parse, env_name="CONNECTIONS")
+    TEST_PARSER.add_option(
+        name="connections", parse_str=tomllib.loads, env_name="CONNECTIONS"
+    )
     with monkeypatch.context() as m:
         m.setenv("CONNECTIONS", toml_value)
         assert TEST_PARSER["connections"] == {"text": rnd_string}

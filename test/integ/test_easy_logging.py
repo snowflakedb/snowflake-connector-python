@@ -10,12 +10,12 @@ from logging import getLogger
 from pathlib import Path
 
 try:
-    import tomlkit
+    import tomli_w
 
     from snowflake.connector.config_manager import CONFIG_MANAGER
     from snowflake.connector.constants import CONFIG_FILE
 except ImportError:
-    tomlkit = None
+    tomli_w = None
     CONFIG_MANAGER = None
     CONFIG_FILE = None
 
@@ -47,7 +47,7 @@ def config_file_setup(request, temp_config_file, log_directory):
     try:
         # create temp config file
         with open(temp_config_file, "w") as f:
-            f.write(tomlkit.dumps(configs[param]))
+            f.write(tomli_w.dumps(configs[param]))
         yield
     finally:
         # remove created dir and file, including log paths and config file paths

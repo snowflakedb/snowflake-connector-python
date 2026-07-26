@@ -1375,22 +1375,18 @@ def test_qcc_tracks_multi_database_hybrid_tables(conn_cnx) -> None:
 def test_connection_name_loading(
     monkeypatch, db_parameters, tmp_path, mode, connection_name
 ):
-    import tomlkit
+    import tomli_w
 
-    doc = tomlkit.document()
-    default_con = tomlkit.table()
+    doc = {connection_name: dict(db_parameters)}
     tmp_connections_file: None | pathlib.Path = None
     try:
         # If anything unexpected fails here, don't want to expose password
-        for k, v in db_parameters.items():
-            default_con[k] = v
-        doc[connection_name] = default_con
         with monkeypatch.context() as m:
             if mode == "env":
-                m.setenv("SNOWFLAKE_CONNECTIONS", tomlkit.dumps(doc))
+                m.setenv("SNOWFLAKE_CONNECTIONS", tomli_w.dumps(doc))
             else:
                 tmp_connections_file = tmp_path / "connections.toml"
-                tmp_connections_file.write_text(tomlkit.dumps(doc))
+                tmp_connections_file.write_text(tomli_w.dumps(doc))
                 tmp_connections_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
             with snowflake.connector.connect(
                 connection_name=connection_name,
@@ -1410,17 +1406,13 @@ def test_connection_name_loading(
 @pytest.mark.skipolddriver
 @pytest.mark.parametrize("connection_name", ["default", "custom_connection_for_test"])
 def test_default_connection_name_loading(monkeypatch, db_parameters, connection_name):
-    import tomlkit
+    import tomli_w
 
-    doc = tomlkit.document()
-    default_con = tomlkit.table()
+    doc = {connection_name: dict(db_parameters)}
     try:
         # If anything unexpected fails here, don't want to expose password
-        for k, v in db_parameters.items():
-            default_con[k] = v
-        doc[connection_name] = default_con
         with monkeypatch.context() as m:
-            m.setenv("SNOWFLAKE_CONNECTIONS", tomlkit.dumps(doc))
+            m.setenv("SNOWFLAKE_CONNECTIONS", tomli_w.dumps(doc))
             m.setenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", connection_name)
             with snowflake.connector.connect() as conn:
                 with conn.cursor() as cur:
