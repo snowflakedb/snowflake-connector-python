@@ -141,6 +141,22 @@ ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE = "390195"
 BAD_REQUEST_GS_CODE = "390400"
 OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE = "390318"
 
+# Server error codes indicating a credential/authorization rejection.
+# These warrant SQLState 28000 (invalid authorization) instead of 08001.
+CREDENTIAL_REJECTION_GS_CODES: frozenset[str] = frozenset(
+    {
+        "390100",  # AUTHORIZATION_FAILURE
+        "390144",  # JWT_TOKEN_INVALID
+        "394300",  # JWT_TOKEN_INVALID
+        "394301",  # JWT_TOKEN_EXPIRED
+        "394302",  # JWT_TOKEN_NOT_YET_VALID
+        "394303",  # JWT_TOKEN_INVALID_EXPIRATION_TIME
+        "394304",  # JWT_TOKEN_INVALID_PUBLIC_KEY_FINGERPRINT_MISMATCH
+        "394305",  # JWT_TOKEN_INVALID_ALGORITHM
+        "394306",  # JWT_TOKEN_INVALID_FORMAT
+    }
+)
+
 # other constants
 CONTENT_TYPE_APPLICATION_JSON = "application/json"
 ACCEPT_TYPE_APPLICATION_SNOWFLAKE = "application/snowflake"
