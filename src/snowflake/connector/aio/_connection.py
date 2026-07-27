@@ -1084,9 +1084,14 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             ret["data"] = {}
         if _update_current_object:
             data = ret["data"]
-            if "finalDatabaseName" in data and data["finalDatabaseName"] is not None:
+            is_context_switch = sql.strip().upper().startswith("USE ")
+            if data.get("finalDatabaseName") is not None and (
+                self._database is not None or is_context_switch
+            ):
                 self._database = data["finalDatabaseName"]
-            if "finalSchemaName" in data and data["finalSchemaName"] is not None:
+            if data.get("finalSchemaName") is not None and (
+                self._schema is not None or is_context_switch
+            ):
                 self._schema = data["finalSchemaName"]
             if "finalWarehouseName" in data and data["finalWarehouseName"] is not None:
                 self._warehouse = data["finalWarehouseName"]

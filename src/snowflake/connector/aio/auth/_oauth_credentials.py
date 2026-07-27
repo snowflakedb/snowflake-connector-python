@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -55,19 +56,15 @@ class AuthByOauthCredentials(AuthByPluginAsync, AuthByOauthCredentialsSync):
     async def reauthenticate(
         self, conn: SnowflakeConnection, **kwargs: Any
     ) -> dict[str, bool]:
-        """Override to use async connection properly."""
-        # Call the sync reset logic but handle the connection retry ourselves
-        self._reset_access_token()
-        if self._pop_cached_refresh_token():
-            logger.debug(
-                "OAuth refresh token is available, try to use it and get a new access token"
-            )
-            # this part is a little hacky - will need to refactor that in future.
-            # we treat conn as a sync connection here, but this method only reads data from the object - which should be fine.
-            self._do_refresh_token(conn=conn)
-        # Use async authenticate_with_retry
-        await conn.authenticate_with_retry(self)
-        return {"success": True}
+        # The sync reauthenticate path POSTs to the IdP via urllib3, which
+        # would stall the asyncio event loop. Run it in a worker thread.
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: AuthByOauthCredentialsSync.reauthenticate(
+                self, conn=conn, **kwargs
+            ),
+        )
 
     async def update_body(self, body: dict[Any, Any]) -> None:
         AuthByOauthCredentialsSync.update_body(self, body)

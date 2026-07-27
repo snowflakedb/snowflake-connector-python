@@ -56,6 +56,7 @@ class AuthByWorkloadIdentity(AuthByPlugin):
         token: str | None = None,
         entra_resource: str | None = None,
         impersonation_path: list[str] | None = None,
+        aws_use_outbound_token: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -63,6 +64,7 @@ class AuthByWorkloadIdentity(AuthByPlugin):
         self.token = token
         self.entra_resource = entra_resource
         self.impersonation_path = impersonation_path
+        self.aws_use_outbound_token = aws_use_outbound_token
 
         self.attestation: WorkloadIdentityAttestation | None = None
 
@@ -94,6 +96,7 @@ class AuthByWorkloadIdentity(AuthByPlugin):
             session_manager=(
                 conn._session_manager.clone(max_retries=0) if conn else None
             ),
+            aws_use_outbound_token=self.aws_use_outbound_token,
         )
 
     def reauthenticate(self, **kwargs: typing.Any) -> dict[str, bool]:

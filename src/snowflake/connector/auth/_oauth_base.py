@@ -54,9 +54,11 @@ class _OAuthTokensMixin:
         if self._refresh_token_enabled:
             self._refresh_token = None
         self._token_cache = token_cache
+        self._idp_host = idp_host
+        self._tokens_loaded_from_cache = False  # Prevents re-loading tokens from cache
         if self._token_cache:
             logger.debug("token cache is going to be used if needed")
-            self._idp_host = idp_host
+            self._user: str | None = None
             self._access_token_key: TokenKey | None = None
             if self._refresh_token_enabled:
                 self._refresh_token_key: TokenKey | None = None
@@ -64,6 +66,31 @@ class _OAuthTokensMixin:
     def _update_cache_keys(self, user: str) -> None:
         if self._token_cache:
             self._user = user
+
+    def _load_tokens_from_cache(self, user: str) -> bool:
+        """Load both access and refresh tokens from cache into memory.
+
+        Called exactly once at connection start. Returns True if access token loaded.
+        """
+        if self._tokens_loaded_from_cache:
+            return self._access_token is not None
+
+        self._tokens_loaded_from_cache = True
+        self._update_cache_keys(user)
+
+        # Load access token
+        if self._token_cache:
+            self._access_token = self._token_cache.retrieve(
+                self._get_access_token_cache_key()
+            )
+
+        # Load refresh token if enabled
+        if self._refresh_token_enabled and self._token_cache:
+            self._refresh_token = self._token_cache.retrieve(
+                self._get_refresh_token_cache_key()
+            )
+
+        return self._access_token is not None
 
     def _get_access_token_cache_key(self) -> TokenKey | None:
         return (
@@ -79,62 +106,44 @@ class _OAuthTokensMixin:
             else None
         )
 
-    def _pop_cached_token(self, key: TokenKey | None) -> str | None:
-        if self._token_cache is None or key is None:
-            return None
-        return self._token_cache.retrieve(key)
+    def _invalidate_refresh_token(self) -> None:
+        """Clear a confirmed-invalid refresh token from memory and cache.
 
-    def _pop_cached_access_token(self) -> bool:
-        """Retrieves OAuth access token from the token cache if enabled, available and still valid.
-
-        Returns True if cached token found, allowing authentication to skip OAuth flow.
+        A lone remove() does not destroy macOS Keychain ACL entries; only the
+        remove-then-store pattern does. Safe to call on definitive IdP rejection.
         """
-        self._access_token = self._pop_cached_token(self._get_access_token_cache_key())
-        return self._access_token is not None
+        self._refresh_token = None
+        if self._token_cache:
+            key = self._get_refresh_token_cache_key()
+            if key:
+                self._token_cache.remove(key)
 
-    def _pop_cached_refresh_token(self) -> bool:
-        """Retrieves OAuth refresh token from the token cache (if enabled) to silently obtain new access token.
+    def _store_tokens(
+        self, access_token: str | None = None, refresh_token: str | None = None
+    ) -> None:
+        """Update tokens in memory and persistent cache.
 
-        Returns True if refresh token found, enabling automatic token renewal without user interaction.
+        Only calls store(), never remove(), to preserve macOS Keychain ACL.
         """
-        if self._refresh_token_enabled:
-            self._refresh_token = self._pop_cached_token(
-                self._get_refresh_token_cache_key()
-            )
-            return self._refresh_token is not None
-        return False
+        if access_token is not None:
+            logger.debug("storing access token to memory and cache")
+            self._access_token = access_token
+            if self._token_cache:
+                key = self._get_access_token_cache_key()
+                if key:
+                    self._token_cache.store(key, access_token)
 
-    def _reset_cached_token(self, key: TokenKey | None, token: str | None) -> None:
-        if self._token_cache is None or key is None:
-            return
-        if token:
-            self._token_cache.store(key, token)
-        else:
-            self._token_cache.remove(key)
-
-    def _reset_access_token(self, access_token: str | None = None) -> None:
-        """Updates OAuth access token both in memory and in the token cache if enabled"""
-        logger.debug(
-            "resetting access token to %s",
-            "*" * len(access_token) if access_token else None,
-        )
-        self._access_token = access_token
-        self._reset_cached_token(self._get_access_token_cache_key(), self._access_token)
-
-    def _reset_refresh_token(self, refresh_token: str | None = None) -> None:
-        """Updates OAuth refresh token both in memory and in the token cache if necessary"""
-        if self._refresh_token_enabled:
-            logger.debug(
-                "resetting refresh token to %s",
-                "*" * len(refresh_token) if refresh_token else None,
-            )
+        if self._refresh_token_enabled and refresh_token is not None:
+            logger.debug("storing refresh token to memory and cache")
             self._refresh_token = refresh_token
-            self._reset_cached_token(
-                self._get_refresh_token_cache_key(), self._refresh_token
-            )
+            if self._token_cache:
+                key = self._get_refresh_token_cache_key()
+                if key:
+                    self._token_cache.store(key, refresh_token)
 
     def _reset_temporary_state(self) -> None:
         self._access_token = None
+        self._tokens_loaded_from_cache = False
         if self._refresh_token_enabled:
             self._refresh_token = None
         if self._token_cache:
@@ -152,6 +161,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         scope: str,
         token_cache: TokenCache | None,
         refresh_token_enabled: bool,
+        is_snowflake_as_idp: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -167,7 +177,35 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         self._scope = scope
         if refresh_token_enabled:
             logger.debug("oauth refresh token is going to be used if needed")
-            self._scope += (" " if self._scope else "") + "offline_access"
+            if self._should_append_offline_access_scope():
+                self._scope += (" " if self._scope else "") + "offline_access"
+            else:
+                logger.debug(
+                    "skipping 'offline_access' scope: Snowflake custom OAuth "
+                    "uses 'refresh_token' or it is already present in scope"
+                )
+
+    def _should_append_offline_access_scope(self) -> bool:
+        """Whether to append the OIDC ``offline_access`` scope.
+
+        Snowflake custom OAuth (security integrations of type CUSTOM) does not
+        accept ``offline_access`` and instead documents ``refresh_token`` as the
+        scope used to request offline access. Appending ``offline_access``
+        unconditionally causes ``invalid_scope`` errors against Snowflake's
+        authorization server.
+
+        Skip the append when:
+          * the token endpoint host is a Snowflake host, OR
+          * the user already requested ``refresh_token`` in scope (explicit intent).
+        """
+        host = (self._idp_host or "").lower()
+        if host.endswith(".snowflakecomputing.com") or host.endswith(
+            ".snowflakecomputing.cn"
+        ):
+            return False
+        if "refresh_token" in (self._scope or "").split():
+            return False
+        return True
 
     @abstractmethod
     def _request_tokens(
@@ -241,13 +279,45 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         conn: SnowflakeConnection,
         **kwargs: Any,
     ) -> dict[str, bool]:
-        self._reset_access_token()
-        if self._pop_cached_refresh_token():
-            logger.debug(
-                "OAuth refresh token is available, try to use it and get a new access token"
-            )
+        """Handle expired access token by trying refresh token or re-authenticating.
+
+        CRITICAL: Calls _request_tokens() directly, NOT prepare(), to avoid loop.
+        """
+        # Clear expired access token from memory
+        self._access_token = None
+
+        # Try refresh using in-memory token (no keychain read)
+        if self._refresh_token_enabled and self._refresh_token:
+            logger.debug("Attempting to exchange refresh token for new access token")
             self._do_refresh_token(conn=conn)
-        conn.authenticate_with_retry(self)
+
+            if self._access_token is not None:
+                logger.debug("Successfully refreshed access token")
+                return {"success": True}
+
+            logger.debug("Refresh token exchange failed, falling back to browser auth")
+
+        # No refresh or refresh failed - get fresh tokens via browser
+        # Call _request_tokens() DIRECTLY to avoid looping back to prepare()
+        access_token, refresh_token = self._request_tokens(
+            conn=conn,
+            authenticator=conn._authenticator,
+            service_name=conn.service_name,
+            account=conn.account,
+            user=conn.user,
+            password=None,
+        )
+        if access_token is None:
+            self._handle_failure(
+                conn=conn,
+                ret={
+                    "code": ER_FAILED_TO_REQUEST,
+                    "message": "Failed to obtain a new OAuth access token during reauthentication",
+                },
+            )
+            return {"success": False}
+        self._store_tokens(access_token, refresh_token)
+
         return {"success": True}
 
     def prepare(
@@ -262,12 +332,13 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
     ) -> None:
         """Web Browser based Authentication."""
         logger.debug("authenticating with OAuth authorization code flow")
-        self._update_cache_keys(user=user)
-        if self._pop_cached_access_token():
-            logger.info(
-                "OAuth access token is already available in cache, no need to authenticate."
-            )
+
+        # Load tokens from cache ONCE at the start
+        if self._load_tokens_from_cache(user):
+            logger.info("OAuth access token is already available in cache")
             return
+
+        # No cached token - request fresh tokens via browser
         access_token, refresh_token = self._request_tokens(
             conn=conn,
             authenticator=authenticator,
@@ -276,8 +347,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             user=user,
             **kwargs,
         )
-        self._reset_access_token(access_token)
-        self._reset_refresh_token(refresh_token)
+        self._store_tokens(access_token, refresh_token)
 
     def update_body(self, body: dict[Any, Any]) -> None:
         """Used by Auth to update the request that gets sent to /v1/login-request.
@@ -304,14 +374,18 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             logger.info(
                 "failed to exchange the refresh token on a new OAuth access token"
             )
-            self._reset_refresh_token()
+            # Clear in-memory refresh token - leave keychain alone
+            self._refresh_token = None
             return
 
         try:
             json_resp = json.loads(resp.data.decode())
-            self._reset_access_token(json_resp["access_token"])
-            if "refresh_token" in json_resp:
-                self._reset_refresh_token(json_resp["refresh_token"])
+            access_token = json_resp["access_token"]
+            refresh_token = json_resp.get("refresh_token")
+
+            # Store both tokens
+            self._store_tokens(access_token, refresh_token)
+
         except (
             json.JSONDecodeError,
             KeyError,
@@ -323,7 +397,10 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
                 "received the following response body when exchanging refresh token: %s",
                 SecretDetector.mask_secrets(str(resp.data)),
             )
-            self._reset_refresh_token()
+            # IdP responded but rejected the token - evict it from cache so the
+            # next connection doesn't waste a round-trip retrying a dead token.
+            # A lone remove() is safe and does not destroy macOS Keychain ACL.
+            self._invalidate_refresh_token()
 
     def _get_refresh_token_response(
         self, conn: SnowflakeConnection

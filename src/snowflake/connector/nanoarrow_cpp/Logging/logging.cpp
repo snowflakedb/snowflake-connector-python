@@ -28,9 +28,7 @@ Logger::Logger(const char *name) : m_name(name) {}
 
 void Logger::log(int level, const char *path_name, const char *func_name,
                  int line_num, const char *msg) {
-  if (m_pyLogger.get() == nullptr) {
-    setupPyLogger();
-  }
+  std::call_once(m_initOnceFlag, [this]() { setupPyLogger(); });
 
   PyObject *logger = m_pyLogger.get();
   py::UniqueRef keywords(PyDict_New());

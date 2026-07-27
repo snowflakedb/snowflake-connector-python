@@ -9,27 +9,17 @@ There are two scenarios:
 """
 
 import argparse
-import base64
 import math
 import random
 import secrets
 
-import util as stress_util
-from util import task_execution_decorator
+from util import draw_perf_graphs, load_arrow_bytes, make_iter, task_execution_decorator
 
-from snowflake.connector.arrow_context import ArrowConverterContext
-from snowflake.connector.nanoarrow_arrow_iterator import (
-    PyArrowRowIterator as NanoarrowRowIterator,
-)
-from snowflake.connector.nanoarrow_arrow_iterator import (
-    PyArrowTableIterator as NanoarrowTableIterator,
-)
 from snowflake.connector.version import VERSION
 
-stress_util.print_to_console = False
 can_draw = True
 try:
-    import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt  # noqa: F401
 except ImportError:
     can_draw = False
 
@@ -48,33 +38,6 @@ def remove_bytes(byte_str, num_bytes):
         byte for idx, byte in enumerate(byte_str) if idx not in indices_to_remove
     )
     return new_byte_str
-
-
-def create_nanoarrow_pyarrow_iterator(input_data, use_table_unit):
-    # create nanoarrow based iterator
-    return (
-        NanoarrowRowIterator(
-            None,
-            input_data,
-            ArrowConverterContext(
-                session_parameters={"TIMEZONE": "America/Los_Angeles"}
-            ),
-            False,
-            False,
-            False,
-        )
-        if not use_table_unit
-        else NanoarrowTableIterator(
-            None,
-            input_data,
-            ArrowConverterContext(
-                session_parameters={"TIMEZONE": "America/Los_Angeles"}
-            ),
-            False,
-            False,
-            False,
-        )
-    )
 
 
 def task_for_loop_iterator(
@@ -149,16 +112,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    try:
-        # file contains base64 encoded data
-        with open(args.data_file) as f:
-            b64data = f.read()
-
-        decode_bytes = base64.b64decode(b64data)
-    except UnicodeDecodeError:
-        # file contains raw bytes data
-        with open(args.data_file, "rb") as f:
-            decode_bytes = f.read()
+    decode_bytes = load_arrow_bytes(args.data_file)
 
     # if connector is pre-release, then it's nanoarrow based iterator
     print(
@@ -184,26 +138,13 @@ if __name__ == "__main__":
         execute_task(
             task_for_loop_iterator,
             decode_bytes,
-            create_nanoarrow_pyarrow_iterator,
+            make_iter,
             args.iteration_cnt,
             args.use_table_unit,
         )
 
+    with open(perf_record_file) as perf_file, open(memory_record_file) as memory_file:
+        perf_records = [float(line) for line in perf_file.readlines()]
+        memory_records = [float(line) for line in memory_file.readlines()]
     if can_draw:
-        with open(perf_record_file) as perf_file, open(
-            memory_record_file
-        ) as memory_file:
-            # sample rate
-            perf_lines = perf_file.readlines()
-            perf_records = [float(line) for line in perf_lines]
-
-            memory_lines = memory_file.readlines()
-            memory_records = [float(line) for line in memory_lines]
-
-            plt.plot([i for i in range(len(perf_records))], perf_records)
-            plt.title("per iteration execution time")
-            plt.show(block=False)
-            plt.figure()
-            plt.plot([i for i in range(len(memory_records))], memory_records)
-            plt.title("memory usage")
-            plt.show(block=True)
+        draw_perf_graphs(perf_records, memory_records)
