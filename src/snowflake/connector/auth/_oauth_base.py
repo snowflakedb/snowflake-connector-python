@@ -369,7 +369,22 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
                 "no cached OAuth access token; attempting silent refresh using "
                 "the cached refresh token"
             )
-            self._do_refresh_token(conn=conn)
+            try:
+                self._do_refresh_token(conn=conn)
+            except Exception as exc:
+                # A silent refresh at connection setup must never hard-fail the
+                # connection. _get_refresh_token_response() surfaces transport
+                # failures (e.g. a transient network error or an urllib3
+                # exception reaching the token endpoint) through _handle_failure,
+                # which raises. Swallow it here and fall back to interactive auth,
+                # which can still recover - this is the whole point of a proactive
+                # refresh. Note this differs from reauthenticate(), where raising
+                # mid-session is the correct behavior.
+                logger.debug(
+                    "silent refresh raised %s; falling back to interactive "
+                    "authentication",
+                    exc,
+                )
             if self._access_token is not None:
                 logger.info(
                     "obtained a new OAuth access token via the cached refresh token"

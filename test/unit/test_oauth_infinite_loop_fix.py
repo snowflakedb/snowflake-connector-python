@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from snowflake.connector.auth import AuthByOauthCode
+from snowflake.connector.errors import DatabaseError
 from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
 pytestmark = pytest.mark.skipolddriver
@@ -576,6 +577,42 @@ class TestOAuthPrepareProactiveRefresh:
 
         # _do_refresh_token leaves _access_token as None (e.g. IdP rejected the RT).
         with patch.object(auth, "_do_refresh_token") as mock_refresh:
+            with patch.object(
+                auth, "_request_tokens", return_value=("new_access", "new_refresh")
+            ) as mock_request_tokens:
+                auth.prepare(
+                    conn=mock_connection,
+                    authenticator="oauth_authorization_code",
+                    service_name=None,
+                    account="test_account",
+                    user="test_user",
+                )
+
+        mock_refresh.assert_called_once()
+        mock_request_tokens.assert_called_once()
+
+    def test_prepare_falls_back_to_browser_when_refresh_raises(
+        self, mock_connection, mock_token_cache, omit_oauth_urls_check
+    ):
+        """A silent refresh that RAISES (e.g. a transient network error reaching
+        the token endpoint, surfaced as DatabaseError) must not hard-fail the
+        connection: prepare() swallows it and falls back to interactive auth."""
+
+        def mock_retrieve(key: TokenKey):
+            if key.tokenType == TokenType.OAUTH_REFRESH_TOKEN:
+                return "cached_refresh_token"
+            return None
+
+        mock_token_cache.retrieve.side_effect = mock_retrieve
+        auth = self._make_auth(mock_token_cache)
+
+        # _do_refresh_token raises the way _get_refresh_token_response ->
+        # _handle_failure does on a transport error. _access_token stays None.
+        with patch.object(
+            auth,
+            "_do_refresh_token",
+            side_effect=DatabaseError("token endpoint unreachable"),
+        ) as mock_refresh:
             with patch.object(
                 auth, "_request_tokens", return_value=("new_access", "new_refresh")
             ) as mock_request_tokens:
