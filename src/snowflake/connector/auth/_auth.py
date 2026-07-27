@@ -53,6 +53,7 @@ from ..network import (
     CONTENT_TYPE_APPLICATION_JSON,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
     OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE,
+    OAUTH_ACCESS_TOKEN_INVALID_GS_CODE,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
@@ -419,11 +420,21 @@ class Auth:
                         sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                     )
                 )
-            elif (errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE) and (
+            elif (
+                errno
+                in (
+                    OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE,
+                    OAUTH_ACCESS_TOKEN_INVALID_GS_CODE,
+                )
+            ) and (
                 # SNOW-2329031: OAuth v1.0 does not support token renewal,
                 # for backward compatibility, we do not raise an exception here
                 not isinstance(auth_instance, AuthByOAuth)
             ):
+                # A presented OAuth access token was rejected as expired or
+                # invalid. Reauthenticate (refresh token or interactive) instead
+                # of hard-failing; reauthenticate() also evicts the stale token
+                # from the cache on terminal failure so it is not replayed.
                 raise ReauthenticationRequest(
                     ProgrammingError(
                         msg=ret["message"],

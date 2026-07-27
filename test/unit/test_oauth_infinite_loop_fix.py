@@ -506,6 +506,143 @@ class TestOAuthPrepareUsesCache:
             mock_request_tokens.assert_called_once()
 
 
+class TestOAuthPrepareProactiveRefresh:
+    """Tests for prepare() proactively refreshing when only a refresh token is cached.
+
+    Covers the cross-process silent-refresh case: a fresh process with a valid
+    cached refresh token but no cached access token should obtain a new access
+    token via refresh, WITHOUT falling back to the interactive browser flow.
+    """
+
+    def _make_auth(self, mock_token_cache, refresh_token_enabled=True):
+        return AuthByOauthCode(
+            "app",
+            "clientId",
+            "clientSecret",
+            "https://test.snowflakecomputing.com/oauth/authorize",
+            "https://test.snowflakecomputing.com/oauth/token-request",
+            "http://localhost:8080",
+            "session:role:test",
+            "test.snowflakecomputing.com",
+            token_cache=mock_token_cache,
+            refresh_token_enabled=refresh_token_enabled,
+        )
+
+    def test_prepare_refreshes_when_only_refresh_token_cached(
+        self, mock_connection, mock_token_cache, omit_oauth_urls_check
+    ):
+        """No cached access token + valid cached refresh token -> silent refresh, no browser."""
+
+        def mock_retrieve(key: TokenKey):
+            if key.tokenType == TokenType.OAUTH_REFRESH_TOKEN:
+                return "cached_refresh_token"
+            return None  # no access token cached
+
+        mock_token_cache.retrieve.side_effect = mock_retrieve
+        auth = self._make_auth(mock_token_cache)
+
+        def fake_refresh(*args, **kwargs):
+            auth._access_token = "refreshed_access_token"
+
+        with patch.object(
+            auth, "_do_refresh_token", side_effect=fake_refresh
+        ) as mock_refresh:
+            with patch.object(auth, "_request_tokens") as mock_request_tokens:
+                auth.prepare(
+                    conn=mock_connection,
+                    authenticator="oauth_authorization_code",
+                    service_name=None,
+                    account="test_account",
+                    user="test_user",
+                )
+
+        # Refresh was attempted and browser flow was skipped.
+        mock_refresh.assert_called_once()
+        mock_request_tokens.assert_not_called()
+        assert auth._access_token == "refreshed_access_token"
+
+    def test_prepare_falls_back_to_browser_when_refresh_yields_no_token(
+        self, mock_connection, mock_token_cache, omit_oauth_urls_check
+    ):
+        """If refresh does not produce an access token, fall back to interactive auth."""
+
+        def mock_retrieve(key: TokenKey):
+            if key.tokenType == TokenType.OAUTH_REFRESH_TOKEN:
+                return "cached_refresh_token"
+            return None
+
+        mock_token_cache.retrieve.side_effect = mock_retrieve
+        auth = self._make_auth(mock_token_cache)
+
+        # _do_refresh_token leaves _access_token as None (e.g. IdP rejected the RT).
+        with patch.object(auth, "_do_refresh_token") as mock_refresh:
+            with patch.object(
+                auth, "_request_tokens", return_value=("new_access", "new_refresh")
+            ) as mock_request_tokens:
+                auth.prepare(
+                    conn=mock_connection,
+                    authenticator="oauth_authorization_code",
+                    service_name=None,
+                    account="test_account",
+                    user="test_user",
+                )
+
+        mock_refresh.assert_called_once()
+        mock_request_tokens.assert_called_once()
+
+    def test_prepare_skips_refresh_when_access_token_cached(
+        self, mock_connection, mock_token_cache, omit_oauth_urls_check
+    ):
+        """A cached access token short-circuits before any refresh attempt."""
+
+        def mock_retrieve(key: TokenKey):
+            if key.tokenType == TokenType.OAUTH_ACCESS_TOKEN:
+                return "cached_access_token"
+            if key.tokenType == TokenType.OAUTH_REFRESH_TOKEN:
+                return "cached_refresh_token"
+            return None
+
+        mock_token_cache.retrieve.side_effect = mock_retrieve
+        auth = self._make_auth(mock_token_cache)
+
+        with patch.object(auth, "_do_refresh_token") as mock_refresh:
+            with patch.object(auth, "_request_tokens") as mock_request_tokens:
+                auth.prepare(
+                    conn=mock_connection,
+                    authenticator="oauth_authorization_code",
+                    service_name=None,
+                    account="test_account",
+                    user="test_user",
+                )
+
+        mock_refresh.assert_not_called()
+        mock_request_tokens.assert_not_called()
+        assert auth._access_token == "cached_access_token"
+
+    def test_prepare_no_proactive_refresh_when_refresh_disabled(
+        self, mock_connection, mock_token_cache, omit_oauth_urls_check
+    ):
+        """With refresh tokens disabled, prepare() must not attempt a refresh."""
+        mock_token_cache.retrieve.return_value = None  # nothing cached
+
+        auth = self._make_auth(mock_token_cache, refresh_token_enabled=False)
+
+        with patch.object(auth, "_do_refresh_token") as mock_refresh:
+            with patch.object(
+                auth, "_request_tokens", return_value=("new_access", "new_refresh")
+            ) as mock_request_tokens:
+                auth.prepare(
+                    conn=mock_connection,
+                    authenticator="oauth_authorization_code",
+                    service_name=None,
+                    account="test_account",
+                    user="test_user",
+                )
+
+        mock_refresh.assert_not_called()
+        mock_request_tokens.assert_called_once()
+
+
 class TestOAuthStoreTokensNullKeyGuard:
     """Tests for _store_tokens() null key guard - prevents store(None, ...) when user unset."""
 
@@ -639,3 +776,82 @@ class TestOAuthRefreshTokenEviction:
 
         assert auth._refresh_token is None  # cleared from memory
         mock_token_cache.remove.assert_not_called()  # keychain untouched
+
+
+class TestOAuthAccessTokenEviction:
+    """Tests for _invalidate_access_token() - evicts a poisoned access token so it
+    is not replayed on the next connection (Gap B: 'Invalid OAuth access token')."""
+
+    def _make_auth(self, mock_token_cache, refresh_token_enabled=True):
+        return AuthByOauthCode(
+            "app",
+            "clientId",
+            "clientSecret",
+            "https://test.snowflakecomputing.com/oauth/authorize",
+            "https://test.snowflakecomputing.com/oauth/token-request",
+            "http://localhost:8080",
+            "session:role:test",
+            "test.snowflakecomputing.com",
+            token_cache=mock_token_cache,
+            refresh_token_enabled=refresh_token_enabled,
+        )
+
+    def test_invalidate_access_token_removes_from_cache(
+        self, mock_token_cache, omit_oauth_urls_check
+    ):
+        """_invalidate_access_token() clears memory and calls cache.remove() with
+        the access-token key (a lone remove(), never followed by store())."""
+        auth = self._make_auth(mock_token_cache)
+        auth._update_cache_keys("test_user")
+        auth._access_token = "poisoned_access_token"
+
+        auth._invalidate_access_token()
+
+        assert auth._access_token is None
+        mock_token_cache.remove.assert_called_once()
+        removed_key = mock_token_cache.remove.call_args.args[0]
+        assert removed_key.tokenType == TokenType.OAUTH_ACCESS_TOKEN
+        mock_token_cache.store.assert_not_called()
+
+    def test_reauthenticate_evicts_access_token_on_terminal_failure(
+        self, mock_connection, mock_token_cache, omit_oauth_urls_check
+    ):
+        """On terminal reauth failure (no new token obtained), the stale access
+        token is evicted from the cache so the next process does not replay it."""
+        auth = self._make_auth(mock_token_cache, refresh_token_enabled=False)
+        auth._update_cache_keys("test_user")
+        auth._access_token = "poisoned_access_token"
+
+        with patch.object(auth, "_request_tokens", return_value=(None, None)):
+            with patch.object(auth, "_handle_failure") as mock_handle_failure:
+                result = auth.reauthenticate(conn=mock_connection)
+
+        assert result == {"success": False}
+        assert auth._access_token is None
+        mock_handle_failure.assert_called_once()
+        # The poisoned access token was removed and nothing was stored on failure.
+        mock_token_cache.remove.assert_called_once()
+        removed_key = mock_token_cache.remove.call_args.args[0]
+        assert removed_key.tokenType == TokenType.OAUTH_ACCESS_TOKEN
+        mock_token_cache.store.assert_not_called()
+
+    def test_reauthenticate_success_does_not_evict_access_token(
+        self, mock_connection, mock_token_cache, omit_oauth_urls_check
+    ):
+        """On successful reauth the new token is stored (ACL-safe overwrite) and
+        the access-token key is NOT removed (avoids the ACL-destroying
+        remove-then-store pattern on macOS Keychain)."""
+        auth = self._make_auth(mock_token_cache, refresh_token_enabled=False)
+        auth._update_cache_keys("test_user")
+        auth._access_token = "old_access_token"
+
+        with patch.object(
+            auth, "_request_tokens", return_value=("new_access", "new_refresh")
+        ):
+            result = auth.reauthenticate(conn=mock_connection)
+
+        assert result == {"success": True}
+        assert auth._access_token == "new_access"
+        # New token stored; no remove() on the access-token key.
+        mock_token_cache.store.assert_called()
+        mock_token_cache.remove.assert_not_called()

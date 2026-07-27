@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from ...auth import Auth as AuthSync
 from ...auth._auth import AUTHENTICATION_REQUEST_KEY_WHITELIST
+from ...auth.oauth import AuthByOAuth
 from ...compat import urlencode
 from ...constants import (
     HTTP_HEADER_ACCEPT,
@@ -31,6 +32,7 @@ from ...network import (
     CONTENT_TYPE_APPLICATION_JSON,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
     OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE,
+    OAUTH_ACCESS_TOKEN_INVALID_GS_CODE,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
@@ -298,6 +300,19 @@ class Auth(AuthSync):
                     )
                 )
             elif errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE:
+                raise ReauthenticationRequest(
+                    ProgrammingError(
+                        msg=ret["message"],
+                        errno=int(errno),
+                        sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                    )
+                )
+            elif errno == OAUTH_ACCESS_TOKEN_INVALID_GS_CODE and not isinstance(
+                auth_instance, AuthByOAuth
+            ):
+                # A cached OAuth access token was rejected as invalid (not merely
+                # expired): reauthenticate instead of hard-failing. Excludes OAuth
+                # v1.0 (AuthByOAuth), whose user-supplied token cannot be renewed.
                 raise ReauthenticationRequest(
                     ProgrammingError(
                         msg=ret["message"],
