@@ -75,13 +75,11 @@ def check_compatibility(urllib3_version, chardet_version, charset_normalizer_ver
     if chardet_version:
         major, minor, patch = chardet_version.split(".")[:3]
         major, minor, patch = int(major), int(minor), int(patch)
-        # chardet_version >= 3.0.2, < 6.0.0
-        assert (3, 0, 2) <= (major, minor, patch) < (6, 0, 0)
+        assert (3, 0, 2) <= (major, minor, patch)
     elif charset_normalizer_version:
         major, minor, patch = charset_normalizer_version.split(".")[:3]
         major, minor, patch = int(major), int(minor), int(patch)
-        # charset_normalizer >= 2.0.0 < 4.0.0
-        assert (2, 0, 0) <= (major, minor, patch) < (4, 0, 0)
+        assert (2, 0, 0) <= (major, minor, patch)
     else:
         warnings.warn(
             "Unable to find acceptable character detection dependency "

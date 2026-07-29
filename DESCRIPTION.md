@@ -9,6 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - NEXT_RELEASE(TBD)
   - Fixed `split_statements` treating `//` as SQL instead of a line comment, which could merge multiple statements when a `//` comment contained an apostrophe (SNOW-3772985).
+  - Fixed a spurious `RequestsDependencyWarning` emitted at import time by the vendored `requests` when a newer `chardet` (7.x) or `charset_normalizer` (3.x) is installed. The vendored `check_compatibility()` no longer enforces upper version bounds on `chardet`/`charset_normalizer` (SNOW-3559506).
 
 - v4.7.1(Jul 15,2026)
   - Added support for Python 3.14t (free-threaded).
