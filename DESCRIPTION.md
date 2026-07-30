@@ -9,6 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - NEXT_RELEASE(TBD)
   - Fixed `split_statements` treating `//` as SQL instead of a line comment, which could merge multiple statements when a `//` comment contained an apostrophe (SNOW-3772985).
+  - Fixed a bug where `client_prefetch_threads=0` could fall back to the default thread count instead of following the existing lower-bound correction, and aligned async `client_prefetch_threads` validation with the sync path.
 
 - v4.7.1(Jul 15,2026)
   - Added support for Python 3.14t (free-threaded).
