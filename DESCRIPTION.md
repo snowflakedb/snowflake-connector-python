@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - NEXT_RELEASE(TBD)
+  - Added a new `arrow` extra (`pip install "snowflake-connector-python[arrow]"`) that installs only PyArrow, allowing `fetch_arrow_all` and `fetch_arrow_batches` to be used without pandas installed. The `pandas` extra now depends on the `arrow` extra and installs the same packages as before (SNOW-710684).
   - Fixed `split_statements` treating `//` as SQL instead of a line comment, which could merge multiple statements when a `//` comment contained an apostrophe (SNOW-3772985).
 
 - v4.7.1(Jul 15,2026)
