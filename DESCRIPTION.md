@@ -16,6 +16,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - DEBUG logging in `create_batches_from_response()` reports chunk-header names with type/length value metadata (SNOW-3675590).
   - The malformed-response ERROR log in `create_batches_from_response()` reports a structural summary of the response (SNOW-3675590).
   - SQL text is masked before it is written to DEBUG logs: `_format_query_for_log()` runs the query through `SecretDetector`, covering the cursor and connection paths on both sync and async. The cancel-query log paths use the same masking (SNOW-3675590).
+  - Deferred the SQL-masking cost to log emit-time: query DEBUG lines pass a lazy `_format_query_for_log_lazy()` wrapper whose `__str__` masks only when a handler emits the record (SNOW-3675590).
 
 - v4.7.2(Aug 6,2026)
   - Fixed a thread leak in the file transfer agent by properly shutting down ThreadPoolExecutors after PUT/GET transfers (SNOW-3556240, #2878).
