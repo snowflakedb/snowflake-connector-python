@@ -137,6 +137,7 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
+from .secret_detector import SecretDetector
 from .session_manager import (
     HttpConfig,
     ProxySupportAdapterFactory,
@@ -2285,7 +2286,11 @@ class SnowflakeConnection:
 
     def _cancel_query(self, sql: str, request_id: UUID) -> dict[str, bool | None]:
         """Cancels the query with the exact SQL query and requestId."""
-        logger.debug("_cancel_query sql=[%s], request_id=[%s]", sql, request_id)
+        logger.debug(
+            "_cancel_query sql=[%s], request_id=[%s]",
+            self._format_query_for_log(sql),
+            request_id,
+        )
         url_parameters = {REQUEST_ID: str(uuid.uuid4())}
 
         return self.rest.request(
@@ -2403,6 +2408,10 @@ class SnowflakeConnection:
 
     def _format_query_for_log(self, query: str) -> str:
         ret = " ".join(line.strip() for line in query.split("\n"))
+        # SNOW-3675590: SQL text can embed cloud credentials (e.g. COPY/CREATE
+        # STAGE CREDENTIALS=(...), PUT/GET), so mask before the query reaches
+        # any log handler.
+        ret = SecretDetector.mask_secrets(ret).masked_text
         return (
             ret
             if len(ret) < self.log_max_query_length

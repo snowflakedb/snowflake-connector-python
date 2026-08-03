@@ -715,7 +715,11 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         self, sql: str, request_id: uuid.UUID
     ) -> dict[str, bool | None]:
         """Cancels the query with the exact SQL query and requestId."""
-        logger.debug("_cancel_query sql=[%s], request_id=[%s]", sql, request_id)
+        logger.debug(
+            "_cancel_query sql=[%s], request_id=[%s]",
+            self._format_query_for_log(sql),
+            request_id,
+        )
         url_parameters = {REQUEST_ID: str(uuid.uuid4())}
 
         return await self.rest.request(
