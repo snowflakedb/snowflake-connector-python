@@ -524,6 +524,25 @@ for m in [method for method in dir(errors) if callable(getattr(errors, method))]
 logger = getLogger(__name__)
 
 
+class _LazyQueryLog:
+    """Defer query mask+format until a DEBUG record is actually emitted.
+
+    ``logging`` only calls ``str()`` on a positional arg when a handler emits
+    the record (i.e. after the level check passes), so wrapping the
+    ``SecretDetector`` masking here avoids paying for it when DEBUG is disabled,
+    without a ``getEffectiveLevel()`` guard at each call site.
+    """
+
+    __slots__ = ("_format", "_query")
+
+    def __init__(self, format_fn: Callable[[str], str], query: str) -> None:
+        self._format = format_fn
+        self._query = query
+
+    def __str__(self) -> str:
+        return self._format(self._query)
+
+
 class TypeAndBinding(NamedTuple):
     """Stores the type name and the Snowflake binding."""
 
@@ -2288,7 +2307,7 @@ class SnowflakeConnection:
         """Cancels the query with the exact SQL query and requestId."""
         logger.debug(
             "_cancel_query sql=[%s], request_id=[%s]",
-            self._format_query_for_log(sql),
+            self._format_query_for_log_lazy(sql),
             request_id,
         )
         url_parameters = {REQUEST_ID: str(uuid.uuid4())}
@@ -2417,6 +2436,10 @@ class SnowflakeConnection:
             if len(ret) < self.log_max_query_length
             else ret[0 : self.log_max_query_length] + "..."
         )
+
+    def _format_query_for_log_lazy(self, query: str) -> _LazyQueryLog:
+        """Lazy ``_format_query_for_log`` — masks only if the record is emitted."""
+        return _LazyQueryLog(self._format_query_for_log, query)
 
     def __enter__(self) -> SnowflakeConnection:
         """Context manager."""
