@@ -15,6 +15,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Result batch construction now logs only whether a `qrmk` is present, for both the sync and async result paths (SNOW-3675590).
   - DEBUG logging in `create_batches_from_response()` reports chunk-header names with type/length value metadata (SNOW-3675590).
   - The malformed-response ERROR log in `create_batches_from_response()` reports a structural summary of the response (SNOW-3675590).
+  - SQL text is masked before it is written to DEBUG logs: `_format_query_for_log()` runs the query through `SecretDetector`, covering the cursor and connection paths on both sync and async. The cancel-query log paths use the same masking (SNOW-3675590).
 
 - v4.7.2(Aug 6,2026)
   - Fixed a thread leak in the file transfer agent by properly shutting down ThreadPoolExecutors after PUT/GET transfers (SNOW-3556240, #2878).
