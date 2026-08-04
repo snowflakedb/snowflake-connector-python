@@ -9,6 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - NEXT_RELEASE(TBD)
   - Fixed `split_statements` treating `//` as SQL instead of a line comment, which could merge multiple statements when a `//` comment contained an apostrophe (SNOW-3772985).
+  - Fixed `PUT` incorrectly failing with a `403 Client Error: Forbidden` when checking whether a file already exists on S3. S3 returns `403` instead of `404` for a `HEAD` request on a non-existent key when the caller's credentials lack `s3:ListBucket` on the bucket, which is the case for the scoped credentials Snowflake issues for stage uploads. This is now treated the same as a `404` (file not found) (SNOW-3869839).
 
 - v4.7.1(Jul 15,2026)
   - Added support for Python 3.14t (free-threaded).

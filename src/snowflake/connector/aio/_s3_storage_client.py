@@ -211,7 +211,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
                 content_length=int(metadata.get("Content-Length")),
                 encryption_metadata=encryption_metadata,
             )
-        elif response.status == 404:
+        elif response.status in (404, 403):
+            # S3 returns 403 (instead of 404) for a HEAD request on a
+            # non-existent key when the caller's credentials lack
+            # s3:ListBucket on the bucket. The scoped credentials Snowflake
+            # issues for stage PUTs only grant object-level permissions, so
+            # this is expected and doesn't mean the file exists or that the
+            # upload itself will fail.
             logger.debug(
                 f"not found. bucket: {self.s3location.bucket_name}, path: {path}"
             )

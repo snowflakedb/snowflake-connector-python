@@ -216,6 +216,47 @@ def test_get_header_unknown_error(caplog):
             rest_client.get_file_header("file.txt")
 
 
+def test_get_header_403_treated_as_not_found():
+    """S3 returns 403 instead of 404 for HEAD on a missing key when the caller lacks s3:ListBucket (SNOW-3869839)."""
+    meta_info = {
+        "name": "data1.txt.gz",
+        "stage_location_type": "S3",
+        "no_sleeping_time": True,
+        "put_callback": None,
+        "put_callback_output_stream": None,
+        SHA256_DIGEST: "123456789abcdef",
+        "dst_file_name": "data1.txt.gz",
+        "src_file_name": path.join(THIS_DIR, "../data", "put_get_1.txt"),
+        "overwrite": True,
+    }
+    meta = SnowflakeFileMeta(**meta_info)
+    creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": "", "AWS_TOKEN": ""}
+    rest_client = SnowflakeS3RestClient(
+        meta,
+        StorageCredential(
+            creds,
+            MagicMock(autospec=SnowflakeConnection),
+            "PUT file:/tmp/file.txt @~",
+        ),
+        {
+            "locationType": "AWS",
+            "location": "bucket/path",
+            "creds": creds,
+            "region": "test",
+            "endPoint": None,
+        },
+        8 * megabyte,
+    )
+    resp = Response()
+    resp.status_code = 403
+    from snowflake.connector.storage_client import METHODS, ResultStatus
+
+    with mock.patch.dict(METHODS, HEAD=MagicMock(return_value=resp)):
+        file_header = rest_client.get_file_header("file.txt")
+    assert file_header is None
+    assert meta.result_status == ResultStatus.NOT_FOUND_FILE
+
+
 def test_upload_expiry_error():
     """Tests whether token expiry error is handled as expected when uploading."""
     meta_info = {
