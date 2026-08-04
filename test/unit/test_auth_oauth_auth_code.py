@@ -196,6 +196,26 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(
             False,
             ProgrammingError,
         ),
+        (
+            "Uppercase account name — host case must not break idp detection",
+            "",
+            "",
+            "PM.snowflakecomputing.com",
+            "https://PM.snowflakecomputing.com/oauth/authorize",
+            "https://PM.snowflakecomputing.com/oauth/token",
+            True,
+            None,
+        ),
+        (
+            "Mixed-case account name in URL",
+            "",
+            "",
+            "MyAccount.snowflakecomputing.com",
+            "https://MyAccount.snowflakecomputing.com/oauth/authorize",
+            "https://MyAccount.snowflakecomputing.com/oauth/token",
+            True,
+            None,
+        ),
     ],
 )
 def test_eligible_for_default_client_credentials_via_constructor(
