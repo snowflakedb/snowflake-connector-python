@@ -42,6 +42,12 @@ class MissingPandas(MissingOptionalDependency):
     _dep_name = "pandas"
 
 
+class MissingPyArrow(MissingOptionalDependency):
+    """The class is specifically for pyarrow optional dependency."""
+
+    _dep_name = "pyarrow"
+
+
 class MissingKeyring(MissingOptionalDependency):
     """The class is specifically for sso optional dependency."""
 
@@ -91,19 +97,33 @@ def warn_incompatible_dep(
     )
 
 
-def _import_or_missing_pandas_option() -> (
-    tuple[ModuleLikeObject, ModuleLikeObject, bool]
-):
-    """This function tries importing the following packages: pandas, pyarrow.
+def _import_or_missing_pandas_option(
+    installed_pyarrow: bool,
+) -> tuple[ModuleLikeObject, bool]:
+    """This function tries importing pandas.
 
-    If available it returns pandas and pyarrow packages with a flag of whether they were imported.
-    It also warns users if they have an unsupported pyarrow version installed if possible.
+    Pandas fetch APIs also require pyarrow, so pandas is only reported as
+    available when pyarrow is too.
     """
+    if not installed_pyarrow:
+        return MissingPandas(), False
     try:
         pandas = importlib.import_module("pandas")
         # since we enable relative imports without dots this import gives us an issues when ran from test directory
         from pandas import DataFrame  # NOQA
 
+        return pandas, True
+    except ImportError:
+        return MissingPandas(), False
+
+
+def _import_or_missing_pyarrow_option() -> tuple[ModuleLikeObject, bool]:
+    """This function tries importing pyarrow.
+
+    If available it returns the pyarrow package with a flag of whether it was imported.
+    It also warns users if they have an unsupported pyarrow version installed if possible.
+    """
+    try:
         pyarrow = importlib.import_module("pyarrow")
 
         # set default memory pool to system for pyarrow to_pandas conversion
@@ -118,30 +138,33 @@ def _import_or_missing_pandas_option() -> (
             dependencies = snowflake_connector_dist.metadata.get_all(
                 "Requires-Dist", []
             )
-            pandas_pyarrow_extra = None
+            arrow_pyarrow_extra = None
             for dependency in dependencies:
                 dep = Requirement(dependency)
                 if (
                     dep.marker is not None
-                    and dep.marker.evaluate({"extra": "pandas"})
+                    and dep.marker.evaluate({"extra": "arrow"})
                     and dep.name == "pyarrow"
                 ):
-                    pandas_pyarrow_extra = dep
+                    arrow_pyarrow_extra = dep
                     break
 
             installed_pyarrow_version = pyarrow_dist.version
-            if not pandas_pyarrow_extra.specifier.contains(installed_pyarrow_version):
+            # metadata from installs predating the arrow extra has no such pin
+            if arrow_pyarrow_extra is not None and not (
+                arrow_pyarrow_extra.specifier.contains(installed_pyarrow_version)
+            ):
                 warn_incompatible_dep(
-                    "pyarrow", installed_pyarrow_version, pandas_pyarrow_extra
+                    "pyarrow", installed_pyarrow_version, arrow_pyarrow_extra
                 )
 
         except PackageNotFoundError as e:
             logger.info(
                 f"Cannot determine if compatible pyarrow is installed because of missing package(s): {e}"
             )
-        return pandas, pyarrow, True
+        return pyarrow, True
     except ImportError:
-        return MissingPandas(), MissingPandas(), False
+        return MissingPyArrow(), False
 
 
 def _import_or_missing_keyring_option() -> tuple[ModuleLikeObject, bool]:
@@ -191,7 +214,8 @@ def _import_or_missing_azure_identity_option() -> (
 
 
 # Create actual constants to be imported from this file
-pandas, pyarrow, installed_pandas = _import_or_missing_pandas_option()
+pyarrow, installed_pyarrow = _import_or_missing_pyarrow_option()
+pandas, installed_pandas = _import_or_missing_pandas_option(installed_pyarrow)
 keyring, installed_keyring = _import_or_missing_keyring_option()
 botocore, boto3, installed_boto = _import_or_missing_boto_option()
 aiobotocore, aioboto3, installed_aioboto = _import_or_missing_aioboto_option()

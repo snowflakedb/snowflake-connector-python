@@ -7,7 +7,7 @@ import time
 from base64 import b64decode
 from enum import Enum, unique
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Sequence
+from typing import TYPE_CHECKING, Any, Iterator, NamedTuple, Sequence
 
 from typing_extensions import Self
 
@@ -37,16 +37,13 @@ DOWNLOAD_TIMEOUT = 7  # seconds
 
 if TYPE_CHECKING:  # pragma: no cover
     from pandas import DataFrame
-    from pyarrow import DataType, Table
+    from pyarrow import Table
 
     from .connection import SnowflakeConnection
     from .converter import SnowflakeConverterType
     from .cursor import ResultMetadataV2, SnowflakeCursor
     from .vendored.requests import Response
 
-
-# emtpy pyarrow type array corresponding to FIELD_TYPES
-FIELD_TYPE_TO_PA_TYPE: list[Callable[[ResultMetadataV2], DataType]] = []
 
 # qrmk related constants
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
@@ -824,12 +821,8 @@ class ArrowResultBatch(ResultBatch):
 
     def _create_empty_table(self) -> Table:
         """Returns empty Arrow table based on schema"""
-        if installed_pandas:
-            # initialize pyarrow type array corresponding to FIELD_TYPES
-            FIELD_TYPE_TO_PA_TYPE = [e.pa_type for e in FIELD_TYPES]
         fields = [
-            pa.field(s.name, FIELD_TYPE_TO_PA_TYPE[s.type_code](s))
-            for s in self._schema
+            pa.field(s.name, FIELD_TYPES[s.type_code].pa_type(s)) for s in self._schema
         ]
         return pa.schema(fields).empty_table()
 
