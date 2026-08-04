@@ -430,7 +430,13 @@ S3_MIN_PART_SIZE = 5 * 1024**2
 S3_MAX_PARTS = 10000
 
 S3_CHUNK_SIZE = 8388608  # boto3 default
-AZURE_CHUNK_SIZE = 4 * megabyte
+
+# Azure Block Blob multipart upload limits
+# https://learn.microsoft.com/en-us/rest/api/storageservices/understanding-block-blobs--append-blobs--and-page-blobs
+AZURE_CHUNK_SIZE = 8 * megabyte  # kept consistent with S3_DEFAULT_CHUNK_SIZE
+AZURE_MAX_BLOCKS = 50000
+AZURE_MAX_BLOCK_SIZE = 4000 * megabyte
+AZURE_MAX_OBJECT_SIZE = AZURE_MAX_BLOCKS * AZURE_MAX_BLOCK_SIZE
 
 # https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
 REQUEST_CONNECTION_TIMEOUT = 10
