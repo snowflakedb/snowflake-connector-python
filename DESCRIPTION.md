@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - NEXT_RELEASE(TBD)
+  - Added experimental Python 3.14t (free-threaded CPython) wheel support. **Experimental — not intended for production use.**
   - Fixed `split_statements` treating `//` as SQL instead of a line comment, which could merge multiple statements when a `//` comment contained an apostrophe (SNOW-3772985).
   - Fixed large-file PUT uploads to internal Azure stages failing against the Azure 50,000-block-per-blob limit. The Azure multipart chunk size is now scaled up dynamically for very large files (mirroring the existing S3 behavior), and the default Azure chunk size was raised from 4 MB to 8 MB (consistent with S3) for better throughput (SNOW-3839943).
 
