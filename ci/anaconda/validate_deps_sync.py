@@ -1,20 +1,24 @@
-"""Validate conda run requirements match setup.cfg install_requires.
+"""Validate conda run requirements match pyproject.toml dependencies.
 
-Note that it assumes default requirements to be install_requires + boto. If that assumption is no longer true,
-this script needs to be updated accordingly.
+Compares project.dependencies in pyproject.toml against meta.yaml run
+requirements. Optional extras (e.g. boto3) are intentionally excluded.
 
 Exit behavior:
 - If there is no diff: exit 0 with no output.
 - If there is a diff: print the diff and exit 1.
 """
 
-import configparser
 import re
 import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
 import yaml
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python < 3.11
+    import tomli as tomllib  # type: ignore[no-redef]
 
 
 def repo_root() -> Path:
@@ -71,31 +75,47 @@ def split_requirement(req: str) -> Tuple[str, str]:
     return normalize_name(name), spec
 
 
-def get_setup_install_requires(cfg_path: Path) -> List[str]:
-    """Extract normalized install_requires entries from setup.cfg.
+def _load_pyproject(pyproject_path: Path) -> dict:
+    """Load and return the parsed pyproject.toml mapping."""
+    with pyproject_path.open("rb") as f:
+        return tomllib.load(f)
 
-    Args:
-      cfg_path: Path to setup.cfg.
 
-    Returns:
-      List of strings in the form "<name> <spec>" where spec may be empty.
-    """
-    parser = configparser.ConfigParser(interpolation=None)
-    parser.read(cfg_path, encoding="utf-8")
-    if not parser.has_section("options"):
-        raise RuntimeError(f"Missing [options] section in {cfg_path}")
-    if not parser.has_option("options", "install_requires"):
-        raise RuntimeError(f"Missing install_requires under [options] in {cfg_path}")
-    raw_value = parser.get("options", "install_requires")
+def _deps_from_requirement_list(raw_deps: Iterable[str]) -> List[str]:
+    """Normalize a list of requirement strings from pyproject.toml."""
     deps: List[str] = []
-    for line in raw_value.splitlines():
-        item = line.strip()
+    for item in raw_deps:
+        if not isinstance(item, str):
+            continue
+        item = item.strip()
         if not item or item.startswith("#"):
             continue
         name, spec = split_requirement(item)
         if name and name != "python":
             deps.append(f"{name} {spec}".strip())
     return deps
+
+
+def get_setup_install_requires(pyproject_path: Path) -> List[str]:
+    """Extract normalized project.dependencies entries from pyproject.toml.
+
+    Args:
+      pyproject_path: Path to pyproject.toml.
+
+    Returns:
+      List of strings in the form "<name> <spec>" where spec may be empty.
+    """
+    data = _load_pyproject(pyproject_path)
+    project = data.get("project") or {}
+    raw_deps = project.get("dependencies")
+    if raw_deps is None:
+        raise RuntimeError(f"Missing project.dependencies in {pyproject_path}")
+    if not isinstance(raw_deps, list):
+        raise RuntimeError(
+            f"project.dependencies in {pyproject_path} must be a list; "
+            f"got {type(raw_deps).__name__}"
+        )
+    return _deps_from_requirement_list(raw_deps)
 
 
 def get_meta_run_requirements(meta_path: Path) -> List[str]:
@@ -138,43 +158,39 @@ def get_meta_run_requirements(meta_path: Path) -> List[str]:
     return deps
 
 
-def get_setup_extra_requires(cfg_path: Path, extra: str) -> List[str]:
-    """Extract normalized requirements for a given extra from setup.cfg.
+def get_setup_extra_requires(pyproject_path: Path, extra: str) -> List[str]:
+    """Extract normalized requirements for a given optional dependency.
 
     Args:
-      cfg_path: Path to setup.cfg.
-      extra: The extras_require key to extract (e.g., "boto").
+      pyproject_path: Path to pyproject.toml.
+      extra: The optional-dependencies key to extract (e.g., "boto3").
 
     Returns:
       List of strings in the form "<name> <spec>".
     """
-    parser = configparser.ConfigParser(interpolation=None)
-    parser.read(cfg_path, encoding="utf-8")
-    section = "options.extras_require"
-    if not parser.has_section(section):
-        raise RuntimeError(f"Missing [options.extras_require] section in {cfg_path}")
+    data = _load_pyproject(pyproject_path)
+    project = data.get("project") or {}
+    optional = project.get("optional-dependencies") or {}
     key = extra.strip().lower()
-    if not parser.has_option(section, key):
+    if key not in optional:
         raise RuntimeError(
-            f"Missing extra '{key}' under [options.extras_require] in {cfg_path}"
+            f"Missing optional-dependency '{key}' under "
+            f"[project.optional-dependencies] in {pyproject_path}"
         )
-    raw_value = parser.get(section, key)
-    deps: List[str] = []
-    for line in raw_value.splitlines():
-        item = line.strip()
-        if not item or item.startswith("#"):
-            continue
-        name, spec = split_requirement(item)
-        if name and name != "python":
-            deps.append(f"{name} {spec}".strip())
-    return deps
+    raw_deps = optional[key]
+    if not isinstance(raw_deps, list):
+        raise RuntimeError(
+            f"project.optional-dependencies.{key} in {pyproject_path} "
+            f"must be a list; got {type(raw_deps).__name__}"
+        )
+    return _deps_from_requirement_list(raw_deps)
 
 
 def compare_deps(setup_deps: Iterable[str], meta_deps: Iterable[str]) -> str:
     """Compare two dependency lists and return a human-readable diff.
 
     Args:
-      setup_deps: Normalized dependencies from setup.cfg.
+      setup_deps: Normalized dependencies from pyproject.toml.
       meta_deps: Normalized dependencies from meta.yaml.
 
     Returns:
@@ -218,17 +234,15 @@ def compare_deps(setup_deps: Iterable[str], meta_deps: Iterable[str]) -> str:
     if mismatches:
         lines.append("Version spec mismatches:")
         for n, s, m in mismatches:
-            lines.append(f"  - {n}: setup.cfg='{s}' vs meta.yaml='{m}'")
+            lines.append(f"  - {n}: pyproject.toml='{s}' vs meta.yaml='{m}'")
     return "\n".join(lines)
 
 
 def main() -> int:
     root = repo_root()
-    setup_cfg_path = root / "setup.cfg"
-    setup_deps = get_setup_install_requires(setup_cfg_path)
-    boto_deps = get_setup_extra_requires(setup_cfg_path, "boto")
+    pyproject_path = root / "pyproject.toml"
     # Make sure to update ci/anaconda/recipe/meta.yaml accordingly when there is dependency set update.
-    expected_deps = setup_deps + boto_deps
+    expected_deps = get_setup_install_requires(pyproject_path)
     meta_deps = get_meta_run_requirements(
         root / "ci" / "anaconda" / "recipe" / "meta.yaml"
     )

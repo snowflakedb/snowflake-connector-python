@@ -4,25 +4,10 @@ import os
 import platform
 import shutil
 import sys
-import warnings
 
-from setuptools import Extension, setup
+from setuptools import setup
+from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
-from setuptools.command.egg_info import egg_info
-
-CONNECTOR_SRC_DIR = os.path.join("src", "snowflake", "connector")
-NANOARROW_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "nanoarrow_cpp", "ArrowIterator")
-
-VERSION = (1, 1, 1, None)  # Default
-try:
-    with open(
-        os.path.join(CONNECTOR_SRC_DIR, "generated_version.py"), encoding="utf-8"
-    ) as f:
-        exec(f.read())
-except Exception:
-    with open(os.path.join(CONNECTOR_SRC_DIR, "version.py"), encoding="utf-8") as f:
-        exec(f.read())
-version = ".".join([str(v) for v in VERSION if v is not None])
 
 # Parse command line flags
 
@@ -39,7 +24,6 @@ for flag in options_def:
         options[flag.lstrip("-")] = True
         sys.argv.remove(flag)
 
-extensions = None
 cmd_class = {}
 
 _POSITIVE_VALUES = ("y", "yes", "t", "true", "1", "on")
@@ -47,36 +31,31 @@ SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS = (
     os.environ.get("SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS", "false").lower()
     in _POSITIVE_VALUES
 )
-SNOWFLAKE_NO_BOTO = (
-    os.environ.get("SNOWFLAKE_NO_BOTO", "false").lower() in _POSITIVE_VALUES
-)
 
-try:
-    from Cython.Build import cythonize
-    from Cython.Distutils import build_ext
-
-    _ABLE_TO_COMPILE_EXTENSIONS = True
-except ImportError:
-    warnings.warn(
-        "Cannot compile native C code, because of a missing build dependency",
-        stacklevel=1,
-    )
-    _ABLE_TO_COMPILE_EXTENSIONS = False
-
-if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS:
-    extensions = cythonize(
-        [
-            Extension(
-                name="snowflake.connector.nanoarrow_arrow_iterator",
-                sources=[
-                    os.path.join(NANOARROW_SRC_DIR, "nanoarrow_arrow_iterator.pyx")
-                ],
-                language="c++",
-            ),
-        ],
-    )
-
+# Extension sources/include dirs live in pyproject.toml ([tool.setuptools.ext-modules]).
+# Keep this block indented like the old cythonize path so the platform-flag diff stays small.
+if True:
     class MyBuildExt(build_ext):
+        def finalize_options(self):
+            super().finalize_options()
+            # Clear after pyproject.toml is applied so the env var wins under PEP 517.
+            if SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS:
+                self.extensions = []
+                self.distribution.ext_modules = []
+
+        def run(self):
+            if SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS:
+                # Drop stale extension artifacts from a previous compile in build/.
+                build_lib = getattr(self, "build_lib", None)
+                if build_lib:
+                    connector_dir = os.path.join(build_lib, "snowflake", "connector")
+                    if os.path.isdir(connector_dir):
+                        for name in os.listdir(connector_dir):
+                            if name.startswith("nanoarrow_arrow_iterator."):
+                                os.remove(os.path.join(connector_dir, name))
+                return
+            super().run()
+
         def build_extension(self, ext):
             if options["debug"]:
                 ext.extra_compile_args.append("-g")
@@ -86,53 +65,6 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
             current_dir = os.getcwd()
 
             if ext.name == "snowflake.connector.nanoarrow_arrow_iterator":
-                NANOARROW_CPP_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "nanoarrow_cpp")
-                NANOARROW_ARROW_ITERATOR_SRC_DIR = os.path.join(
-                    NANOARROW_CPP_SRC_DIR, "ArrowIterator"
-                )
-                NANOARROW_LOGGING_SRC_DIR = os.path.join(
-                    NANOARROW_CPP_SRC_DIR, "Logging"
-                )
-
-                ext.sources += [
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR,
-                        *((file,) if isinstance(file, str) else file),
-                    )
-                    for file in {
-                        "ArrayConverter.cpp",
-                        "BinaryConverter.cpp",
-                        "BooleanConverter.cpp",
-                        "CArrowChunkIterator.cpp",
-                        "CArrowIterator.cpp",
-                        "CArrowTableIterator.cpp",
-                        "DateConverter.cpp",
-                        "DecFloatConverter.cpp",
-                        "DecimalConverter.cpp",
-                        "FixedSizeListConverter.cpp",
-                        "FloatConverter.cpp",
-                        "IntConverter.cpp",
-                        "IntervalConverter.cpp",
-                        "MapConverter.cpp",
-                        "ObjectConverter.cpp",
-                        "SnowflakeType.cpp",
-                        "StringConverter.cpp",
-                        "TimeConverter.cpp",
-                        "TimeStampConverter.cpp",
-                        "flatcc.c",
-                        "nanoarrow.c",
-                        "nanoarrow_ipc.c",
-                        ("Python", "Common.cpp"),
-                        ("Python", "Helpers.cpp"),
-                        ("Util", "time.cpp"),
-                    }
-                ]
-                ext.sources.append(
-                    os.path.join(NANOARROW_LOGGING_SRC_DIR, "logging.cpp")
-                )
-                ext.include_dirs.append(NANOARROW_ARROW_ITERATOR_SRC_DIR)
-                ext.include_dirs.append(NANOARROW_LOGGING_SRC_DIR)
-
                 if sys.platform == "win32":
                     if not any("/std" not in s for s in ext.extra_compile_args):
                         ext.extra_compile_args.append("/std:c++17")
@@ -182,17 +114,6 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
                 self.compiler._compile = original__compile
 
     cmd_class = {"build_ext": MyBuildExt}
-
-
-class SetDefaultInstallationExtras(egg_info):
-    """Adds AWS extra unless SNOWFLAKE_NO_BOTO is specified."""
-
-    def finalize_options(self):
-        super().finalize_options()
-        # if not explicitly excluded, add boto dependencies to install_requires
-        if not SNOWFLAKE_NO_BOTO:
-            boto_extras = self.distribution.extras_require.get("boto", [])
-            self.distribution.install_requires += boto_extras
 
 
 def _minicore_native_subdir():
@@ -258,11 +179,8 @@ class PlatformBuildPy(build_py):
 
 
 # Update command classes
-cmd_class["egg_info"] = SetDefaultInstallationExtras
 cmd_class["build_py"] = PlatformBuildPy
 
 setup(
-    version=version,
-    ext_modules=extensions,
     cmdclass=cmd_class,
 )
