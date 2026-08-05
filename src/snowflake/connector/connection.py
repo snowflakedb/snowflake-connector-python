@@ -750,7 +750,7 @@ class SnowflakeConnection:
                 None,
                 ProgrammingError,
                 {
-                    "msg": "Invalid account identifier: only letters, digits, '_' and '-' allowed; no dots or slashes",
+                    "msg": "Invalid account identifier: only letters, digits, '_', '-' and '.' (as a label separator) allowed; no slashes or backslashes",
                     "errno": ER_NO_ACCOUNT_NAME,
                 },
             )
