@@ -1,12 +1,186 @@
 [build-system]
 requires = [
-    # The minimum setuptools version is specific to the PEP 517 backend,
-    # and may be stricter than the version required in `setup.py`
-    "setuptools>=40.6.0",
+    # ext-modules in pyproject.toml requires setuptools>=74.1
+    "setuptools>=74.1",
     "wheel",
     # cython>=3.1 is required for the `freethreading_compatible` directive
     # used by src/snowflake/connector/nanoarrow_cpp/ArrowIterator/nanoarrow_arrow_iterator.pyx
     "cython>=3.1",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "snowflake-connector-python"
+description = "Snowflake Connector for Python"
+authors = [
+    { name = "Snowflake, Inc", email = "snowflake-python-libraries-dl@snowflake.com" },
+]
+license = { text = "Apache-2.0" }
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Environment :: Other Environment",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Free Threading :: 2 - Beta",
+    "Programming Language :: SQL",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = [
+    "Snowflake",
+    "db",
+    "database",
+    "cloud",
+    "analytics",
+    "warehouse",
+]
+requires-python = ">=3.10"
+readme = { file = "DESCRIPTION.md", content-type = "text/markdown" }
+dependencies = [
+    # Make sure to update ci/anaconda/recipe/meta.yaml accordingly when there is dependency set update.
+    "asn1crypto>0.24.0,<2.0.0",
+    "cryptography>=46.0.5",
+    "pyOpenSSL>=24.0.0",
+    "pyjwt>=2.10.1,<3.0.0",
+    "pytz",
+    "requests>=2.32.4,<3.0.0",
+    "packaging",
+    "charset_normalizer>=2,<4",
+    "idna>=3.7,<4",
+    "certifi>=2024.7.4",
+    "typing_extensions>=4.3,<5",
+    "filelock>=3.5,<4",
+    "sortedcontainers>=2.4.0",
+    "platformdirs>=2.6.0,<5.0.0",
+    "tomlkit",
+]
+# version comes from snowflake.connector.version.__version__;
+# custom build_ext / build_py commands remain in setup.py
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://www.snowflake.com/"
+Documentation = "https://docs.snowflake.com/en/user-guide/python-connector.html"
+Source = "https://github.com/snowflakedb/snowflake-connector-python"
+Issues = "https://github.com/snowflakedb/snowflake-connector-python/issues"
+Changelog = "https://github.com/snowflakedb/snowflake-connector-python/blob/main/DESCRIPTION.md"
+
+[project.optional-dependencies]
+boto3 = [
+    "boto3>=1.24",
+    "botocore>=1.24",
+]
+azure = [
+    "azure-identity>=1.16",
+]
+development = [
+    "Cython>=3.1",
+    "azure-identity>=1.16",
+    "boto3>=1.24",
+    "botocore>=1.24",
+    "coverage",
+    "mitmproxy>=12.0.0; python_version >= '3.12' and python_version < '3.14'",
+    "more-itertools",
+    "numpy<=2.4.3",
+    "pendulum!=2.1.1",
+    "pexpect",
+    "pytest<7.5.0",
+    "pytest-asyncio",
+    "pytest-cov",
+    "pytest-rerunfailures<16.0",
+    "pytest-timeout",
+    "pytest-xdist",
+    "pytzdata",
+    "responses",
+]
+pandas = [
+    "pandas>=1.0.0,<3.0.0; python_version < '3.13'",
+    "pandas>=2.1.2,<3.0.0; python_version >= '3.13'",
+    "pyarrow>=14.0.1,<24; python_version >= '3.14'",
+    "pyarrow>=14.0.1; python_version < '3.14'",
+]
+secure-local-storage = [
+    "keyring>=23.1.0,<26.0.0",
+]
+
+[project.scripts]
+snowflake-dump-ocsp-response = "snowflake.connector.tool.dump_ocsp_response:main"
+snowflake-dump-ocsp-response-cache = "snowflake.connector.tool.dump_ocsp_response_cache:main"
+snowflake-dump-certs = "snowflake.connector.tool.dump_certs:main"
+
+[tool.setuptools]
+include-package-data = true
+package-dir = { "" = "src" }
+zip-safe = false
+license-files = ["LICENSE.txt", "NOTICE"]
+# Setuptools auto-cythonizes .pyx when Cython is in build-system.requires.
+# Platform-specific compile/link flags and the C-vs-C++ compile filter stay in setup.py.
+ext-modules = [
+    { name = "snowflake.connector.nanoarrow_arrow_iterator", language = "c++", sources = [
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/nanoarrow_arrow_iterator.pyx",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/ArrayConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/BinaryConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/BooleanConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/CArrowChunkIterator.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/CArrowIterator.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/CArrowTableIterator.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/DateConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/DecFloatConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/DecimalConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/FixedSizeListConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/FloatConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/IntConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/IntervalConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/MapConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/ObjectConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/SnowflakeType.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/StringConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/TimeConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/TimeStampConverter.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/flatcc.c",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/nanoarrow.c",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/nanoarrow_ipc.c",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/Python/Common.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/Python/Helpers.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator/Util/time.cpp",
+        "src/snowflake/connector/nanoarrow_cpp/Logging/logging.cpp",
+    ], include-dirs = [
+        "src/snowflake/connector/nanoarrow_cpp/ArrowIterator",
+        "src/snowflake/connector/nanoarrow_cpp/Logging",
+    ] },
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "snowflake.connector.version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["snowflake.connector.cpp*"]
+include = ["snowflake.*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+"snowflake.connector.minicore" = [
+    "*.so",
+    "*.dll",
+    "*.dylib",
+    "*.a",
 ]
 
 [tool.cibuildwheel]
