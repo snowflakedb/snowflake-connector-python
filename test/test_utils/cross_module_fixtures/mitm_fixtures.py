@@ -34,7 +34,7 @@ def mitm_proxy() -> Generator[Union[MitmClient, Any], Any, None]:
     Fails:
         When RuntimeError: If mitmproxy is installed but fails to start
     """
-    # mitmproxy is excluded for Python 3.14+ in setup.cfg; skip dynamically
+    # mitmproxy is excluded for Python 3.14+ in pyproject.toml; skip dynamically
     # so tests auto-re-enable when upstream wheels become available.
     if not shutil.which("mitmdump"):
         pytest.skip("mitmdump not available (mitmproxy not installed)")
