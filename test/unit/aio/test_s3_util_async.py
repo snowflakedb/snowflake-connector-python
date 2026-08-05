@@ -17,7 +17,7 @@ import pytest
 from snowflake.connector.aio import SnowflakeConnection
 from snowflake.connector.aio._cursor import SnowflakeCursor
 from snowflake.connector.aio._file_transfer_agent import SnowflakeFileTransferAgent
-from snowflake.connector.constants import SHA256_DIGEST
+from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
 
 try:
     from aiohttp import ClientResponse, ClientResponseError
@@ -208,8 +208,8 @@ async def test_get_header_unknown_error(caplog):
             await rest_client.get_file_header("file.txt")
 
 
-async def test_get_header_403_treated_as_not_found():
-    """S3 returns 403 instead of 404 for HEAD on a missing key when the caller lacks s3:ListBucket (SNOW-3869839)."""
+async def _make_head_rest_client(overwrite: bool) -> SnowflakeS3RestClient:
+    """Builds an S3 rest client whose file is configured to (not) be overwritten."""
     meta_info = {
         "name": "data1.txt.gz",
         "stage_location_type": "S3",
@@ -219,12 +219,11 @@ async def test_get_header_403_treated_as_not_found():
         SHA256_DIGEST: "123456789abcdef",
         "dst_file_name": "data1.txt.gz",
         "src_file_name": path.join(THIS_DIR, "../data", "put_get_1.txt"),
-        "overwrite": True,
+        "overwrite": overwrite,
     }
-    meta = SnowflakeFileMeta(**meta_info)
     creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": "", "AWS_TOKEN": ""}
     rest_client = SnowflakeS3RestClient(
-        meta,
+        SnowflakeFileMeta(**meta_info),
         StorageCredential(
             creds,
             MagicMock(autospec=SnowflakeConnection),
@@ -240,7 +239,29 @@ async def test_get_header_403_treated_as_not_found():
         8 * megabyte,
     )
     await rest_client.transfer_accelerate_config(None)
-    from snowflake.connector.constants import ResultStatus
+    return rest_client
+
+
+@pytest.mark.parametrize("overwrite", [True, False])
+async def test_get_header_404_is_not_found(overwrite):
+    """A 404 means the file is definitely absent, regardless of overwrite (SNOW-3869839)."""
+    rest_client = await _make_head_rest_client(overwrite=overwrite)
+
+    resp = MagicMock(autospec=ClientResponse, status=404)
+    with mock.patch.object(
+        rest_client,
+        "_send_request_with_authentication_and_retry",
+        return_value=resp,
+    ):
+        file_header = await rest_client.get_file_header("file.txt")
+
+    assert file_header is None
+    assert rest_client.meta.result_status == ResultStatus.NOT_FOUND_FILE
+
+
+async def test_get_header_403_treated_as_not_found_when_overwriting():
+    """S3 returns 403 instead of 404 for HEAD on a missing key when the caller lacks s3:ListBucket (SNOW-3869839)."""
+    rest_client = await _make_head_rest_client(overwrite=True)
 
     resp = MagicMock(autospec=ClientResponse, status=403)
     with mock.patch.object(
@@ -249,8 +270,44 @@ async def test_get_header_403_treated_as_not_found():
         return_value=resp,
     ):
         file_header = await rest_client.get_file_header("file.txt")
+
     assert file_header is None
-    assert meta.result_status == ResultStatus.NOT_FOUND_FILE
+    assert rest_client.meta.result_status == ResultStatus.NOT_FOUND_FILE
+
+
+async def test_get_header_403_raises_when_not_overwriting(caplog):
+    """A 403 must not be read as "missing" when overwrite is off, or an existing file would be replaced (SNOW-3869839)."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
+    rest_client = await _make_head_rest_client(overwrite=False)
+
+    error = ClientResponseError(
+        mock.AsyncMock(),
+        mock.AsyncMock(spec=ClientResponse),
+        status=403,
+        message="Forbidden",
+        headers={},
+    )
+    resp = MagicMock(
+        autospec=ClientResponse,
+        status=403,
+        raise_for_status=MagicMock(side_effect=error),
+    )
+    with mock.patch.object(
+        rest_client,
+        "_send_request_with_authentication_and_retry",
+        return_value=resp,
+    ):
+        with pytest.raises(ClientResponseError) as caught_exc:
+            await rest_client.get_file_header("file.txt")
+
+    assert caught_exc.value.status == 403
+    assert rest_client.meta.result_status is None
+    assert verify_log_tuple(
+        "snowflake.connector.aio._s3_storage_client",
+        logging.WARNING,
+        re.compile(".*S3 returned 403 for the HEAD request.*"),
+        caplog.record_tuples,
+    )
 
 
 async def test_upload_expiry_error():

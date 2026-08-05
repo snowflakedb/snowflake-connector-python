@@ -21,6 +21,7 @@ from ..s3_storage_client import (
     AMZ_KEY,
     AMZ_MATDESC,
     EXPIRED_TOKEN,
+    HEAD_FORBIDDEN_WARNING_MSG,
     META_PREFIX,
     SFC_DIGEST,
     UNSIGNED_PAYLOAD,
@@ -183,8 +184,20 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
             filename: Name of remote file.
 
         Returns:
-            None if HEAD returns 404, otherwise a FileHeader instance populated
-            with metadata
+            None if the file was reported as missing, otherwise a FileHeader
+            instance populated with metadata.
+
+        Notes:
+            Updates ``meta.result_status``.
+
+            S3 answers a HEAD on a non-existent key with 403 instead of 404 when
+            the caller's credentials lack ``s3:ListBucket`` on the bucket, and a
+            HEAD response carries no body to tell that case apart from a genuine
+            permission failure. A 403 is therefore only reported as missing when
+            ``meta.overwrite`` is set, i.e. when the outcome of this check cannot
+            change what happens next. With ``meta.overwrite`` unset the caller
+            needs a definitive answer - assuming "missing" would overwrite a file
+            the user asked us to keep - so the 403 is raised instead.
         """
         path = quote(self.s3location.path + filename.lstrip("/"))
         url = self.endpoint + f"/{path}"
@@ -211,19 +224,20 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
                 content_length=int(metadata.get("Content-Length")),
                 encryption_metadata=encryption_metadata,
             )
-        elif response.status in (404, 403):
-            # S3 returns 403 (instead of 404) for a HEAD request on a
-            # non-existent key when the caller's credentials lack
-            # s3:ListBucket on the bucket. The scoped credentials Snowflake
-            # issues for stage PUTs only grant object-level permissions, so
-            # this is expected and doesn't mean the file exists or that the
-            # upload itself will fail.
+        elif response.status == 404 or (response.status == 403 and self.meta.overwrite):
             logger.debug(
-                f"not found. bucket: {self.s3location.bucket_name}, path: {path}"
+                f"not found (HTTP {response.status}). "
+                f"bucket: {self.s3location.bucket_name}, path: {path}"
             )
             self.meta.result_status = ResultStatus.NOT_FOUND_FILE
             return None
         else:
+            if response.status == 403:
+                logger.warning(
+                    HEAD_FORBIDDEN_WARNING_MSG.format(
+                        bucket=self.s3location.bucket_name, path=path
+                    )
+                )
             response.raise_for_status()
 
     # for multi-chunk file transfer
