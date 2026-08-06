@@ -40,7 +40,7 @@ jobs:
       build_matrix: ${{ steps.test_matrix.outputs.build_matrix }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Define testing matrix
@@ -61,9 +61,9 @@ jobs:
     name: Check linting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.10'
       - name: Display Python version
@@ -74,7 +74,7 @@ jobs:
         run: python -m pip install tox>=4
       - name: Set PY
         run: echo "PY=$(python -VV | sha256sum | cut -d' ' -f1)" >> $GITHUB_ENV
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.cache/pre-commit
           key: pre-commit|${{ env.PY }}|${{ hashFiles('.pre-commit-config.yaml') }}
@@ -89,9 +89,9 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.define-matrix.outputs.test_matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
@@ -122,9 +122,9 @@ jobs:
           # xref https://github.com/tonistiigi/binfmt/issues/215
           image: tonistiigi/binfmt:qemu-v8.1.5
           platforms: all
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Cache cibuildwheel dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/cibuildwheel
@@ -159,7 +159,7 @@ jobs:
       - name: Show wheels generated
         run: ls -lh dist
         shell: bash
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           include-hidden-files: true
           name: ${{ matrix.os_download_name }}_py${{ matrix.python-version }}
@@ -174,15 +174,15 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.define-matrix.outputs.test_matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
       - name: Set up Java
-        uses: actions/setup-java@v4 # for wiremock
+        uses: actions/setup-java@v5 # for wiremock
         with:
           java-version: ${{ matrix.os_download_name == 'win_arm64' && '21.0.5+11.0.LTS' || '11' }}
           distribution: 'temurin'
@@ -205,7 +205,7 @@ jobs:
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
       - name: Download wheel(s)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: ${{ matrix.os_download_name }}_py${{ matrix.python-version }}
           path: dist
@@ -228,7 +228,7 @@ jobs:
          # To specify the test name (in single test mode) pass this env variable:
 #          SINGLE_TEST_NAME: test/path/filename.py::test_name
         shell: bash
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           include-hidden-files: true
@@ -236,7 +236,7 @@ jobs:
           path: |
             .tox/.coverage
             .tox/coverage.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           include-hidden-files: true
@@ -259,9 +259,9 @@ jobs:
         python-version: ["3.10"]
         cloud-provider: [aws]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
@@ -305,9 +305,9 @@ jobs:
         python-version: ["3.10"]
         cloud-provider: [aws]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
@@ -333,7 +333,7 @@ jobs:
       matrix:
         cloud-provider: [aws, azure, gcp]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup parameters file
         shell: bash
         env:
@@ -349,7 +349,7 @@ jobs:
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
       - name: Download wheel(s)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: manylinux_x86_64_py3.11
           path: dist
@@ -364,7 +364,7 @@ jobs:
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           include-hidden-files: true
@@ -372,7 +372,7 @@ jobs:
           path: |
             .coverage
             coverage.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           include-hidden-files: true
@@ -397,7 +397,7 @@ jobs:
         env:
           longver: ${{ matrix.python-version }}
         shell: bash
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup parameters file
         shell: bash
         env:
@@ -413,7 +413,7 @@ jobs:
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
       - name: Download wheel(s)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: manylinux_x86_64_py${{ matrix.python-version }}
           path: dist
@@ -428,7 +428,7 @@ jobs:
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           include-hidden-files: true
@@ -436,7 +436,7 @@ jobs:
           path: |
             .coverage.py${{ env.shortver }}-lambda-ci
             junit.py${{ env.shortver }}-lambda-ci-dev.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           include-hidden-files: true
@@ -462,15 +462,15 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
         cloud-provider: [aws, azure, gcp]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
       - name: Set up Java
-        uses: actions/setup-java@v4 # for wiremock
+        uses: actions/setup-java@v5 # for wiremock
         with:
           java-version: 11
           distribution: 'temurin'
@@ -493,7 +493,7 @@ jobs:
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
       - name: Download wheel(s)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: ${{ matrix.os.download_name }}_py${{ matrix.python-version }}
           path: dist
@@ -514,7 +514,7 @@ jobs:
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
         shell: bash
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           include-hidden-files: true
@@ -539,9 +539,9 @@ jobs:
         env:
           longver: ${{ matrix.python-version }}
         shell: bash
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Cache cibuildwheel dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/cibuildwheel
           key: cibw-v3.3.1-manylinux_x86_64
@@ -597,12 +597,12 @@ jobs:
     needs: [lint, test, test-fips, test-lambda]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
         with:
           path: artifacts
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.10'
       - name: Display Python version
@@ -648,19 +648,19 @@ jobs:
           fi
       - name: Publish html coverage
         if: ${{ success() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           include-hidden-files: true
           name: overall_cov_html
           path: .tox/htmlcov
       - name: Publish xml coverage
         if: ${{ success() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           include-hidden-files: true
           name: overall_cov_xml
           path: .tox/coverage.xml
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@v5
         if: ${{ success() }}
         with:
           files: .tox/coverage.xml
