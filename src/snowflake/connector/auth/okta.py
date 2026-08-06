@@ -15,7 +15,7 @@ from ..constants import (
     HTTP_HEADER_USER_AGENT,
 )
 from ..errorcode import ER_IDP_CONNECTION_ERROR, ER_INCORRECT_DESTINATION
-from ..errors import DatabaseError, Error, RefreshTokenError
+from ..errors import DatabaseError, Error, OperationalError, RefreshTokenError
 from ..network import CONTENT_TYPE_APPLICATION_JSON, PYTHON_CONNECTOR_USER_AGENT
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from . import Auth
@@ -276,7 +276,7 @@ class AuthByOkta(AuthByPlugin):
     ) -> dict[Any, Any]:
         logger.debug("step 4: query IDP URL snowflake app to get SAML " "response")
         timeout_time = time.time() + conn.login_timeout if conn.login_timeout else None
-        response_html = {}
+        response_html = None
         origin_sso_url = sso_url
         while timeout_time is None or time.time() < timeout_time:
             try:
@@ -289,6 +289,12 @@ class AuthByOkta(AuthByPlugin):
                     HTTP_HEADER_ACCEPT: "*/*",
                 }
                 remaining_timeout = timeout_time - time.time() if timeout_time else None
+                if remaining_timeout is not None and remaining_timeout <= 0:
+                    # Obtaining the one time token consumed the whole login budget.
+                    # The HTTP layer rejects a non-positive timeout with an opaque
+                    # ValueError, so stop here and report the timeout that actually
+                    # happened.
+                    break
                 response_html = conn.rest.fetch(
                     "get",
                     sso_url,
@@ -301,7 +307,28 @@ class AuthByOkta(AuthByPlugin):
                 break
             except RefreshTokenError:
                 logger.debug("step4: refresh token for re-authentication")
+        if response_html is None:
+            # Every way out of the loop above without a response means the
+            # login_timeout budget ran out.
+            AuthByOkta._handle_login_timeout(conn)
         return response_html
+
+    @staticmethod
+    def _handle_login_timeout(conn: SnowflakeConnection) -> None:
+        Error.errorhandler_wrapper(
+            conn._rest._connection,
+            None,
+            OperationalError,
+            {
+                "msg": (
+                    f"Timed out after {conn.login_timeout} second(s) waiting for "
+                    "the identity provider to return a SAML response. Consider "
+                    "increasing login_timeout."
+                ),
+                "errno": ER_IDP_CONNECTION_ERROR,
+                "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+            },
+        )
 
     def _step5(
         self,
