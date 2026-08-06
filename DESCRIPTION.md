@@ -9,6 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - NEXT_RELEASE(TBD)
   - Fixed `split_statements` treating `//` as SQL instead of a line comment, which could merge multiple statements when a `//` comment contained an apostrophe (SNOW-3772985).
+  - Fixed Okta/SAML authentication reporting an exhausted `login_timeout` as `250003: Failed to execute request: Attempted to set connect timeout to <negative value>`. Obtaining the one-time token in step 4 can overshoot the login deadline, which made the remaining budget negative; it was then passed to the HTTP layer, which rejected it with an opaque `ValueError`. A timed-out SAML login now raises `250006` with a message naming `login_timeout`. Running out of budget while retrying on `RefreshTokenError` reports the same error instead of failing later with an `AttributeError` on an empty response (SNOW-3891419).
 
 - v4.7.1(Jul 15,2026)
   - Added support for Python 3.14t (free-threaded).
