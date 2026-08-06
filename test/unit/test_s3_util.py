@@ -28,6 +28,7 @@ try:
         EXPIRED_TOKEN,
         SnowflakeS3RestClient,
     )
+    from snowflake.connector.storage_client import METHODS, ResultStatus
     from snowflake.connector.vendored.requests import HTTPError, Response
 except ImportError:
     # Compatibility for olddriver tests
@@ -40,6 +41,8 @@ except ImportError:
     RequestExceedMaxRetryError = None
     OperationalError = None
     StorageCredential = None
+    METHODS = {}
+    ResultStatus = None
     megabytes = 1024 * 1024
     DEFAULT_MAX_RETRY = 5
 
@@ -214,6 +217,85 @@ def test_get_header_unknown_error(caplog):
     with mock.patch.dict(METHODS, HEAD=MagicMock(return_value=resp)):
         with pytest.raises(HTTPError, match="555 Server Error"):
             rest_client.get_file_header("file.txt")
+
+
+def _make_head_rest_client(overwrite: bool) -> SnowflakeS3RestClient:
+    """Builds an S3 rest client whose file is configured to (not) be overwritten."""
+    meta_info = {
+        "name": "data1.txt.gz",
+        "stage_location_type": "S3",
+        "no_sleeping_time": True,
+        "put_callback": None,
+        "put_callback_output_stream": None,
+        SHA256_DIGEST: "123456789abcdef",
+        "dst_file_name": "data1.txt.gz",
+        "src_file_name": path.join(THIS_DIR, "../data", "put_get_1.txt"),
+        "overwrite": overwrite,
+    }
+    creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": "", "AWS_TOKEN": ""}
+    return SnowflakeS3RestClient(
+        SnowflakeFileMeta(**meta_info),
+        StorageCredential(
+            creds,
+            MagicMock(autospec=SnowflakeConnection),
+            "PUT file:/tmp/file.txt @~",
+        ),
+        {
+            "locationType": "AWS",
+            "location": "bucket/path",
+            "creds": creds,
+            "region": "test",
+            "endPoint": None,
+        },
+        8 * megabyte,
+    )
+
+
+@pytest.mark.parametrize("overwrite", [True, False])
+def test_get_header_404_is_not_found(overwrite):
+    """A 404 means the file is definitely absent, regardless of overwrite (SNOW-3869839)."""
+    rest_client = _make_head_rest_client(overwrite=overwrite)
+    resp = Response()
+    resp.status_code = 404
+
+    with mock.patch.dict(METHODS, HEAD=MagicMock(return_value=resp)):
+        file_header = rest_client.get_file_header("file.txt")
+
+    assert file_header is None
+    assert rest_client.meta.result_status == ResultStatus.NOT_FOUND_FILE
+
+
+def test_get_header_403_treated_as_not_found_when_overwriting():
+    """S3 returns 403 instead of 404 for HEAD on a missing key when the caller lacks s3:ListBucket (SNOW-3869839)."""
+    rest_client = _make_head_rest_client(overwrite=True)
+    resp = Response()
+    resp.status_code = 403
+
+    with mock.patch.dict(METHODS, HEAD=MagicMock(return_value=resp)):
+        file_header = rest_client.get_file_header("file.txt")
+
+    assert file_header is None
+    assert rest_client.meta.result_status == ResultStatus.NOT_FOUND_FILE
+
+
+def test_get_header_403_raises_when_not_overwriting(caplog):
+    """A 403 must not be read as "missing" when overwrite is off, or an existing file would be replaced (SNOW-3869839)."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
+    rest_client = _make_head_rest_client(overwrite=False)
+    resp = Response()
+    resp.status_code = 403
+
+    with mock.patch.dict(METHODS, HEAD=MagicMock(return_value=resp)):
+        with pytest.raises(HTTPError, match="403 Client Error"):
+            rest_client.get_file_header("file.txt")
+
+    assert rest_client.meta.result_status is None
+    assert verify_log_tuple(
+        "snowflake.connector.s3_storage_client",
+        logging.WARNING,
+        re.compile(".*S3 returned 403 for the HEAD request.*"),
+        caplog.record_tuples,
+    )
 
 
 def test_upload_expiry_error():
