@@ -54,6 +54,7 @@ from ..network import (
     CREDENTIAL_REJECTION_GS_CODES,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
     OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE,
+    OAUTH_ACCESS_TOKEN_INVALID_GS_CODE,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
@@ -69,8 +70,8 @@ from ..sqlstate import (
 from ..token_cache import TokenCache, TokenKey, TokenType
 from ..util_text import expand_tilde
 from ..version import VERSION
+from ._oauth_base import AuthByOAuthBase
 from .no_auth import AuthNoAuth
-from .oauth import AuthByOAuth
 
 if TYPE_CHECKING:
     from . import AuthByPlugin
@@ -423,11 +424,24 @@ class Auth:
                         sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                     )
                 )
-            elif (errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE) and (
-                # SNOW-2329031: OAuth v1.0 does not support token renewal,
-                # for backward compatibility, we do not raise an exception here
-                not isinstance(auth_instance, AuthByOAuth)
-            ):
+            elif (
+                errno
+                in (
+                    OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE,
+                    OAUTH_ACCESS_TOKEN_INVALID_GS_CODE,
+                )
+            ) and isinstance(auth_instance, AuthByOAuthBase):
+                # A presented OAuth access token was rejected as expired (390318)
+                # or invalid (390303) - both are OAuth-scoped codes in GS.
+                # Reauthenticate (via refresh token or interactive) instead of
+                # hard-failing; reauthenticate() also evicts the stale token from
+                # the cache on terminal failure so it is not replayed.
+                #
+                # The guard is a positive isinstance(AuthByOAuthBase): only OAuth
+                # v2 authenticators (authorization-code, client-credentials) can
+                # renew a token. This excludes OAuth v1.0 (AuthByOAuth), whose
+                # user-supplied token cannot be renewed (SNOW-2329031), and keeps
+                # any non-OAuth authenticator out of the reauth retry.
                 raise ReauthenticationRequest(
                     ProgrammingError(
                         msg=ret["message"],
