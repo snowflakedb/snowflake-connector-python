@@ -1646,9 +1646,9 @@ async def test_disable_telemetry(conn_cnx, caplog):
         async with conn_cnx() as conn:
             async with conn.cursor() as cur:
                 await (await cur.execute("select 1")).fetchall()
-            assert (
-                len(conn._telemetry._log_batch) == 3
-            )  # 3 events are `import package`, `fetch first`, `fetch last`
+            assert len(conn._telemetry._log_batch) == 4  # 4 events: import package,
+            # client_connection_identifier_shape (SNOW-3548350; remove with
+            # the emission, target 2026-11-30), fetch first, fetch last
 
     assert "POST /telemetry/send" in caplog.text
     caplog.clear()
@@ -1672,7 +1672,10 @@ async def test_disable_telemetry(conn_cnx, caplog):
     # test disable telemetry in the client
     with caplog.at_level(logging.DEBUG):
         async with conn_cnx() as conn:
-            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 1
+            # Bumped from 1 to 2 by SNOW-3351450 (one extra event:
+            # client_connection_identifier_shape). Revert to 1 with the
+            # emission removal (SNOW-3548350, target 2026-11-30).
+            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 2
             conn.telemetry_enabled = False
             async with conn.cursor() as cur:
                 await (await cur.execute("select 1")).fetchall()

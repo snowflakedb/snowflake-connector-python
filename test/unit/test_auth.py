@@ -150,6 +150,8 @@ def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
             "message": None,
             "data": None,
         }
+    else:
+        ret = {}
 
     mock_cnt += 1
     return ret
@@ -426,6 +428,71 @@ def test_oauth_token_expired_error_handling(auth_instance, expected_exc_type):
     account = "testaccount"
     user = "testuser"
     rest = _init_rest(application, _mock_oauth_token_expired_rest_response)
+    rest._connection.errorhandler = mock_errorhandler_always_raise
+    auth = Auth(rest)
+    with pytest.raises(expected_exc_type):
+        auth.authenticate(auth_instance, account, user)
+
+
+def _mock_oauth_token_invalid_rest_response(url, headers, body, **kwargs):
+    """Mock rest response for OAuth access token *invalid* (not expired) error."""
+    from snowflake.connector.network import OAUTH_ACCESS_TOKEN_INVALID_GS_CODE
+
+    return {
+        "success": False,
+        "message": "Invalid OAuth access token",
+        "code": OAUTH_ACCESS_TOKEN_INVALID_GS_CODE,
+        "data": {},
+    }
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "auth_instance, expected_exc_type",
+    [
+        (AuthByOAuth("test_oauth_token"), DatabaseError),
+        (
+            AuthByOauthCode(
+                application="testapp",
+                client_id="test_client_id",
+                client_secret="test_client_secret",
+                authentication_url="https://auth.example.com",
+                token_request_url="https://token.example.com",
+                redirect_uri="http://localhost:8080",
+                scope="session:role-any",
+                host="testaccount.snowflakecomputing.com",
+            ),
+            ReauthenticationRequest,
+        ),
+        (
+            AuthByOauthCredentials(
+                application="testapp",
+                client_id="test_client_id",
+                client_secret="test_client_secret",
+                token_request_url="https://token.example.com",
+                scope="session:role-any",
+            ),
+            ReauthenticationRequest,
+        ),
+    ],
+)
+def test_oauth_token_invalid_error_handling(auth_instance, expected_exc_type):
+    """An *invalid* (not merely expired) OAuth access token must be handled like
+    expiry rather than hard-failing with 250001:
+
+    - AuthByOauthCode / AuthByOauthCredentials -> ReauthenticationRequest, so the
+      connector discards the cached token and reauthenticates.
+    - AuthByOAuth (OAuth v1.0) -> DatabaseError, since a user-supplied token
+      cannot be renewed by the driver.
+    """
+
+    def mock_errorhandler_always_raise(connection, cursor, error_class, error_value):
+        raise error_class(**error_value)
+
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    rest = _init_rest(application, _mock_oauth_token_invalid_rest_response)
     rest._connection.errorhandler = mock_errorhandler_always_raise
     auth = Auth(rest)
     with pytest.raises(expected_exc_type):

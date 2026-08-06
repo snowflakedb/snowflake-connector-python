@@ -55,15 +55,6 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
             )
             session_manager = SessionManagerFactory.get_manager()
         self._session_manager = session_manager
-        if self._snowflake_ocsp_mode == OCSPMode.FAIL_OPEN and sys.version_info < (
-            3,
-            10,
-        ):
-            raise RuntimeError(
-                "Async Snowflake Python Connector requires Python 3.10+ for OCSP validation related features. "
-                "Please open a feature request issue in github if your want to use Python 3.9 or lower: "
-                "https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose."
-            )
 
         super().__init__(*args, **kwargs)
 

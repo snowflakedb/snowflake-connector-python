@@ -8,6 +8,9 @@ on:
 jobs:
   CLAssistant:
     runs-on: ubuntu-latest
+    # The CLA only applies to external contributions on the public repos. Skip it
+    # on internal "-private" repos.
+    if: ${{ !endsWith(github.repository, '-private') }}
     permissions:
       actions: write
       contents: write

@@ -59,12 +59,12 @@ class OperatingSystem(Enum):
 class Python(Enum):
     """Available Python versions."""
 
-    PY39 = PythonVersion("3.9", test_on_pr=True)
-    PY310 = PythonVersion("3.10", test_on_pr=False)
+    PY310 = PythonVersion("3.10", test_on_pr=True)
     PY311 = PythonVersion("3.11", test_on_pr=False)
     PY312 = PythonVersion("3.12", test_on_pr=False)
     PY313 = PythonVersion("3.13", test_on_pr=False)
     PY314 = PythonVersion("3.14", test_on_pr=True)
+    PY314t = PythonVersion("3.14t", test_on_pr=True)
 
 
 class CSP(Enum):
@@ -79,12 +79,13 @@ class CSP(Enum):
 # Format: (os_name, python_version)
 EXCLUSIONS: List[Tuple[str, str]] = [
     # Windows 11 ARM tests don't pass — exclude all versions
-    ("windows-11-arm", "3.9"),
     ("windows-11-arm", "3.10"),
     ("windows-11-arm", "3.11"),
     ("windows-11-arm", "3.12"),
     ("windows-11-arm", "3.13"),
     ("windows-11-arm", "3.14"),
+    # cryptography doesn't publish cp314t-win_arm64 wheels yet
+    ("windows-11-arm", "3.14t"),
 ]
 
 # Additional fields to add to each matrix entry (optional)

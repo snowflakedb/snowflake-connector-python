@@ -151,6 +151,38 @@ async def test_renew_token(mockPrepare):
     assert mockPrepare.called
 
 
+def test_async_keypair_init_with_passphrase_no_multiple_values_error():
+    """Regression test for GH #2896.
+
+    Before the fix, passing private_key_passphrase to the async AuthByKeyPair raised:
+      TypeError: __init__() got multiple values for argument 'private_key_passphrase'
+    because the async __init__ was missing the parameter and forwarded it through
+    **kwargs while also passing lifetime_in_seconds into the passphrase slot positionally.
+    """
+    private_key = rsa.generate_private_key(
+        backend=default_backend(), public_exponent=65537, key_size=2048
+    )
+    passphrase = b"test-passphrase"
+    private_key_der_encrypted = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.BestAvailableEncryption(passphrase),
+    )
+    # must not raise "got multiple values for argument 'private_key_passphrase'"
+    auth_instance = AuthByKeyPair(
+        private_key=private_key_der_encrypted,
+        private_key_passphrase=passphrase,
+    )
+    assert auth_instance is not None
+
+
+def test_async_keypair_init_without_passphrase():
+    """AuthByKeyPair without passphrase must still work after the param reorder fix."""
+    private_key_der, _ = generate_key_pair(2048)
+    auth_instance = AuthByKeyPair(private_key=private_key_der)
+    assert auth_instance is not None
+
+
 def test_mro():
     """Ensure that methods from AuthByPluginAsync override those from AuthByPlugin."""
     from snowflake.connector.aio.auth import AuthByPlugin as AuthByPluginAsync

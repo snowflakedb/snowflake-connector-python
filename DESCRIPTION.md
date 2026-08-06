@@ -7,8 +7,32 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- Upcoming Release
+- NEXT_RELEASE(TBD)
+  - Fixed `split_statements` treating `//` as SQL instead of a line comment, which could merge multiple statements when a `//` comment contained an apostrophe (SNOW-3772985).
+  - Fixed large-file PUT uploads to internal Azure stages failing against the Azure 50,000-block-per-blob limit. The Azure multipart chunk size is now scaled up dynamically for very large files (mirroring the existing S3 behavior), and the default Azure chunk size was raised from 4 MB to 8 MB (consistent with S3) for better throughput (SNOW-3839943).
+  - Fixed OAuth cached-credential connections failing with `250001 Invalid OAuth access token` when the cached token was invalid (GS code `390303`); the connector now reauthenticates silently (via refresh token if available, otherwise browser) instead of hard-failing. Also fixed fresh processes holding only a cached refresh token going straight to an interactive browser prompt instead of attempting a silent refresh first.
+
+- v4.7.1(Jul 15,2026)
+  - Added support for Python 3.14t (free-threaded).
+    - **Note:** Python 3.14t CI testing excludes `win_arm64` (no `cryptography` wheels available) and `mitmproxy` proxy tests on all platforms (transitive dependencies `aioquic`/`pylsqpack` lack free-threaded-compatible wheels).
+  - Improved verification of TLS connections (SNOW-3675579).
+  - Fixed `python-connector.log` not rotating on Windows, and every record being logged twice, when easy logging is enabled via `config.toml` (SNOW-3680325).
+    - **Note:** As part of this fix, easy logging no longer calls `logging.basicConfig()` and therefore no longer configures the root logger. `python-connector.log` now captures only the `snowflake.connector`, `botocore`, and `boto3`.
+  - Improved URL validation reliability by replacing the hand-rolled regex in `is_valid_url()` with `urllib.parse.urlparse` (SNOW-3392651).
+  - Fixed OAuth infinite loop when tokens expire by ensuring `reauthenticate()` calls `_request_tokens()` directly instead of looping through `prepare()`. Token cache is now read exactly once per connection, and `_store_tokens()` preserves macOS Keychain ACL by never calling `remove()`. The async OAuth `reauthenticate()` now runs the synchronous OAuth flow on a worker thread instead of blocking the event loop.
+  - Fixed OAuth scope handling for Snowflake custom OAuth: when refresh tokens are enabled, the connector no longer appends the OIDC `offline_access` scope for token endpoints on `*.snowflakecomputing.com` or `*.snowflakecomputing.cn`, which caused `invalid_scope` errors. Snowflake custom OAuth expects `refresh_token` in scope instead. External IdP behavior is unchanged.
+  - Fixed input validation for `scale` metadata in Arrow result set processing for `TIME`, `TIMESTAMP_NTZ`, `TIMESTAMP_LTZ`, and `TIMESTAMP_TZ` columns (SNOW-3388299).
+  - Fixed S3 storage client to correctly handle 307/308 (method-preserving) and 301/302 (GET/HEAD only) redirects by disabling automatic redirect following and re-signing each request with AWS SigV4 credentials for the redirect target. The region is updated from the `x-amz-bucket-region` response header on each redirect. Redirects are capped at 5 hops.
+  - Added native AKS (Azure Kubernetes Service) workload identity support. When running on AKS with workload identity configured, the connector automatically uses `WorkloadIdentityCredential` to authenticate via the injected service account credentials. OIDC backward compatibility is also supported.
+  - Added the `workload_identity_aws_use_outbound_token` connection option (default `false`) to opt into AWS WIF JWT attestation via STS `GetWebIdentityToken` instead of the default SigV4 `GetCallerIdentity` method.
+  - Fixed a bug where a fully-qualified DDL statement (e.g. `CREATE VIEW db.schema.obj`) on a session with no current schema would populate the connector's cached `_schema`/`_database` from the referenced object's namespace. This made `get_current_schema()` diverge from the server's `CURRENT_SCHEMA()` and mis-qualified Snowpark temp objects (SNOW-3665226).
+  - Fixed JWT key-pair authentication errors to surface the server's specific error code (e.g. `394304` for fingerprint mismatch, `394303` for clock skew) instead of always reporting the generic `250001`. Auth-rejection failures now also use SQLState `28000` (invalid authorization) instead of `08001` (SNOW-3775156).
+
+- v4.6.0(May 28,2026)
+  - Dropped support for Python 3.9. The minimum supported version is now Python 3.10.
   - Fixed sdist to only install the minicore binary matching the current platform (SNOW-3526469). Previous 4.x releases copied every platform's minicore `.so`/`.dylib`/`.dll` into the install prefix, breaking downstream packagers (e.g. Homebrew) whose audits reject foreign-arch binaries.
+  - Added one in-band telemetry record per successful login describing which connection-identifier fields the user supplied (`account_provided`, `account_with_region`, `account_org_provided`, `region_provided`, `host_provided`). No hostname or account value is included. This is gated by the existing server-side `CLIENT_TELEMETRY_ENABLED` parameter and can additionally be disabled locally by setting `SF_TELEMETRY_DISABLE_CONNECTION_SHAPE=true`. The telemetry collection is time-boxed and will be removed in a future release.
+  - Bumped up vendored `urllib3` to `2.7.0`
 
 - v4.5.0(May 12,2026)
   - Fixed `write_pandas` temp stage name collisions (SNOW-3481510). The old PRNG could produce identical name sequences in forked processes (e.g. Notebook kernels), causing `CREATE TEMPORARY STAGE` to fail with "Object already exists".

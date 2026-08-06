@@ -25,6 +25,13 @@ PROVIDER = os.getenv("SNOWFLAKE_TEST_WIF_PROVIDER")
 EXPECTED_USERNAME = os.getenv("SNOWFLAKE_TEST_WIF_USERNAME")
 IMPERSONATION_PATH = os.getenv("SNOWFLAKE_TEST_WIF_IMPERSONATION_PATH")
 EXPECTED_USERNAME_IMPERSONATION = os.getenv("SNOWFLAKE_TEST_WIF_USERNAME_IMPERSONATION")
+_federated_token_file = os.environ.get("AZURE_FEDERATED_TOKEN_FILE", "")
+IS_AKS = bool(
+    os.environ.get("AZURE_CLIENT_ID")
+    and os.environ.get("AZURE_TENANT_ID")
+    and _federated_token_file
+    and os.path.exists(_federated_token_file)
+)
 
 
 @pytest.mark.wif
@@ -38,6 +45,50 @@ def test_wif_defined_provider():
     assert connect_and_execute_simple_query(
         connection_params, EXPECTED_USERNAME
     ), f"Failed to connect with using WIF using provider {PROVIDER}"
+
+
+@pytest.mark.wif
+def test_aks_workload_identity_auth():
+    """AKS workload identity authentication via WorkloadIdentityCredential.
+
+    Covers MI and SP scenarios via different service accounts configured in CI:
+    - Case 1: MI service account on cluster 1
+    - Case 2: SP service account on cluster 1
+    - Case 4: MI service account on cluster 2
+    """
+    if not IS_AKS or PROVIDER != "AZURE":
+        pytest.skip("Requires AKS environment with AZURE provider")
+    connection_params = {
+        "host": HOST,
+        "account": ACCOUNT,
+        "authenticator": "WORKLOAD_IDENTITY",
+        "workload_identity_provider": "AZURE",
+    }
+    assert connect_and_execute_simple_query(
+        connection_params, EXPECTED_USERNAME
+    ), "AKS workload identity authentication failed"
+
+
+@pytest.mark.wif
+def test_aks_oidc_backward_compat():
+    """Case 3: OIDC backward-compatible path using K8s SA projected token."""
+    if not IS_AKS:
+        pytest.skip("Requires AKS environment")
+    token_file = "/var/run/secrets/snowflake/token"
+    if not os.path.exists(token_file):
+        pytest.skip(f"Projected token file not found: {token_file}")
+    with open(token_file) as f:
+        token = f.read().strip()
+    connection_params = {
+        "host": HOST,
+        "account": ACCOUNT,
+        "authenticator": "WORKLOAD_IDENTITY",
+        "workload_identity_provider": "OIDC",
+        "token": token,
+    }
+    assert connect_and_execute_simple_query(
+        connection_params, EXPECTED_USERNAME
+    ), "AKS OIDC backward-compatible authentication failed"
 
 
 @pytest.mark.wif
@@ -80,23 +131,28 @@ def test_should_authenticate_with_impersonation():
 
 
 @pytest.mark.wif
-def test_should_authenticate_using_aws_outbound_token():
+def test_should_authenticate_using_get_web_identity_token():
+    # AWS WIF supports two attestation methods: GetCallerIdentity (default) and
+    # GetWebIdentityToken (enabled via workload_identity_aws_use_outbound_token).
+    # This test covers the GetWebIdentityToken method against the dedicated
+    # TEST_WIF_E2E_AWS_WITH_ISSUER Snowflake user (configured with an ISSUER). Since an EC2 instance
+    # can only have one IAM role, the test impersonates a dedicated role that maps to that user.
     if PROVIDER != "AWS":
         pytest.skip("Skipping test - not running on AWS")
 
-    os.environ["SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN"] = "true"
-    try:
-        connection_params = {
-            "host": HOST,
-            "account": ACCOUNT,
-            "authenticator": "WORKLOAD_IDENTITY",
-            "workload_identity_provider": "AWS",
-        }
-        assert connect_and_execute_simple_query(
-            connection_params, EXPECTED_USERNAME
-        ), "Failed to connect using WIF with AWS outbound token"
-    finally:
-        os.environ.pop("SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN", None)
+    connection_params = {
+        "host": HOST,
+        "account": ACCOUNT,
+        "authenticator": "WORKLOAD_IDENTITY",
+        "workload_identity_provider": "AWS",
+        "workload_identity_aws_use_outbound_token": True,
+        "workload_identity_impersonation_path": [
+            "arn:aws:iam::376129840140:role/drivers-wif-automated-tests-with-issuer",
+        ],
+    }
+    assert connect_and_execute_simple_query(
+        connection_params, "TEST_WIF_E2E_AWS_WITH_ISSUER"
+    ), "Failed to connect using WIF with GetWebIdentityToken"
 
 
 def is_provider_gcp() -> bool:

@@ -8,8 +8,10 @@ from unittest.mock import Mock, patch
 import pytest
 
 from snowflake.connector.platform_detection import (
+    _LOGGERS_TO_SUPPRESS,
     _PLATFORM_DETECTION_DISABLED_RESULT,
     ENV_VAR_DISABLE_PLATFORM_DETECTION,
+    _suppress_platform_detection_logs,
     detect_platforms,
     is_azure_vm,
     is_ec2_instance,
@@ -487,3 +489,55 @@ class TestDetectPlatforms:
             if record.name == "snowflake.connector.platform_detection"
         ]
         assert len(our_logs) > 0, "Our own debug logs should not be suppressed"
+
+
+def test_suppress_platform_detection_logs_is_thread_safe():
+    """Concurrent connections must not leave suppressed loggers permanently muted.
+
+    ``_suppress_platform_detection_logs`` mutates process-global logger levels. When
+    multiple connections run ``detect_platforms`` concurrently (e.g. free-threaded
+    builds, or any threaded connect), a naive save/restore lets one thread capture the
+    already-suppressed level as the "original" and restore the logger to CRITICAL+1
+    forever -- silently killing connection-pool/telemetry DEBUG logs for the rest of the
+    process. Guard against that regression.
+    """
+    import threading
+
+    # Snapshot each logger's true starting level to later restore
+    originals = {name: logging.getLogger(name).level for name in _LOGGERS_TO_SUPPRESS}
+    try:
+
+        def hammer():
+            for _ in range(300):
+                with _suppress_platform_detection_logs():
+                    pass
+
+        threads = [threading.Thread(target=hammer) for _ in range(16)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        for name, level in originals.items():
+            assert logging.getLogger(name).level == level, (
+                f"{name} left at level {logging.getLogger(name).level} "
+                f"(expected {level}) after concurrent suppression -- the "
+                f"logger-level save/restore raced"
+            )
+    finally:
+        # Restore every suppressed logger to avoid leaking state.
+        for name, level in originals.items():
+            logging.getLogger(name).setLevel(level)
+
+
+def test_suppress_platform_detection_logs_preserves_original_level():
+    """A non-default original level must be restored exactly (not clobbered to NOTSET)."""
+    target = logging.getLogger("snowflake.connector.vendored.urllib3.connectionpool")
+    original = target.level
+    try:
+        target.setLevel(logging.WARNING)
+        with _suppress_platform_detection_logs():
+            assert target.level == logging.CRITICAL + 1  # suppressed while active
+        assert target.level == logging.WARNING  # restored to the real original
+    finally:
+        target.setLevel(original)

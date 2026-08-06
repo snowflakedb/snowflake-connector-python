@@ -130,6 +130,7 @@ def test_connect_externalbrowser(
         assert con._rest.token == "TOKEN"
         assert con._rest.master_token == "MASTER_TOKEN"
         assert con._rest.id_token == "ID_TOKEN"
+        con.close()
 
         # second connection that uses the id token to get the session token
         con = snowflake.connector.connect(
@@ -147,6 +148,7 @@ def test_connect_externalbrowser(
         assert con._rest.id_token is None
         assert con.database == "TESTDB_NEW"
         assert con.warehouse == "TESTWH_NEW"
+        con.close()
 
     if IS_MACOS:
         with patch("keyring.delete_password", Mock(return_value=None)), patch(
