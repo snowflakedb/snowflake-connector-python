@@ -2025,7 +2025,22 @@ class SnowflakeConnection:
             ):
                 # IDToken and OAuth auth need to authenticate through
                 # SSO if its credential has expired
-                self._reauthenticate()
+                result = self._reauthenticate()
+                # AuthByIdToken re-establishes the session inside reauthenticate()
+                # (it swaps to browser auth and re-runs _authenticate). The OAuth
+                # authenticators only obtain a fresh access token, so we must
+                # re-post the login here to actually establish a session with the
+                # new token - otherwise the connection is left without a session
+                # token and the first query fails with 250002 (connection closed).
+                # prepare() short-circuits on the in-memory token (tokens load from
+                # cache only once per connection), so this does not loop back into
+                # another refresh.
+                if (
+                    type(auth_instance) in (AuthByOauthCode, AuthByOauthCredentials)
+                    and isinstance(result, dict)
+                    and result.get("success")
+                ):
+                    self._authenticate(auth_instance)
             else:
                 self._authenticate(auth_instance)
 
