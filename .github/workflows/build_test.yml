@@ -12,6 +12,14 @@ on:
             - '**'
     workflow_dispatch:
         inputs:
+          matrix:
+            description: "Test matrix to run"
+            required: true
+            type: choice
+            options:
+              - pr
+              - full
+            default: pr
           logLevel:
             default: warning
             description: "Log level"
@@ -46,7 +54,7 @@ jobs:
       - name: Define testing matrix
         id: test_matrix
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ inputs.matrix }}" = "full" ]; then
             echo "Using full matrix"
             MATRIX=$(jq -c . < ./.github/workflows/generated_full_matrix.json)
           else
