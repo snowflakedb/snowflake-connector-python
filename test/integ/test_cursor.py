@@ -1805,9 +1805,12 @@ def test_fetch_batches_with_sessions(conn_cnx):
 
             num_batches = len(cur.get_result_batches())
 
+            # Patch SnowflakeRestful (not SessionManager): OCSP also calls
+            # SessionManager.use_session during TLS handshakes to cloud storage,
+            # which would inflate the count beyond remote result batches.
             with mock.patch(
-                "snowflake.connector.session_manager.SessionManager.use_session",
-                side_effect=con._rest.session_manager.use_session,
+                "snowflake.connector.network.SnowflakeRestful.use_requests_session",
+                side_effect=con._rest.use_requests_session,
             ) as get_session_mock:
                 result = cur.fetchall()
                 # all but one batch is downloaded using a session

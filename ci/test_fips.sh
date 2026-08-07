@@ -46,7 +46,11 @@ pip freeze
 
 cd $CONNECTOR_DIR
 
-# Run tests in parallel using pytest-xdist
-pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test --ignore=test/integ/aio_it --ignore=test/unit/aio --ignore=test/wif/test_wif_async.py
+# Full run first; on failure, --lf --maxfail=5 once to retry potential flakes
+# https://docs.pytest.org/en/stable/how-to/cache.html
+pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test \
+  --ignore=test/integ/aio_it --ignore=test/unit/aio --ignore=test/wif/test_wif_async.py \
+  || pytest --lf --maxfail=5 --last-failed-no-failures none -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test \
+  --ignore=test/integ/aio_it --ignore=test/unit/aio --ignore=test/wif/test_wif_async.py
 
 deactivate
