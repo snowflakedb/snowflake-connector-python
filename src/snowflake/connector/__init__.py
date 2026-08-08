@@ -32,6 +32,7 @@ from .dbapi import (
     Timestamp,
     TimestampFromTicks,
 )
+from .embedded_streamlit import EmbeddedStreamlit
 from .errors import (
     DatabaseError,
     DataError,
@@ -103,4 +104,6 @@ __all__ = [
     "ROWID",
     # Extended data type (experimental)
     "EasyLoggingConfigPython",
+    # Streamlit embedding
+    "EmbeddedStreamlit",
 ]
