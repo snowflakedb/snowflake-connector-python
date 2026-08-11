@@ -11,6 +11,7 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
+from urllib.parse import urlparse
 
 import pytest
 import pytz
@@ -1796,6 +1797,16 @@ def test_describe(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_fetch_batches_with_sessions(conn_cnx):
+    """Verifies that fetchall() reuses sessions for downloading result batches.
+
+    ``SessionManager.use_session`` is also the entry point OCSP/CRL revocation
+    checks piggyback on for their own network calls (see
+    ``_propagate_session_manager_to_ocsp``), so a raw call count would be
+    polluted by revocation-check traffic that has nothing to do with batch
+    downloading. Instead, every call is bucketed by the URL it targeted so the
+    test asserts the exact, download-only count while still accounting for
+    every other call - nothing is silently ignored.
+    """
     rowcount = 250_000
     with conn_cnx() as con:
         with con.cursor() as cur:
@@ -1803,15 +1814,52 @@ def test_fetch_batches_with_sessions(conn_cnx):
                 f"select seq4() as foo from table(generator(rowcount=>{rowcount}))"
             )
 
-            num_batches = len(cur.get_result_batches())
+            batches = cur.get_result_batches()
+            num_batches = len(batches)
+            batch_urls = {
+                batch._remote_chunk_info.url
+                for batch in batches
+                if batch._remote_chunk_info is not None
+            }
+            account_host = urlparse(con._rest.server_url).netloc
 
             with mock.patch(
                 "snowflake.connector.session_manager.SessionManager.use_session",
                 side_effect=con._rest.session_manager.use_session,
             ) as get_session_mock:
                 result = cur.fetchall()
-                # all but one batch is downloaded using a session
-                assert get_session_mock.call_count == num_batches - 1
+
+                categories = {"batch": 0, "login_logout": 0, "ocsp": 0, "crl": 0}
+                unrecognized = []
+                for call in get_session_mock.call_args_list:
+                    url = call.args[0] if call.args else call.kwargs.get("url")
+                    parsed = urlparse(url) if isinstance(url, str) else None
+                    hostname = (parsed.netloc if parsed else "").lower()
+                    path = (parsed.path if parsed else "").lower()
+
+                    if url in batch_urls:
+                        categories["batch"] += 1
+                    elif hostname == account_host.lower() and "/session/" in path:
+                        categories["login_logout"] += 1
+                    elif "ocsp" in hostname:
+                        categories["ocsp"] += 1
+                    elif "crl" in hostname or path.endswith(".crl"):
+                        categories["crl"] += 1
+                    else:
+                        unrecognized.append(url)
+
+                assert (
+                    not unrecognized
+                ), f"session used for unrecognized request(s): {unrecognized}"
+                assert (
+                    categories["login_logout"] == 0
+                ), "fetchall() should not need to (re)authenticate"
+                # all but one batch is downloaded using a session; the rest of
+                # use_session's traffic is OCSP/CRL revocation checks riding
+                # along on the same session manager, tracked but not counted
+                # as part of the batch-download assertion.
+                assert categories["batch"] == num_batches - 1
+                assert sum(categories.values()) == get_session_mock.call_count
                 assert len(result) == rowcount
 
 
