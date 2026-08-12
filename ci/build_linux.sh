@@ -6,6 +6,10 @@
 #   - To compile only a specific version(s) pass in versions like: `./build_linux.sh "3.10 3.11"`
 set -ox pipefail
 
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+}
+
 U_WIDTH=16
 PYTHON_VERSIONS="${1:-3.10 3.11 3.12 3.13 3.14}"
 THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,10 +17,17 @@ CONNECTOR_DIR="$(dirname "${THIS_DIR}")"
 DIST_DIR="${CONNECTOR_DIR}/dist"
 REPAIRED_DIR=${DIST_DIR}/repaired_wheels
 
+log "[Info] Starting build_linux.sh"
+log "[Info] Host: $(uname -a)"
+log "[Info] PYTHON_VERSIONS: ${PYTHON_VERSIONS}"
+log "[Info] AUDITWHEEL_PLAT: ${AUDITWHEEL_PLAT:-<not set, will use per-arch default>}"
+log "[Info] libc: $(ldd --version 2>&1 | head -1)"
+log "[Info] Available interpreters in /opt/python/: $(ls /opt/python/ 2>/dev/null | tr '\n' ' ' || echo '<not found>')"
+
 cd "$CONNECTOR_DIR"
 # Clean up previously built DIST_DIR
 if [ -d "${DIST_DIR}" ]; then
-    echo "[WARN] ${DIST_DIR} already existing, deleting it..."
+    log "[WARN] ${DIST_DIR} already existing, deleting it..."
     rm -rf "${DIST_DIR}"
 fi
 mkdir -p ${REPAIRED_DIR}
@@ -58,36 +69,53 @@ fi
 source /home/user/multibuild/manylinux_utils.sh
 
 for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
+    log "[Info] ===== Starting build for Python ${PYTHON_VERSION} ====="
     # Constants and setup
     PYTHON="$(cpython_path ${PYTHON_VERSION} ${U_WIDTH})/bin/python"
+    log "[Info] Interpreter path: ${PYTHON}"
+    log "[Info] Interpreter exists: $(test -x ${PYTHON} && echo YES || echo NO)"
     BUILD_DIR="${DIST_DIR}/$PYTHON_VERSION"
 
-    # Build
-    echo "[Info] Building for ${PYTHON_VERSION} with $PYTHON"
+    log "[Info] Python --version: $(${PYTHON} --version 2>&1)"
+    log "[Info] Upgrading pip, setuptools, wheel, build..."
     # Clean up possible build artifacts
     rm -rf build generated_version.py
     # Update PEP-517 dependencies
     ${PYTHON} -m pip install --upgrade pip setuptools wheel build
+    log "[Info] pip upgrade done. Running python -m build..."
     # Use new PEP-517 build
     ${PYTHON} -m build --outdir ${BUILD_DIR} .
+    log "[Info] Build complete. Wheels in ${BUILD_DIR}:"
+    ls -lh ${BUILD_DIR}/*.whl 2>/dev/null || log "[WARN] No wheels found in ${BUILD_DIR}"
     # On Linux we should repair wheel(s) generated
 arch=$(uname -p)
+log "[Info] Running auditwheel show..."
 auditwheel show ${BUILD_DIR}/*.whl
+PLAT="${AUDITWHEEL_PLAT:-$([ "$arch" == "x86_64" ] && echo manylinux2014_x86_64 || echo manylinux2014_aarch64)}"
+log "[Info] Repairing wheel with plat=${PLAT}"
 if [[ $arch == x86_64 ]]; then
   auditwheel repair --plat manylinux2014_x86_64 ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 else
   auditwheel repair --plat manylinux2014_aarch64 ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 fi
+log "[Info] Repaired wheels for ${PYTHON_VERSION}:"
+ls -lh ${REPAIRED_DIR}/*cp${PYTHON_VERSION//./}*.whl 2>/dev/null || log "[WARN] No repaired wheels found for ${PYTHON_VERSION}"
 
     # Generate reqs files
     FULL_PYTHON_VERSION="$(${PYTHON} --version | cut -d' ' -f2-)"
     REQS_FILE="${BUILD_DIR}/requirements_$(${PYTHON} -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').txt"
+    log "[Info] Generating requirements file: ${REQS_FILE}"
     ${PYTHON} -m pip install ${BUILD_DIR}/*.whl
     echo "# Generated on: $(${PYTHON} --version)" >${REQS_FILE}
     echo "# With snowflake-connector-python version: $(${PYTHON} -m pip show snowflake-connector-python | grep ^Version | cut -d' ' -f2-)" >>${REQS_FILE}
     ${PYTHON} -m pip freeze | grep -v snowflake-connector-python 1>>${REQS_FILE} 2>/dev/null
+    log "[Info] ===== Finished build for Python ${PYTHON_VERSION} ====="
 done
 
 # Move lowest Python version generated sdist to right location
 LOWEST_SDIST="$(find dist -iname '*.tar.gz' | sort | head -n 1)"
+log "[Info] Moving sdist: ${LOWEST_SDIST} → dist/"
 mv "${LOWEST_SDIST}" dist
+log "[Info] build_linux.sh finished successfully"
+log "[Info] Final repaired_wheels:"
+ls -lh ${REPAIRED_DIR}/ 2>/dev/null
