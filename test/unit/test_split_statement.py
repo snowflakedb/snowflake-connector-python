@@ -374,6 +374,50 @@ list @~;
 
 
 @pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://example.com/path",
+        "https://example.com/path",
+        "s3://bucket/key",
+        "S3://BUCKET/KEY",
+        "snow://db.schema.stage/path",
+        "azure://acct.blob.core.windows.net/container/key",
+    ],
+)
+def test_url_scheme_not_treated_as_comment(url):
+    """The // in any scheme:// must not be read as a line comment."""
+    s = f"select '{url}' as u, {url};"
+
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == (s, False)
+        with pytest.raises(StopIteration):
+            next(itr)
+
+
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
+@pytest.mark.parametrize(
+    "url",
+    [
+        "s3://bucket/*.csv",
+        "azure://acct.blob.core.windows.net/container/*.csv",
+        # Not a valid RFC 3986 scheme (underscore), but still must not be truncated.
+        "my_scheme://bucket/*.csv",
+    ],
+)
+def test_scheme_url_with_glob_not_treated_as_block_comment(url):
+    """A glob after scheme:// must not be read as the start of a /* block comment."""
+    s = f"put {url} @stage;"
+
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == (s, True)
+        with pytest.raises(StopIteration):
+            next(itr)
+
+
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_sql_with_commands():
     with StringIO(
         """create or replace view aaa
