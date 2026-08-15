@@ -25,7 +25,7 @@ if [[ "$arch" == "aarch64" ]]; then
   BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014AARCH64
   GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-arm64
 else
-  BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014
+  BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014  # points to manylinux_2_28 via set_base_image.sh
   GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-amd64
 fi
 

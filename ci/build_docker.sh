@@ -18,9 +18,11 @@ arch=$(uname -p)
 echo "[Info] Building docker image"
 if [[ "$arch" == "aarch64" ]]; then
   BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014AARCH64
+  AUDITWHEEL_PLAT=manylinux_2_28_aarch64
   GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-arm64
 else
   BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014
+  AUDITWHEEL_PLAT=manylinux_2_28_x86_64
   GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-amd64
 fi
 
@@ -32,6 +34,7 @@ docker run \
     -e TERM=vt102 \
     -e PIP_DISABLE_PIP_VERSION_CHECK=1 \
     -e LOCAL_USER_ID=${user_id} \
+    -e AUDITWHEEL_PLAT=${AUDITWHEEL_PLAT} \
     --mount type=bind,source="${CONNECTOR_DIR}",target=/home/user/snowflake-connector-python \
     ${CONTAINER_NAME}:1.0 \
     /home/user/snowflake-connector-python/ci/build_linux.sh $1
