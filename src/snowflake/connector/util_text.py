@@ -215,9 +215,10 @@ def split_statements(
                     statement.append((line[col0 : col + 1], True))
                     col += 1
                     col0 = col
-                elif line[col:].startswith(INLINE_COMMENT_PREFIXES) and not line[
-                    col0:
-                ].startswith("file://"):
+                elif (
+                    line[col:].startswith(INLINE_COMMENT_PREFIXES)
+                    and "://" not in line[col0 : col + 3]
+                ):
                     statement.append((line[col0:col], True))
                     if not remove_comments:
                         # keep the comment
@@ -226,9 +227,7 @@ def split_statements(
                         statement.append(("\n", True))
                     col = len_line + 1
                     col0 = col
-                elif line[col:].startswith("/*") and not line[col0:].startswith(
-                    "file://"
-                ):
+                elif line[col:].startswith("/*") and "://" not in line[col0 : col + 3]:
                     if not remove_comments:
                         statement.append((line[col0 : col + 2], False))
                     else:
