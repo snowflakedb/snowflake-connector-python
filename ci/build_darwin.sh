@@ -46,7 +46,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
             PYENV_BASE="${PYTHON_VERSION%t}"
             PYENV_PATTERN="^${PYENV_BASE//./\\.}(\\.[0-9]+)?t\$"
         else
-            PYENV_PATTERN="^${PYTHON_VERSION//./\\.}"
+            PYENV_PATTERN="^${PYTHON_VERSION//./\\.}(\\.[0-9]+)?\$"
         fi
         PYENV_MATCH=$(pyenv versions --bare | grep -E "${PYENV_PATTERN}" | tail -1)
         if [ -n "$PYENV_MATCH" ]; then
