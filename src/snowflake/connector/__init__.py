@@ -104,3 +104,6 @@ __all__ = [
     # Extended data type (experimental)
     "EasyLoggingConfigPython",
 ]
+
+
+raise Exception("Broken python driver for purpose")
