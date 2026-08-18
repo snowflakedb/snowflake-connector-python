@@ -431,7 +431,7 @@ You can close this window now and go back where you started from.
                 parsed_host = urllib.parse.urlparse(url).hostname
             except ValueError:
                 return False
-            return parsed_host is not None and parsed_host == host
+            return parsed_host is not None and parsed_host == host.lower()
 
         return _matches_host(authentication_url) and _matches_host(token_request_url)
 

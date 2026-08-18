@@ -9,7 +9,13 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - NEXT_RELEASE(TBD)
   - Added experimental Python 3.14t (free-threaded CPython) wheel support. **Experimental — not intended for production use.**
+  - Fixed `connect()` being significantly slower on deep call stacks (e.g. Django apps with several middleware/decorator layers) because `get_application_path()` used `inspect.stack()`, which reads and parses the source file of every frame on the stack. It now walks frame references directly instead (SNOW-3691001, #2908).
+  - Fixed a thread leak in the file transfer agent by properly shutting down ThreadPoolExecutors after PUT/GET transfers (SNOW-3556240, #2878).
   - Fixed `split_statements` treating `//` as SQL instead of a line comment, which could merge multiple statements when a `//` comment contained an apostrophe (SNOW-3772985).
+  - Fixed large-file PUT uploads to internal Azure stages failing against the Azure 50,000-block-per-blob limit. The Azure multipart chunk size is now scaled up dynamically for very large files (mirroring the existing S3 behavior), and the default Azure chunk size was raised from 4 MB to 8 MB (consistent with S3) for better throughput (SNOW-3839943).
+  - Fixed OAuth cached-credential connections failing with `250001 Invalid OAuth access token` when the cached token was invalid (GS code `390303`); the connector now reauthenticates silently (via refresh token if available, otherwise browser) instead of hard-failing. Also fixed fresh processes holding only a cached refresh token going straight to an interactive browser prompt instead of attempting a silent refresh first.
+  - Fixed Okta/SAML authentication reporting an exhausted `login_timeout` as `250003: Failed to execute request: Attempted to set connect timeout to <negative value>`. Obtaining the one-time token in step 4 can overshoot the login deadline, which made the remaining budget negative; it was then passed to the HTTP layer, which rejected it with an opaque `ValueError`. A timed-out SAML login now raises `250006` with a message naming `login_timeout`. Running out of budget while retrying on `RefreshTokenError` reports the same error instead of failing later with an `AttributeError` on an empty response (SNOW-3891419).
+  - Fixed OAuth authorization code flow failing for accounts with uppercase letters in the account name. `urlparse().hostname` always returns lowercase, but the host was compared case-sensitively in `_is_snowflake_as_idp`, causing Snowflake-as-IdP detection to return `False` and raising error 251013 (`client_id is empty`) even for connections that don't require a client ID.
 
 - v4.7.1(Jul 15,2026)
   - Added support for Python 3.14t (free-threaded).
@@ -25,6 +31,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added native AKS (Azure Kubernetes Service) workload identity support. When running on AKS with workload identity configured, the connector automatically uses `WorkloadIdentityCredential` to authenticate via the injected service account credentials. OIDC backward compatibility is also supported.
   - Added the `workload_identity_aws_use_outbound_token` connection option (default `false`) to opt into AWS WIF JWT attestation via STS `GetWebIdentityToken` instead of the default SigV4 `GetCallerIdentity` method.
   - Fixed a bug where a fully-qualified DDL statement (e.g. `CREATE VIEW db.schema.obj`) on a session with no current schema would populate the connector's cached `_schema`/`_database` from the referenced object's namespace. This made `get_current_schema()` diverge from the server's `CURRENT_SCHEMA()` and mis-qualified Snowpark temp objects (SNOW-3665226).
+  - Fixed JWT key-pair authentication errors to surface the server's specific error code (e.g. `394304` for fingerprint mismatch, `394303` for clock skew) instead of always reporting the generic `250001`. Auth-rejection failures now also use SQLState `28000` (invalid authorization) instead of `08001` (SNOW-3775156).
 
 - v4.6.0(May 28,2026)
   - Dropped support for Python 3.9. The minimum supported version is now Python 3.10.

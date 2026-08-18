@@ -118,6 +118,23 @@ class _OAuthTokensMixin:
             if key:
                 self._token_cache.remove(key)
 
+    def _invalidate_access_token(self) -> None:
+        """Clear a confirmed-invalid access token from memory and cache.
+
+        Prevents a poisoned cached access token from being replayed on the next
+        connection (the symptom that made disabling the credential cache the only
+        workaround). Only call this on a *terminal* rejection, i.e. when it will
+        NOT be followed by a store of a fresh token: a lone remove() is safe, but
+        the remove-then-store pattern destroys macOS Keychain ACL entries. On a
+        successful reauth the new token is written via _store_tokens(), which
+        overwrites the stale one ACL-safely without a remove().
+        """
+        self._access_token = None
+        if self._token_cache:
+            key = self._get_access_token_cache_key()
+            if key:
+                self._token_cache.remove(key)
+
     def _store_tokens(
         self, access_token: str | None = None, refresh_token: str | None = None
     ) -> None:
@@ -308,6 +325,10 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             password=None,
         )
         if access_token is None:
+            # Terminal rejection: we could not obtain a new access token, so the
+            # stale one must not linger in the cache to be replayed next time.
+            # This is a lone remove() (no subsequent store), so it is ACL-safe.
+            self._invalidate_access_token()
             self._handle_failure(
                 conn=conn,
                 ret={
@@ -338,7 +359,43 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             logger.info("OAuth access token is already available in cache")
             return
 
-        # No cached token - request fresh tokens via browser
+        # No cached access token, but a cached refresh token may still be usable
+        # (loaded into memory above). Try to exchange it for a new access token
+        # BEFORE falling back to interactive auth, so a fresh process can refresh
+        # silently without a browser prompt. Gated on refresh_token_enabled, so
+        # behavior is unchanged when refresh tokens are disabled.
+        if self._refresh_token_enabled and self._refresh_token:
+            logger.debug(
+                "no cached OAuth access token; attempting silent refresh using "
+                "the cached refresh token"
+            )
+            try:
+                self._do_refresh_token(conn=conn)
+            except Exception as exc:
+                # A silent refresh at connection setup must never hard-fail the
+                # connection. _get_refresh_token_response() surfaces transport
+                # failures (e.g. a transient network error or an urllib3
+                # exception reaching the token endpoint) through _handle_failure,
+                # which raises. Swallow it here and fall back to interactive auth,
+                # which can still recover - this is the whole point of a proactive
+                # refresh. Note this differs from reauthenticate(), where raising
+                # mid-session is the correct behavior.
+                logger.debug(
+                    "silent refresh raised %s; falling back to interactive "
+                    "authentication",
+                    exc,
+                )
+            if self._access_token is not None:
+                logger.info(
+                    "obtained a new OAuth access token via the cached refresh token"
+                )
+                return
+            logger.debug(
+                "silent refresh did not yield an access token; falling back to "
+                "interactive authentication"
+            )
+
+        # No usable cached tokens - request fresh tokens via browser
         access_token, refresh_token = self._request_tokens(
             conn=conn,
             authenticator=authenticator,
