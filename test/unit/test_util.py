@@ -1,5 +1,7 @@
 import ctypes
 import os
+import sys
+import time
 from importlib import reload
 from time import sleep
 from unittest import mock
@@ -13,9 +15,61 @@ from snowflake.connector._utils import (
     build_minicore_usage_for_session,
     build_minicore_usage_for_telemetry,
     build_nanoarrow_usage_for_telemetry,
+    get_application_path,
 )
 
 pytestmark = pytest.mark.skipolddriver
+
+
+def test_get_application_path_is_fast_on_deep_call_stacks():
+    """Regression test for GH-2908 / SNOW-3691001.
+
+    get_application_path() used to call inspect.stack(), which reads and
+    parses the source file of every frame on the call stack. Real-world
+    call stacks (e.g. a Django app with several middleware/decorator
+    layers) can be 100+ frames deep, which made connect() take hundreds
+    of milliseconds to over half a second just to compute the
+    application path. A correct implementation only walks frame.f_back
+    pointers and stays in the microsecond range regardless of depth.
+    """
+    depth = 150
+    n_runs = 5
+    threshold_ms = 1.0
+
+    def recurse(n):
+        if n == 0:
+            t0 = time.perf_counter()
+            get_application_path()
+            return time.perf_counter() - t0
+        return recurse(n - 1)
+
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(old_limit, depth + 500))
+    try:
+        durations = [recurse(depth) for _ in range(n_runs)]
+    finally:
+        sys.setrecursionlimit(old_limit)
+
+    avg_ms = sum(durations) / len(durations) * 1000
+    assert avg_ms < threshold_ms, (
+        f"get_application_path() averaged {avg_ms:.3f} ms over {n_runs} "
+        f"runs at stack depth {depth} (threshold {threshold_ms} ms). This "
+        "indicates a regression to a slow, per-frame-source-reading "
+        "implementation (see GH-2908)."
+    )
+
+
+def test_get_application_path_matches_inspect_stack_behavior():
+    """The fast frame-walk must return the same filename inspect.stack()[-1] would."""
+    from inspect import stack
+
+    def recurse(n):
+        if n == 0:
+            return get_application_path(), stack()[-1].filename
+        return recurse(n - 1)
+
+    fast_result, reference_result = recurse(20)
+    assert fast_result == reference_result
 
 
 def test_timer():

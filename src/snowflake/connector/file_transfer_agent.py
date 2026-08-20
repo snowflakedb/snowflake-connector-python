@@ -9,6 +9,7 @@ import os
 import sys
 import threading
 from concurrent.futures.thread import ThreadPoolExecutor
+from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import partial
 from logging import getLogger
@@ -21,6 +22,8 @@ from .compat import IS_WINDOWS
 from .constants import (
     AZURE_CHUNK_SIZE,
     AZURE_FS,
+    AZURE_MAX_BLOCKS,
+    AZURE_MAX_OBJECT_SIZE,
     CMD_TYPE_DOWNLOAD,
     CMD_TYPE_UPLOAD,
     GCS_FS,
@@ -186,24 +189,31 @@ def _update_progress(
     return progress == 1.0
 
 
-def _chunk_size_calculator(file_size: int) -> int:
-    # S3 has limitation on the num of parts to be uploaded, this helper method recalculate the num of parts
-    if file_size > S3_MAX_OBJECT_SIZE:
-        # check if we don't exceed the allowed S3 max file size 5 TiB
+def _chunk_size_calculator(
+    file_size: int,
+    default_chunk_size: int = S3_DEFAULT_CHUNK_SIZE,
+    max_parts: int = S3_MAX_PARTS,
+    min_part_size: int = S3_MIN_PART_SIZE,
+    max_object_size: int = S3_MAX_OBJECT_SIZE,
+) -> int:
+    # Cloud providers cap the number of parts/blocks per object (S3: 10,000 parts,
+    # Azure: 50,000 blocks). This helper scales the chunk size up so the resulting
+    # number of parts stays within that limit; otherwise it keeps the default chunk size.
+    if file_size > max_object_size:
         raise ValueError(
-            f"File size {file_size} exceeds the maximum file size {S3_MAX_OBJECT_SIZE} allowed in S3."
+            f"File size {file_size} exceeds the maximum allowed file size {max_object_size}."
         )
 
     # num_parts = math.ceil(file_size / default_chunk_size)
-    # if num_parts is greater than the allowed S3_MAX_PARTS, we update our chunk_size, otherwise we use the default one
+    # if num_parts is greater than the allowed max_parts, we update our chunk_size, otherwise we use the default one
     calculated_chunk_size = (
-        max(math.ceil(file_size / S3_MAX_PARTS), S3_MIN_PART_SIZE)
-        if math.ceil(file_size / S3_DEFAULT_CHUNK_SIZE) > S3_MAX_PARTS
-        else S3_DEFAULT_CHUNK_SIZE
+        max(math.ceil(file_size / max_parts), min_part_size)
+        if math.ceil(file_size / default_chunk_size) > max_parts
+        else default_chunk_size
     )
-    if calculated_chunk_size != S3_DEFAULT_CHUNK_SIZE:
+    if calculated_chunk_size != default_chunk_size:
         logger.debug(
-            f"Setting chunksize to {calculated_chunk_size} instead of the default {S3_DEFAULT_CHUNK_SIZE}."
+            f"Setting chunksize to {calculated_chunk_size} instead of the default {default_chunk_size}."
         )
     return calculated_chunk_size
 
@@ -462,9 +472,16 @@ class SnowflakeFileTransferAgent:
         max_concurrency = min(
             self._parallel, self._snowflake_server_dop_cap_for_file_transfer
         )
-        network_tpe = ThreadPoolExecutor(max_concurrency)
-        preprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
-        postprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
+        thread_pools_exit_stack = ExitStack()
+        network_tpe = thread_pools_exit_stack.enter_context(
+            ThreadPoolExecutor(max_concurrency)
+        )
+        preprocess_tpe = thread_pools_exit_stack.enter_context(
+            ThreadPoolExecutor(iobound_tpe_limit)
+        )
+        postprocess_tpe = thread_pools_exit_stack.enter_context(
+            ThreadPoolExecutor(iobound_tpe_limit)
+        )
         logger.debug(f"Chunk ThreadPoolExecutor size: {max_concurrency}")
         cv_main_thread = threading.Condition()  # to signal the main thread
         cv_chunk_process = (
@@ -661,37 +678,38 @@ class SnowflakeFileTransferAgent:
                         f"An exception was raised in {repr(callback)}", exc_info=True
                     )
 
-        for file_client in files:
-            callback = partial(preprocess_done_cb, done_client=file_client)
-            if is_upload:
-                preprocess_tpe.submit(
-                    function_and_callback_wrapper,
-                    # Work fn
-                    file_client.prepare_upload,
-                    # Callback fn
-                    callback,
-                    file_client.meta,
-                )
-            else:
-                preprocess_tpe.submit(
-                    function_and_callback_wrapper,
-                    # Work fn
-                    file_client.prepare_download,
-                    # Callback fn
-                    callback,
-                    file_client.meta,
-                )
-            transfer_metadata.num_files_started += 1  # TODO: do we need this?
+        with thread_pools_exit_stack:
+            for file_client in files:
+                callback = partial(preprocess_done_cb, done_client=file_client)
+                if is_upload:
+                    preprocess_tpe.submit(
+                        function_and_callback_wrapper,
+                        # Work fn
+                        file_client.prepare_upload,
+                        # Callback fn
+                        callback,
+                        file_client.meta,
+                    )
+                else:
+                    preprocess_tpe.submit(
+                        function_and_callback_wrapper,
+                        # Work fn
+                        file_client.prepare_download,
+                        # Callback fn
+                        callback,
+                        file_client.meta,
+                    )
+                transfer_metadata.num_files_started += 1  # TODO: do we need this?
 
-        with cv_main_thread:
-            while transfer_metadata.num_files_completed < num_total_files:
-                cv_main_thread.wait()
-                # If both exception_caught_in_work and exception_caught_in_callback
-                # are present, the former will take precedence.
-                if exception_caught_in_work is not None:
-                    raise exception_caught_in_work
-                if exception_caught_in_callback is not None:
-                    raise exception_caught_in_callback
+            with cv_main_thread:
+                while transfer_metadata.num_files_completed < num_total_files:
+                    cv_main_thread.wait()
+                    # If both exception_caught_in_work and exception_caught_in_callback
+                    # are present, the former will take precedence.
+                    if exception_caught_in_work is not None:
+                        raise exception_caught_in_work
+                    if exception_caught_in_callback is not None:
+                        raise exception_caught_in_callback
 
         self._results = metas
 
@@ -709,7 +727,13 @@ class SnowflakeFileTransferAgent:
             return SnowflakeAzureRestClient(
                 meta,
                 self._credentials,
-                AZURE_CHUNK_SIZE,
+                _chunk_size_calculator(
+                    meta.src_file_size,
+                    default_chunk_size=AZURE_CHUNK_SIZE,
+                    max_parts=AZURE_MAX_BLOCKS,
+                    min_part_size=AZURE_CHUNK_SIZE,
+                    max_object_size=AZURE_MAX_OBJECT_SIZE,
+                ),
                 self._stage_info,
                 unsafe_file_write=self._unsafe_file_write,
             )

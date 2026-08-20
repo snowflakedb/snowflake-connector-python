@@ -16,6 +16,9 @@ from snowflake.connector.auth import AuthByOauthCredentials
 from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
 from ..test_utils.wiremock.wiremock_utils import WiremockClient
+from ..test_utils.wiremock.wiremock_utils import (
+    oauth_redirect_uri as _oauth_redirect_uri,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +118,20 @@ def omit_oauth_urls_check():
         yield
 
 
+# Base port for the local OAuth redirect callback server. Each pytest-xdist
+# worker gets its own port derived from its worker id so that, with
+# SO_REUSEPORT enabled, callbacks intended for one worker's OAuth flow are not
+# delivered by the kernel to a different worker listening on the same port.
+@pytest.fixture()
+def oauth_redirect_uri() -> str:
+    """OAuth redirect URI with a worker-unique port to avoid SO_REUSEPORT races.
+
+    Matches the port substituted into WireMock mappings by
+    ``WiremockClient`` (see ``oauth_redirect_port`` in wiremock_utils).
+    """
+    return _oauth_redirect_uri()
+
+
 @pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_successful_flow(
@@ -124,6 +141,7 @@ def test_oauth_code_successful_flow(
     webbrowser_mock,
     monkeypatch,
     omit_oauth_urls_check,
+    oauth_redirect_uri,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -149,7 +167,7 @@ def test_oauth_code_successful_flow(
                 oauth_client_secret="testClientSecret",
                 oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                oauth_redirect_uri=oauth_redirect_uri,
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
             )
@@ -166,6 +184,7 @@ def test_oauth_code_invalid_state(
     webbrowser_mock,
     monkeypatch,
     omit_oauth_urls_check,
+    oauth_redirect_uri,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -186,7 +205,7 @@ def test_oauth_code_invalid_state(
                     role="ANALYST",
                     oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                     oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                    oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                    oauth_redirect_uri=oauth_redirect_uri,
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                 )
@@ -201,6 +220,7 @@ def test_oauth_code_scope_error(
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock,
     monkeypatch,
+    oauth_redirect_uri,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -220,7 +240,7 @@ def test_oauth_code_scope_error(
                     role="ANALYST",
                     oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                     oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                    oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                    oauth_redirect_uri=oauth_redirect_uri,
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                 )
@@ -237,6 +257,7 @@ def test_oauth_code_token_request_error(
     webbrowser_mock,
     monkeypatch,
     omit_oauth_urls_check,
+    oauth_redirect_uri,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -258,7 +279,7 @@ def test_oauth_code_token_request_error(
                         role="ANALYST",
                         oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                         oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                        oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                        oauth_redirect_uri=oauth_redirect_uri,
                         host=wiremock_client.wiremock_host,
                         port=wiremock_client.wiremock_http_port,
                     )
@@ -275,6 +296,7 @@ def test_oauth_code_browser_timeout(
     webbrowser_mock,
     monkeypatch,
     omit_oauth_urls_check,
+    oauth_redirect_uri,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -296,7 +318,7 @@ def test_oauth_code_browser_timeout(
                     role="ANALYST",
                     oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                     oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                    oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                    oauth_redirect_uri=oauth_redirect_uri,
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                     external_browser_timeout=2,
@@ -316,6 +338,7 @@ def test_oauth_code_custom_urls(
     webbrowser_mock,
     monkeypatch,
     omit_oauth_urls_check,
+    oauth_redirect_uri,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -341,7 +364,7 @@ def test_oauth_code_custom_urls(
                 role="ANALYST",
                 oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/tokenrequest",
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/authorization",
-                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                oauth_redirect_uri=oauth_redirect_uri,
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
             )
@@ -359,6 +382,7 @@ def test_oauth_code_local_application_custom_urls_successful_flow(
     webbrowser_mock,
     monkeypatch,
     omit_oauth_urls_check,
+    oauth_redirect_uri,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -385,7 +409,7 @@ def test_oauth_code_local_application_custom_urls_successful_flow(
                 role="ANALYST",
                 oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/tokenrequest",
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/authorization",
-                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                oauth_redirect_uri=oauth_redirect_uri,
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
             )
@@ -403,6 +427,7 @@ def test_oauth_code_successful_refresh_token_flow(
     monkeypatch,
     temp_cache,
     omit_oauth_urls_check,
+    oauth_redirect_uri,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -446,7 +471,7 @@ def test_oauth_code_successful_refresh_token_flow(
         oauth_client_secret="testClientSecret",
         oauth_token_request_url=token_request_url,
         oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-        oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+        oauth_redirect_uri=oauth_redirect_uri,
         host=wiremock_client.wiremock_host,
         port=wiremock_client.wiremock_http_port,
         oauth_enable_refresh_tokens=True,
@@ -463,6 +488,138 @@ def test_oauth_code_successful_refresh_token_flow(
 
 @pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
+def test_oauth_code_invalid_access_token_triggers_refresh(
+    wiremock_client: WiremockClient,
+    wiremock_oauth_refresh_token_dir,
+    wiremock_generic_mappings_dir,
+    monkeypatch,
+    temp_cache,
+    omit_oauth_urls_check,
+    oauth_redirect_uri,
+) -> None:
+    """A cached access token rejected as *invalid* (GS code 390303, not merely
+    expired 390318) must trigger reauthentication via the refresh token rather
+    than hard-failing with 250001."""
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
+
+    # Login with the cached token is rejected with 390303 ("Invalid OAuth access
+    # token"), then the refresh token is exchanged and the retry login succeeds.
+    wiremock_client.import_mapping(
+        wiremock_generic_mappings_dir
+        / "snowflake_login_failed_invalid_oauth_token.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_oauth_refresh_token_dir / "refresh_successful.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_login_successful.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+    user = "testUser"
+    access_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_ACCESS_TOKEN
+    )
+    refresh_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_REFRESH_TOKEN
+    )
+    temp_cache.store(access_token_key, "expired-access-token-123")
+    temp_cache.store(refresh_token_key, "refresh-token-123")
+    cnx = snowflake.connector.connect(
+        user=user,
+        authenticator="OAUTH_AUTHORIZATION_CODE",
+        oauth_client_id="123",
+        account="testAccount",
+        protocol="http",
+        role="ANALYST",
+        oauth_client_secret="testClientSecret",
+        oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+        oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
+        oauth_redirect_uri=oauth_redirect_uri,
+        host=wiremock_client.wiremock_host,
+        port=wiremock_client.wiremock_http_port,
+        oauth_enable_refresh_tokens=True,
+        client_store_temporary_credential=True,
+    )
+    assert cnx, "invalid cnx"
+    cnx.close()
+    # The invalid token was replaced by the refreshed one in the cache.
+    assert temp_cache.retrieve(access_token_key) == "access-token-123"
+    assert temp_cache.retrieve(refresh_token_key) == "refresh-token-123"
+
+
+@pytest.mark.skipolddriver
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
+def test_oauth_code_proactive_refresh_without_cached_access_token(
+    wiremock_client: WiremockClient,
+    wiremock_oauth_refresh_token_dir,
+    wiremock_generic_mappings_dir,
+    monkeypatch,
+    temp_cache,
+    omit_oauth_urls_check,
+    oauth_redirect_uri,
+) -> None:
+    """Fresh process with only a cached refresh token (no access token) should
+    silently obtain a new access token via refresh, without a browser prompt."""
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
+
+    wiremock_client.import_mapping(
+        wiremock_oauth_refresh_token_dir / "refresh_successful_from_start.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_login_successful.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+
+    user = "testUser"
+    access_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_ACCESS_TOKEN
+    )
+    refresh_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_REFRESH_TOKEN
+    )
+    # Only a refresh token is cached - the access token is absent.
+    temp_cache.store(refresh_token_key, "refresh-token-123")
+
+    # If interactive auth is ever reached the test must fail loudly: the whole
+    # point is that a valid cached refresh token avoids the browser.
+    def _no_browser(*args, **kwargs):
+        raise AssertionError(
+            "interactive browser auth must not be triggered when a valid "
+            "refresh token is cached"
+        )
+
+    with mock.patch(
+        "snowflake.connector.auth.oauth_code.AuthByOauthCode._request_tokens",
+        side_effect=_no_browser,
+    ):
+        cnx = snowflake.connector.connect(
+            user=user,
+            authenticator="OAUTH_AUTHORIZATION_CODE",
+            oauth_client_id="123",
+            account="testAccount",
+            protocol="http",
+            role="ANALYST",
+            oauth_client_secret="testClientSecret",
+            oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+            oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
+            oauth_redirect_uri=oauth_redirect_uri,
+            host=wiremock_client.wiremock_host,
+            port=wiremock_client.wiremock_http_port,
+            oauth_enable_refresh_tokens=True,
+            client_store_temporary_credential=True,
+        )
+    assert cnx, "invalid cnx"
+    cnx.close()
+    # The freshly refreshed access token should be persisted to the cache.
+    assert temp_cache.retrieve(access_token_key) == "access-token-123"
+
+
+@pytest.mark.skipolddriver
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_expired_refresh_token_flow(
     wiremock_client: WiremockClient,
     wiremock_oauth_refresh_token_dir,
@@ -472,6 +629,7 @@ def test_oauth_code_expired_refresh_token_flow(
     monkeypatch,
     temp_cache,
     omit_oauth_urls_check,
+    oauth_redirect_uri,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -525,7 +683,7 @@ def test_oauth_code_expired_refresh_token_flow(
                 oauth_client_secret="testClientSecret",
                 oauth_token_request_url=token_request_url,
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                oauth_redirect_uri=oauth_redirect_uri,
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
                 oauth_enable_refresh_tokens=True,
@@ -819,6 +977,7 @@ def test_oauth_code_successful_flow_through_proxy(
     webbrowser_mock,
     monkeypatch,
     omit_oauth_urls_check,
+    oauth_redirect_uri,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
     target_wm, proxy_wm = wiremock_target_proxy_pair
@@ -849,7 +1008,7 @@ def test_oauth_code_successful_flow_through_proxy(
                 oauth_client_secret="testClientSecret",
                 oauth_token_request_url=f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/token-request",
                 oauth_authorization_url=f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/authorize",
-                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                oauth_redirect_uri=oauth_redirect_uri,
                 host=target_wm.wiremock_host,
                 port=target_wm.wiremock_http_port,
             )
