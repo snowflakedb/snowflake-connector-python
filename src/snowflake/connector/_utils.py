@@ -9,7 +9,7 @@ import string
 import threading
 import time
 from enum import Enum
-from inspect import stack
+from inspect import currentframe
 from secrets import choice
 from threading import Timer
 from uuid import UUID
@@ -101,12 +101,24 @@ class _TrackedQueryCancellationTimer(Timer):
 
 
 def get_application_path() -> str:
-    """Get the path of the application script using the connector."""
+    """Get the path of the application script using the connector.
+
+    Walks frame.f_back directly instead of using inspect.stack(), which
+    reads and parses the source file of every frame on the call stack.
+    That per-frame disk I/O made connect() take hundreds of milliseconds
+    on deep call stacks (see SNOW-3691001 / GH-2908).
+    """
+    frame = currentframe()
     try:
-        outermost_frame = stack()[-1]
-        return outermost_frame.filename
+        if frame is None:
+            return "unknown"
+        while frame.f_back is not None:
+            frame = frame.f_back
+        return frame.f_code.co_filename
     except Exception:
         return "unknown"
+    finally:
+        del frame
 
 
 _SPCS_ENV_VAR = "SNOWFLAKE_RUNNING_INSIDE_SPCS"

@@ -3,7 +3,7 @@
 # Build Snowflake Python Connector on Mac
 # NOTES:
 #   - To compile only a specific version(s) pass in versions like: `./build_darwin.sh "3.10 3.11"`
-PYTHON_VERSIONS="${1:-3.10 3.11 3.12 3.13 3.14}"
+PYTHON_VERSIONS="${1:-3.10 3.11 3.12 3.13 3.14 3.14t}"
 
 THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONNECTOR_DIR="$(dirname "${THIS_DIR}")"
@@ -36,12 +36,29 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
 
     log "[Info] ===== Starting build for Python ${PYTHON_VERSION} ====="
 
-    # Select the matching pyenv-installed version (e.g. 3.10 -> 3.10.15)
+    unset PYENV_VERSION
+
+    # Select the matching pyenv-installed version (e.g. 3.10 -> 3.10.15).
+    # Free-threaded builds may be reported as e.g. "3.14t" or "3.14.0t" depending on the
+    # pyenv-build convention, so match either shape for a "*t" version.
     if command -v pyenv &> /dev/null; then
-        PYENV_MATCH=$(pyenv versions --bare | grep "^${PYTHON_VERSION//./\\.}" | head -1)
+        if [[ "${PYTHON_VERSION}" == *t ]]; then
+            PYENV_BASE="${PYTHON_VERSION%t}"
+            PYENV_PATTERN="^${PYENV_BASE//./\\.}(\\.[0-9]+)?t\$"
+        else
+            PYENV_PATTERN="^${PYTHON_VERSION//./\\.}(\\.[0-9]+)?\$"
+        fi
+        PYENV_MATCH=$(pyenv versions --bare | grep -E "${PYENV_PATTERN}" | tail -1)
         if [ -n "$PYENV_MATCH" ]; then
             pyenv local "$PYENV_MATCH"
-            log "[Info] pyenv local set to $PYENV_MATCH"
+            # `pyenv local` alone is not enough: the shim can hang in a non-interactive
+            # shell (no TTY) if it has to re-resolve the version on every invocation.
+            # Exporting PYENV_VERSION makes the shim resolve it directly. See ed53f0cf
+            # ("Fix pyenv shim hang on Jenkins by selecting PYENV_VERSION per iteration").
+            export PYENV_VERSION="$PYENV_MATCH"
+            log "[Info] pyenv version set to $PYENV_MATCH"
+        else
+            log "[WARN] no pyenv-installed version matches ${PYTHON_VERSION}, relying on PATH"
         fi
     fi
 
@@ -68,6 +85,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     python -m build --wheel .
     log "[Info] python -m build complete"
     deactivate
+    unset PYENV_VERSION
     log "[Info] Deleting venv at ${VENV_DIR}"
     rm -rf ${VENV_DIR}
     log "[Info] ===== Finished build for Python ${PYTHON_VERSION} ====="
