@@ -19,6 +19,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - SQL text is masked before it is written to DEBUG logs: `_format_query_for_log()` runs the query through `SecretDetector`, covering the cursor and connection paths on both sync and async. The cancel-query log paths use the same masking (SNOW-3675590).
   - Deferred the SQL-masking cost to log emit-time: query DEBUG lines pass a lazy `_format_query_for_log_lazy()` wrapper whose `__str__` masks only when a handler emits the record (SNOW-3675590).
   - Corrected the invalid-account-identifier error message so it matches the validator, which allows '.' as a label separator.
+  - The `WORKLOAD_IDENTITY` authenticator runs only against recognized Snowflake hosts: the connection host is normalized and suffix-anchored against `snowflakecomputing.com`, `.cn`, and `.mil` before the workload-identity flow proceeds. The `SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES` environment variable additively extends the recognized-host list (SNOW-3675580).
 
 - v4.7.2(Aug 6,2026)
   - Fixed a thread leak in the file transfer agent by properly shutting down ThreadPoolExecutors after PUT/GET transfers (SNOW-3556240, #2878).
