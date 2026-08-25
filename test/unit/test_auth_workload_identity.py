@@ -9,6 +9,7 @@ import jwt
 import pytest
 
 from snowflake.connector.auth import AuthByWorkloadIdentity
+from snowflake.connector.errorcode import ER_WIF_UNTRUSTED_HOST
 from snowflake.connector.errors import MissingDependencyError, ProgrammingError
 from snowflake.connector.vendored.requests.exceptions import (
     ConnectTimeout,
@@ -801,3 +802,148 @@ def test_aks_impersonation_path_raises_error(_mock_exists, monkeypatch):
     assert "workload_identity_impersonation_path is not supported on AKS" in str(
         excinfo.value
     )
+
+
+# -- Host allow-list tests (SNOW-3675580) --
+#
+# The WORKLOAD_IDENTITY authenticator harvests an ambient cloud credential and
+# places it in the login request, so the destination host must be a Snowflake
+# host. These tests verify prepare() refuses untrusted hosts *before* harvesting.
+
+
+def _mock_conn_with_host(host: str):
+    conn = mock.Mock()
+    conn.host = host
+    return conn
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "myorg-acct.snowflakecomputing.com",
+        "myorg-acct.privatelink.snowflakecomputing.com",
+        "acct.us-east-1.snowflakecomputing.com",
+        "acct.snowflakecomputing.cn",
+        "acct.snowflakecomputing.mil",
+        "acct.some-region.privatelink.snowflakecomputing.mil",
+        "snowflakecomputing.com",  # apex
+        "ACCT.SnowflakeComputing.COM",  # case-insensitive
+        "acct.snowflakecomputing.com.",  # trailing dot / FQDN form
+        "acct.snowflakecomputing.com.:443",  # FQDN form combined with an explicit port
+    ],
+)
+def test_wif_prepare_allows_snowflake_hosts(host):
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
+    with mock.patch(
+        "snowflake.connector.auth.workload_identity.create_attestation"
+    ) as mock_create:
+        mock_create.return_value = WorkloadIdentityAttestation(
+            AttestationProvider.AWS, "fake-credential", {}
+        )
+        auth_class.prepare(conn=_mock_conn_with_host(host))
+    mock_create.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "evilsnowflakecomputing.com",  # no label boundary
+        "acct.snowflakecomputing.com.external.example",  # extra labels after suffix
+        "evil.snowflakecomputing.external.example",  # "contains" match, not a suffix match
+        "acct.snowflakecomputing.zip",  # TLD not in the allowlist
+        "external.example",
+        "snowflakecomputing.com.evil.io",
+        "",  # empty host
+        "127.0.0.1",
+        "xsnowflakecomputing.mil",
+        "acct.snowflakecomputing.co",  # near-miss TLD
+        "collector.external.example",
+        "snowflakecomputing.external.example",
+    ],
+)
+def test_wif_prepare_rejects_untrusted_host_without_harvesting(host):
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
+    with mock.patch(
+        "snowflake.connector.auth.workload_identity.create_attestation"
+    ) as mock_create:
+        with pytest.raises(ProgrammingError) as excinfo:
+            auth_class.prepare(conn=_mock_conn_with_host(host))
+    assert excinfo.value.errno == ER_WIF_UNTRUSTED_HOST
+    # The ambient credential must never be fetched for an untrusted host.
+    mock_create.assert_not_called()
+    assert auth_class.attestation is None
+
+
+def test_wif_prepare_skips_host_check_when_conn_is_none():
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
+    with mock.patch(
+        "snowflake.connector.auth.workload_identity.create_attestation"
+    ) as mock_create:
+        mock_create.return_value = WorkloadIdentityAttestation(
+            AttestationProvider.AWS, "fake-credential", {}
+        )
+        auth_class.prepare(conn=None)
+    mock_create.assert_called_once()
+
+
+def test_wif_prepare_rejects_wiremock_host_by_default():
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
+    with mock.patch(
+        "snowflake.connector.auth.workload_identity.create_attestation"
+    ) as mock_create:
+        with pytest.raises(ProgrammingError) as excinfo:
+            auth_class.prepare(conn=_mock_conn_with_host("wiremock.local"))
+    assert excinfo.value.errno == ER_WIF_UNTRUSTED_HOST
+    mock_create.assert_not_called()
+
+
+def test_wif_prepare_allows_host_added_via_env_var(monkeypatch):
+    monkeypatch.setenv("SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES", "wiremock.local")
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
+    with mock.patch(
+        "snowflake.connector.auth.workload_identity.create_attestation"
+    ) as mock_create:
+        mock_create.return_value = WorkloadIdentityAttestation(
+            AttestationProvider.AWS, "fake-credential", {}
+        )
+        auth_class.prepare(conn=_mock_conn_with_host("wiremock.local"))
+    mock_create.assert_called_once()
+
+
+def test_wif_prepare_env_var_is_additive_not_a_disable(monkeypatch):
+    """SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES only adds suffixes; it must never disable the check."""
+    monkeypatch.setenv("SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES", "wiremock.local")
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
+    with mock.patch(
+        "snowflake.connector.auth.workload_identity.create_attestation"
+    ) as mock_create:
+        with pytest.raises(ProgrammingError) as excinfo:
+            auth_class.prepare(conn=_mock_conn_with_host("external.example"))
+    assert excinfo.value.errno == ER_WIF_UNTRUSTED_HOST
+    mock_create.assert_not_called()
+
+
+def test_wif_env_var_suffix_logs_info(monkeypatch, caplog):
+    monkeypatch.setenv("SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES", "wiremock.local")
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
+    with mock.patch(
+        "snowflake.connector.auth.workload_identity.create_attestation"
+    ) as mock_create:
+        mock_create.return_value = WorkloadIdentityAttestation(
+            AttestationProvider.AWS, "fake-credential", {}
+        )
+        with caplog.at_level(logging.INFO):
+            auth_class.prepare(conn=_mock_conn_with_host("wiremock.local"))
+    assert "SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES" in caplog.text
+    assert "wiremock.local" in caplog.text
+
+
+def test_wif_allowed_host_suffixes_env_var_not_read_from_connection_params():
+    """The escape hatch must not be reachable through connection config (DSN/toml)."""
+    from snowflake.connector.auth.workload_identity import _extra_wif_allowed_suffixes
+
+    conn = _mock_conn_with_host("wiremock.local")
+    conn.wif_allowed_host_suffixes = "wiremock.local"  # not read from connection config
+    conn._wif_allowed_host_suffixes = "wiremock.local"
+    # No connection attribute is consulted; only the environment variable is.
+    assert _extra_wif_allowed_suffixes() == []
