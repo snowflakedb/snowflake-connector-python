@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 from snowflake.connector.logging_utils.filters import (
-    SecretMaskingFilter,
-    add_filter_to_logger_and_children,
+    DISABLE_LOG_SECRET_MASKING_ENV,
+    install_secret_masking_filters,
 )
 
+# Re-exported for tests and callers that historically imported it from here.
+__all__ = [
+    "DISABLE_LOG_SECRET_MASKING_ENV",
+    "MODULES_TO_MASK_LOGS_NAMES",
+    "add_filters_to_external_loggers",
+    "setup_external_libraries",
+]
+
 MODULES_TO_MASK_LOGS_NAMES = [
+    "snowflake.connector",
     "snowflake.connector.vendored.urllib3",
     "botocore",
     "boto3",
@@ -19,8 +28,7 @@ MODULES_TO_MASK_LOGS_NAMES = [
 
 
 def add_filters_to_external_loggers():
-    for module_name in MODULES_TO_MASK_LOGS_NAMES:
-        add_filter_to_logger_and_children(module_name, SecretMaskingFilter())
+    install_secret_masking_filters(MODULES_TO_MASK_LOGS_NAMES)
 
 
 def setup_external_libraries():
