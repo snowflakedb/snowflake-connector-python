@@ -36,6 +36,7 @@ from snowflake.connector.errorcode import (
     ER_OCSP_RESPONSE_ATTACHED_CERT_INVALID,
     ER_OCSP_RESPONSE_CACHE_DECODE_FAILED,
     ER_OCSP_RESPONSE_CACHE_DOWNLOAD_FAILED,
+    ER_OCSP_RESPONSE_CERT_ID_MISMATCH,
     ER_OCSP_RESPONSE_CERT_STATUS_INVALID,
     ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
     ER_OCSP_RESPONSE_CERT_STATUS_UNKNOWN,
@@ -55,6 +56,7 @@ from snowflake.connector.session_manager import SessionManager
 from snowflake.connector.ssl_wrap_socket import get_current_session_manager
 
 from . import constants
+from ._host_util import has_recognized_snowflake_suffix, is_ldh_host, normalize_host
 from .backoff_policies import exponential_backoff
 from .cache import CacheEntry, SFDictCache, SFDictFileCache
 from .constants import OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
@@ -132,10 +134,10 @@ class OCSPResponseValidationResult(NamedTuple):
                     errno=exception_dict.get("errno", ER_OCSP_RESPONSE_LOAD_FAILURE),
                 )
 
-            # SECURITY: Do not dynamically import or instantiate classes from
-            # cache data.  All non-RevocationCheckError exceptions are wrapped
-            # in a RevocationCheckError to avoid arbitrary code execution via
-            # crafted cache files (CWE-470 / CWE-502).
+            # Do not dynamically import or instantiate classes from cache data.
+            # All non-RevocationCheckError exceptions are wrapped in a
+            # RevocationCheckError so that only known types are constructed from
+            # cache files.
             logger.debug(
                 "Converting cached %s.%s exception to RevocationCheckError",
                 exc_module,
@@ -169,7 +171,15 @@ class OCSPResponseValidationResult(NamedTuple):
                 else None
             ),
             ts=json_obj.get("ts"),
-            validated=json_obj.get("validated"),
+            # SNOW-3675581: verdicts loaded from the on-disk cache are
+            # re-verified before use. _validate_certificates_sequential
+            # short-circuits on `validated`, so a verdict read from the cache
+            # file is not accepted as-is; the cache stores the response bytes and
+            # the verdict is recomputed on load (signature / CertID / freshness).
+            # The response bytes are still cached (no network round-trip); only
+            # the verdict is recomputed, so the entry is re-verified the first
+            # time it is used per process.
+            validated=False,
         )
 
 
@@ -295,6 +305,7 @@ class OCSPTelemetryData:
     OCSP_RESPONSE_CACHE_DECODE_FAILED = "OCSPResponseCacheDecodeFailed"
     OCSP_RESPONSE_LOAD_FAILURE = "OCSPResponseLoadFailure"
     OCSP_RESPONSE_INVALID_SSD = "OCSPResponseInvalidSSD"
+    OCSP_RESPONSE_CERT_ID_MISMATCH = "OCSPResponseCertIdMismatch"
 
     ERROR_CODE_MAP = {
         ER_OCSP_URL_INFO_MISSING: OCSP_URL_MISSING,
@@ -316,6 +327,7 @@ class OCSPTelemetryData:
         ER_OCSP_RESPONSE_CACHE_DECODE_FAILED: OCSP_RESPONSE_CACHE_DECODE_FAILED,
         ER_INVALID_OCSP_RESPONSE_SSD: OCSP_RESPONSE_INVALID_SSD,
         ER_INVALID_SSD: OCSP_RESPONSE_INVALID_SSD,
+        ER_OCSP_RESPONSE_CERT_ID_MISMATCH: OCSP_RESPONSE_CERT_ID_MISMATCH,
     }
 
     def __init__(self) -> None:
@@ -416,9 +428,19 @@ class OCSPServer:
     MAX_RETRY = int(os.getenv("OCSP_MAX_RETRY", "3"))
 
     def __init__(self, **kwargs) -> None:
-        top_level_domain = kwargs.pop(
-            "top_level_domain", constants._DEFAULT_HOSTNAME_TLD
-        )
+        # The OCSP cache server URL is derived from *this connection's* hostname
+        # and stored on this (per-connection) OCSPServer instance -- it is never
+        # written to the process-global SF_OCSP_RESPONSE_CACHE_SERVER_URL env
+        # var, so the cache server one connection uses is independent of the
+        # other connections in the same process (SNOW-3675581).
+        hostname = kwargs.pop("hostname", None)
+        top_level_domain = kwargs.pop("top_level_domain", None)
+        if top_level_domain is None:
+            top_level_domain = (
+                extract_top_level_domain_from_hostname(hostname)
+                if hostname
+                else constants._DEFAULT_HOSTNAME_TLD
+            )
         self.DEFAULT_CACHE_SERVER_URL = (
             f"http://ocsp.snowflakecomputing.{top_level_domain}"
         )
@@ -431,13 +453,27 @@ class OCSPServer:
             f"https://ocspssd.snowflakecomputing.{top_level_domain}/ocsp/"
         )
         if not OCSPServer.is_enabled_new_ocsp_endpoint():
-            self.CACHE_SERVER_URL = os.getenv(
-                "SF_OCSP_RESPONSE_CACHE_SERVER_URL",
-                "{}/{}".format(
+            # Precedence: an operator-set SF_OCSP_RESPONSE_CACHE_SERVER_URL
+            # (trusted, process-wide) wins; otherwise a genuine PrivateLink host
+            # gets a per-connection cache URL derived from its own hostname;
+            # otherwise the public default.
+            env_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
+            if env_url is not None:
+                self.CACHE_SERVER_URL = env_url
+            elif hostname is not None and OCSPServer._is_privatelink_host(hostname):
+                # Built from the normalized host, never the raw string: the gate
+                # judges the normalized host, so deriving the URL from anything
+                # else could authorize one authority and then contact another
+                # (e.g. a raw "host:evil@elsewhere.example" keeps its tail).
+                self.CACHE_SERVER_URL = "http://ocsp.{}/{}".format(
+                    normalize_host(hostname),
+                    OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME,
+                )
+            else:
+                self.CACHE_SERVER_URL = "{}/{}".format(
                     self.DEFAULT_CACHE_SERVER_URL,
                     OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME,
-                ),
-            )
+                )
         else:
             self.CACHE_SERVER_URL = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
 
@@ -446,6 +482,34 @@ class OCSPServer:
         )
         # OCSP dynamic cache server URL pattern
         self.OCSP_RETRY_URL = None
+
+    # PrivateLink detection reuses the connector's shared host-recognition core
+    # (SNOW-3675581), so this gate, the WORKLOAD_IDENTITY gate and the other
+    # drivers all classify a host the same way. A hostname drives the derived
+    # OCSP cache URL only when all three hold:
+    #
+    #   1. every label is non-empty and drawn from [a-z0-9_-] (is_ldh_host), so
+    #      the host cannot carry a character a URL parser treats as ending the
+    #      authority;
+    #   2. the host ends at a recognized Snowflake suffix on a label boundary, so
+    #      a host that merely contains the PrivateLink domain as a non-terminal
+    #      label ("x.privatelink.snowflakecomputing.com.unrelated.example") does
+    #      not qualify;
+    #   3. it carries a ".privatelink." label.
+    #
+    # A non-match simply falls through to the public default OCSP cache URL.
+    # Deployments on a host outside the recognized suffixes set
+    # SF_OCSP_RESPONSE_CACHE_SERVER_URL, which is honored ahead of this gate.
+    @staticmethod
+    def _is_privatelink_host(hostname: str) -> bool:
+        """Whether *hostname* is a genuine Snowflake PrivateLink host whose own
+        name may be used to derive the OCSP cache server URL."""
+        normalized = normalize_host(hostname)
+        return (
+            is_ldh_host(normalized)
+            and has_recognized_snowflake_suffix(normalized)
+            and ".privatelink." in normalized
+        )
 
     @staticmethod
     def is_enabled_new_ocsp_endpoint() -> bool:
@@ -1048,11 +1112,7 @@ class SnowflakeOCSP:
 
         self._use_post_method = use_post_method
         self._root_certs_dict_lock_timeout = root_certs_dict_lock_timeout
-        self.OCSP_CACHE_SERVER = OCSPServer(
-            top_level_domain=extract_top_level_domain_from_hostname(
-                kwargs.pop("hostname", None)
-            )
-        )
+        self.OCSP_CACHE_SERVER = OCSPServer(hostname=kwargs.pop("hostname", None))
 
         self.debug_ocsp_failure_url = None
 
@@ -1301,9 +1361,30 @@ class SnowflakeOCSP:
 
         return err, issuer, subject, cert_id, ocsp_response
 
+    # Errnos that are a definitive result -- REVOKED, a CertID mismatch, or an
+    # invalid signature -- rather than a soft "could not reach the responder"
+    # failure. A definitive result is authoritative even in fail-open mode:
+    # these MUST fail the connection. Fail-open only tolerates an unavailable /
+    # unreachable responder, not a definitive answer about the certificate. In
+    # particular this keeps the CertID binding
+    # (ER_OCSP_RESPONSE_CERT_ID_MISMATCH) effective under the default
+    # configuration.
+    FAIL_OPEN_NON_SWALLOWABLE_ERRNOS = frozenset(
+        {
+            ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
+            ER_OCSP_RESPONSE_CERT_ID_MISMATCH,
+            ER_OCSP_RESPONSE_INVALID_SIGNATURE,
+        }
+    )
+
     def verify_fail_open(self, ex_obj, telemetry_data):
-        if not self.is_enabled_fail_open():
-            if ex_obj.errno is ER_OCSP_RESPONSE_CERT_STATUS_REVOKED:
+        # NB: compare by value (membership), not `is` -- errnos rebuilt from a
+        # deserialized cache entry are fresh int objects, so identity can fail.
+        must_fail_closed = (
+            ex_obj.errno in SnowflakeOCSP.FAIL_OPEN_NON_SWALLOWABLE_ERRNOS
+        )
+        if not self.is_enabled_fail_open() or must_fail_closed:
+            if ex_obj.errno == ER_OCSP_RESPONSE_CERT_STATUS_REVOKED:
                 logger.debug(
                     telemetry_data.generate_telemetry_data(
                         "RevokedCertificateError", True
@@ -1315,18 +1396,10 @@ class SnowflakeOCSP:
                 )
             return ex_obj
         else:
-            if ex_obj.errno is ER_OCSP_RESPONSE_CERT_STATUS_REVOKED:
-                logger.debug(
-                    telemetry_data.generate_telemetry_data(
-                        "RevokedCertificateError", True
-                    )
-                )
-                return ex_obj
-            else:
-                SnowflakeOCSP.print_fail_open_debug(
-                    telemetry_data.generate_telemetry_data("RevocationCheckFailure")
-                )
-                return None
+            SnowflakeOCSP.print_fail_open_debug(
+                telemetry_data.generate_telemetry_data("RevocationCheckFailure")
+            )
+            return None
 
     def _validate_certificates_sequential(
         self,
