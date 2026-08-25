@@ -53,6 +53,29 @@ These tools are integrated into `tox` to allow us to easily set them up universa
   and we would like to have an overall coverage data file created for them.
 * **flake8**: (Deprecated) Similar to `fix_lint`, but only runs `flake8` checks.
 
+## Log secret masking
+
+By default, the connector masks secrets (tokens, passwords, cloud credentials,
+private keys) in records emitted by `snowflake.connector` loggers and by the
+third-party loggers it uses (`botocore`, `boto3`, `aiohttp`, `aiobotocore`,
+`aioboto3`, and vendored `urllib3`). Masking applies even when logging is
+configured with `logging.basicConfig`, not only when Easy Logging
+(`save_logs = true` in `config.toml`) is enabled. The same opt-out covers
+those trees: they also interpolate the message and clear `record.args`.
+
+To disable masking, set `SNOWFLAKE_DISABLE_LOG_SECRET_MASKING` to `true`.
+The connector reads this on every log record, so it is an escape hatch if
+masking is incompatible with a log pipeline (for example one that depends
+on structured `record.args`). Setting it **before** importing
+`snowflake.connector` also skips installing the masking hook:
+
+```bash
+export SNOWFLAKE_DISABLE_LOG_SECRET_MASKING=true
+```
+
+The masker interpolates each log record and clears `record.args`. Leave
+masking enabled unless you need that escape hatch.
+
 ## Disable telemetry
 
 By default, the Snowflake Connector for Python collects telemetry data to improve the product.
