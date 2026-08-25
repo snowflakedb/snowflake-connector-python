@@ -7,12 +7,14 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v4.7.2(Aug 25,2026)
+- NEXT_RELEASE(TBD)
   - Added experimental Python 3.14t (free-threaded CPython) wheel support. **Experimental — not intended for production use.**
   - Fixed `connect()` being significantly slower on deep call stacks (e.g. Django apps with several middleware/decorator layers) because `get_application_path()` used `inspect.stack()`, which reads and parses the source file of every frame on the stack. It now walks frame references directly instead (SNOW-3691001, #2908).
+  - Fixed `split_statements` truncating unquoted URLs containing `://` at the `//`, misreading it as a line comment. The guards added alongside `//` comment support in 4.7.2 (SNOW-3772985) only recognized `file://`, so every other scheme (`http://`, `https://`, `s3://`, `snow://`, `azure://`) was cut short. Any `scheme://` is now recognized, on both the line-comment and block-comment paths (the latter affected globs such as `s3://bucket/*.csv`) (SNOW-3930192).
+
+- v4.7.2(Aug 6,2026)
   - Fixed a thread leak in the file transfer agent by properly shutting down ThreadPoolExecutors after PUT/GET transfers (SNOW-3556240, #2878).
   - Fixed `split_statements` treating `//` as SQL instead of a line comment, which could merge multiple statements when a `//` comment contained an apostrophe (SNOW-3772985).
-  - Fixed `split_statements` truncating unquoted URLs containing `://` at the `//`, misreading it as a line comment. The guards added alongside `//` comment support in 4.7.2 (SNOW-3772985) only recognized `file://`, so every other scheme (`http://`, `https://`, `s3://`, `snow://`, `azure://`) was cut short. Any `scheme://` is now recognized, on both the line-comment and block-comment paths (the latter affected globs such as `s3://bucket/*.csv`) (SNOW-3930192).
   - Fixed large-file PUT uploads to internal Azure stages failing against the Azure 50,000-block-per-blob limit. The Azure multipart chunk size is now scaled up dynamically for very large files (mirroring the existing S3 behavior), and the default Azure chunk size was raised from 4 MB to 8 MB (consistent with S3) for better throughput (SNOW-3839943).
   - Fixed OAuth cached-credential connections failing with `250001 Invalid OAuth access token` when the cached token was invalid (GS code `390303`); the connector now reauthenticates silently (via refresh token if available, otherwise browser) instead of hard-failing. Also fixed fresh processes holding only a cached refresh token going straight to an interactive browser prompt instead of attempting a silent refresh first.
   - Fixed Okta/SAML authentication reporting an exhausted `login_timeout` as `250003: Failed to execute request: Attempted to set connect timeout to <negative value>`. Obtaining the one-time token in step 4 can overshoot the login deadline, which made the remaining budget negative; it was then passed to the HTTP layer, which rejected it with an opaque `ValueError`. A timed-out SAML login now raises `250006` with a message naming `login_timeout`. Running out of budget while retrying on `RefreshTokenError` reports the same error instead of failing later with an `AttributeError` on an empty response (SNOW-3891419).
