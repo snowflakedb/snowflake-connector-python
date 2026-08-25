@@ -33,7 +33,6 @@ from snowflake.connector.ocsp_snowflake import (
 from snowflake.connector.ocsp_snowflake import OCSPServer as OCSPServerSync
 from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP as SnowflakeOCSPSync
-from snowflake.connector.url_util import extract_top_level_domain_from_hostname
 
 if TYPE_CHECKING:
     from snowflake.connector.aio._session_manager import SessionManager
@@ -157,11 +156,7 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
 
         self._use_post_method = use_post_method
         self._root_certs_dict_lock_timeout = root_certs_dict_lock_timeout
-        self.OCSP_CACHE_SERVER = OCSPServer(
-            top_level_domain=extract_top_level_domain_from_hostname(
-                kwargs.pop("hostname", None)
-            )
-        )
+        self.OCSP_CACHE_SERVER = OCSPServer(hostname=kwargs.pop("hostname", None))
 
         self.debug_ocsp_failure_url = None
 

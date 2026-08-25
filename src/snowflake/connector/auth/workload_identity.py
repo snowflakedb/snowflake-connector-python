@@ -9,7 +9,7 @@ from enum import Enum, unique
 if typing.TYPE_CHECKING:
     from snowflake.connector.connection import SnowflakeConnection
 
-from ..constants import _SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES
+from .._host_util import has_recognized_snowflake_suffix, normalize_host
 from ..errorcode import ER_WIF_UNTRUSTED_HOST
 from ..errors import ProgrammingError
 from ..network import WORKLOAD_IDENTITY_AUTHENTICATOR
@@ -23,29 +23,17 @@ from .by_plugin import AuthByPlugin, AuthType
 logger = logging.getLogger(__name__)
 
 # Additive escape hatch for on-prem / air-gapped Snowflake deployments whose host
-# does not end in a suffix in _SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES.
+# does not end in a recognized Snowflake suffix.
 #
 # Read only from the process environment - never from the DSN, connection
 # parameters or configuration files - so connection configuration cannot
 # influence the allowlist. Entries are additive: they extend the
 # recognized-host list and cannot disable it.
+#
+# Scoped to WORKLOAD_IDENTITY on purpose. Widening the hosts an ambient cloud
+# credential may be sent to is a different decision from widening the hosts an
+# OCSP cache may be fetched from, so the OCSP gate passes no extra suffixes.
 _SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES_ENV_VAR = "SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES"
-
-
-def _normalize_wif_host(host: str) -> str:
-    """Normalizes a host (or host suffix) for WORKLOAD_IDENTITY allow-list matching.
-
-    Trims whitespace, lower-cases, strips a trailing ':port' if present, and then
-    strips a single trailing '.' (FQDN form). The port must be stripped first so
-    that an FQDN-with-port host like "acct.snowflakecomputing.com.:443" ends up
-    with the trailing dot removed rather than left dangling on the host portion.
-    """
-    normalized = host.strip().lower()
-    if ":" in normalized:
-        normalized = normalized.split(":", 1)[0]
-    if normalized.endswith("."):
-        normalized = normalized[:-1]
-    return normalized
 
 
 def _extra_wif_allowed_suffixes() -> list[str]:
@@ -59,7 +47,7 @@ def _extra_wif_allowed_suffixes() -> list[str]:
     raw = os.environ.get(_SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES_ENV_VAR, "")
     if not raw:
         return []
-    suffixes = [_normalize_wif_host(entry) for entry in raw.split(",") if entry.strip()]
+    suffixes = [normalize_host(entry) for entry in raw.split(",") if entry.strip()]
     suffixes = [s for s in suffixes if s]
     if suffixes:
         logger.info(
@@ -72,16 +60,9 @@ def _extra_wif_allowed_suffixes() -> list[str]:
 
 def _is_host_allowed_for_workload_identity(host: str) -> bool:
     """Returns True if `host` (already-normalized or not) is a trusted WIF destination."""
-    normalized = _normalize_wif_host(host)
-    if not normalized:
-        return False
-    for suffix in (
-        *_SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES,
-        *_extra_wif_allowed_suffixes(),
-    ):
-        if normalized == suffix or normalized.endswith(f".{suffix}"):
-            return True
-    return False
+    return has_recognized_snowflake_suffix(
+        normalize_host(host), _extra_wif_allowed_suffixes()
+    )
 
 
 def _verify_host_allowed_for_workload_identity(
