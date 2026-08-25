@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import typing
 from enum import Enum, unique
 
 if typing.TYPE_CHECKING:
     from snowflake.connector.connection import SnowflakeConnection
 
+from ..constants import _SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES
+from ..errorcode import ER_WIF_UNTRUSTED_HOST
+from ..errors import ProgrammingError
 from ..network import WORKLOAD_IDENTITY_AUTHENTICATOR
 from ..wif_util import (
     AttestationProvider,
@@ -14,6 +19,91 @@ from ..wif_util import (
     create_attestation,
 )
 from .by_plugin import AuthByPlugin, AuthType
+
+logger = logging.getLogger(__name__)
+
+# Additive escape hatch for on-prem / air-gapped Snowflake deployments whose host
+# does not end in a suffix in _SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES.
+#
+# Read only from the process environment - never from the DSN, connection
+# parameters or configuration files - so connection configuration cannot
+# influence the allowlist. Entries are additive: they extend the
+# recognized-host list and cannot disable it.
+_SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES_ENV_VAR = "SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES"
+
+
+def _normalize_wif_host(host: str) -> str:
+    """Normalizes a host (or host suffix) for WORKLOAD_IDENTITY allow-list matching.
+
+    Trims whitespace, lower-cases, strips a trailing ':port' if present, and then
+    strips a single trailing '.' (FQDN form). The port must be stripped first so
+    that an FQDN-with-port host like "acct.snowflakecomputing.com.:443" ends up
+    with the trailing dot removed rather than left dangling on the host portion.
+    """
+    normalized = host.strip().lower()
+    if ":" in normalized:
+        normalized = normalized.split(":", 1)[0]
+    if normalized.endswith("."):
+        normalized = normalized[:-1]
+    return normalized
+
+
+def _extra_wif_allowed_suffixes() -> list[str]:
+    """Reads the additive SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES env-var allow-list.
+
+    Comma-separated, additive-only (never disables the built-in allow-list),
+    normalized the same way as the candidate host. Logs at INFO naming the
+    extra suffixes whenever the env var is used, since this widens the set of
+    hosts the ambient cloud credential may be sent to.
+    """
+    raw = os.environ.get(_SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES_ENV_VAR, "")
+    if not raw:
+        return []
+    suffixes = [_normalize_wif_host(entry) for entry in raw.split(",") if entry.strip()]
+    suffixes = [s for s in suffixes if s]
+    if suffixes:
+        logger.info(
+            "SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES is set; extending the WORKLOAD_IDENTITY "
+            "recognized-host allow-list with additional suffixes: %s.",
+            suffixes,
+        )
+    return suffixes
+
+
+def _is_host_allowed_for_workload_identity(host: str) -> bool:
+    """Returns True if `host` (already-normalized or not) is a trusted WIF destination."""
+    normalized = _normalize_wif_host(host)
+    if not normalized:
+        return False
+    for suffix in (
+        *_SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES,
+        *_extra_wif_allowed_suffixes(),
+    ):
+        if normalized == suffix or normalized.endswith(f".{suffix}"):
+            return True
+    return False
+
+
+def _verify_host_allowed_for_workload_identity(
+    conn: SnowflakeConnection | None,
+) -> None:
+    """Suffix-anchored allowlist that restricts Workload Identity attestation to
+    recognized Snowflake hosts before any cloud credential is fetched.
+
+    When ``conn`` is None there is no destination to send the credential to (e.g.
+    unit tests that only exercise attestation creation), so the check is skipped.
+    """
+    if conn is None:
+        return
+    host = conn.host or ""
+    if not _is_host_allowed_for_workload_identity(host):
+        raise ProgrammingError(
+            msg=(
+                f"WORKLOAD_IDENTITY requires a recognized Snowflake host "
+                f"(*.snowflakecomputing.com, .cn or .mil). Got: '{host}'."
+            ),
+            errno=ER_WIF_UNTRUSTED_HOST,
+        )
 
 
 @unique
@@ -88,6 +178,9 @@ class AuthByWorkloadIdentity(AuthByPlugin):
         self, *, conn: SnowflakeConnection | None, **kwargs: typing.Any
     ) -> None:
         """Fetch the token."""
+        # Verify the host is a recognized Snowflake endpoint before fetching
+        # cloud credentials.
+        _verify_host_allowed_for_workload_identity(conn)
         self.attestation = create_attestation(
             self.provider,
             self.entra_resource,
