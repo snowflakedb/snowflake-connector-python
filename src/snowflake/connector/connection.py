@@ -618,8 +618,6 @@ class SnowflakeConnection:
         check_arrow_conversion_error_on_every_column: When true, the error check after the conversion from arrow to python types will happen for every column in the row. This is a new behaviour which fixes the bug that caused the type errors to trigger silently when occurring at any place other than last column in a row. To revert the previous (faulty) behaviour, please set this flag to false.
     """
 
-    OCSP_ENV_LOCK = Lock()
-
     def __init__(
         self,
         connection_name: str | None = None,
@@ -1395,15 +1393,6 @@ class SnowflakeConnection:
             name = m if not m.startswith("_") else m[1:]
             setattr(self, name, getattr(errors, m))
 
-    @staticmethod
-    def setup_ocsp_privatelink(app, hostname) -> None:
-        hostname = hostname.lower()
-        SnowflakeConnection.OCSP_ENV_LOCK.acquire()
-        ocsp_cache_server = f"http://ocsp.{hostname}/ocsp_response_cache.json"
-        os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"] = ocsp_cache_server
-        logger.debug("OCSP Cache Server is updated: %s", ocsp_cache_server)
-        SnowflakeConnection.OCSP_ENV_LOCK.release()
-
     def __open_connection(self):
         """Opens a new network connection."""
         self.converter = self._converter_class(
@@ -1420,17 +1409,16 @@ class SnowflakeConnection:
         )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
 
+        # The PrivateLink OCSP cache URL is now derived per-connection inside
+        # OCSPServer from this connection's hostname (SNOW-3675581); the driver
+        # does not write SF_OCSP_RESPONSE_CACHE_SERVER_URL to the process
+        # environment. An operator-set value is still honored (and takes
+        # precedence) -- log it if present.
         if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
             logger.debug(
                 "Custom OCSP Cache Server URL found in environment - %s",
                 os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"],
             )
-
-        if ".privatelink.snowflakecomputing." in self.host.lower():
-            SnowflakeConnection.setup_ocsp_privatelink(self.application, self.host)
-        else:
-            if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
-                del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
 
         if self._session_parameters is None:
             self._session_parameters = {}
