@@ -24,6 +24,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
     - When `SF_OCSP_RESPONSE_CACHE_SERVER_URL` is set, the connector uses it as the OCSP cache server, including on PrivateLink hosts.
     - A PrivateLink OCSP cache URL is derived only for hosts that consist of hostname characters, include a `.privatelink.` label, and end at `snowflakecomputing.com`, `.cn`, or `.mil`. Other hosts use the public default cache URL; set `SF_OCSP_RESPONSE_CACHE_SERVER_URL` to use a different cache server.
   - Extended log secret masking coverage (SNOW-3675583). The connection-token pattern accepts `:` and `%` in the token value. Added patterns for OAuth access and refresh tokens in serialized JSON, for one-time passcodes, and for OAuth client identifiers and secrets. The passcode pattern accepts quoted values. The password pattern requires at least six characters in the value, so ordinary prose following the word "password" is not redacted.
+  - Request headers are copied before mutation on the async path, and masking is applied to the `Authorization` header in error logs (SNOW-3675593).
 
 - v4.7.2(Aug 6,2026)
   - Fixed a thread leak in the file transfer agent by properly shutting down ThreadPoolExecutors after PUT/GET transfers (SNOW-3556240, #2878).

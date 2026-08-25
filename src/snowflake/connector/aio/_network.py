@@ -730,6 +730,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             else:
                 input_data = data
 
+            # Work on a copy so the caller-supplied dict is never mutated.
+            headers = dict(headers)
             if HEADER_AUTHORIZATION_KEY in headers:
                 del headers[HEADER_AUTHORIZATION_KEY]
             if token != NO_TOKEN:
