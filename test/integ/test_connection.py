@@ -963,10 +963,11 @@ def test_authenticate_error(conn_cnx, caplog):
         caplog.set_level(logging.DEBUG, "snowflake.connector")
         with pytest.raises(ReauthenticationRequest):
             conn.authenticate_with_retry(mock_auth)
+        # Default log masking matches the "token <value>" shape in this line.
         assert (
             "snowflake.connector.connection",
             logging.DEBUG,
-            "ID token expired. Reauthenticating...: None",
+            "ID token **** Reauthenticating...: None",
         ) in caplog.record_tuples
 
 
