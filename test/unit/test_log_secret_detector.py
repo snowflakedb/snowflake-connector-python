@@ -4,6 +4,8 @@ from __future__ import annotations
 import logging
 from unittest import mock
 
+import pytest
+
 from snowflake.connector.secret_detector import SecretDetector
 
 
@@ -149,6 +151,16 @@ def test_mask_token():
     assert masked_str == "{'TOKEN': '****'}"
 
 
+def test_mask_token_with_version_hint_prefix():
+    # A real session token carries version/hint detail ahead of the token itself.
+    # Without ':' in the value group the whole token was left unmasked.
+    token_with_hint = "token=ver:1-hint:1036-abcd1234efgh5678"
+    masked, masked_str, err_str = SecretDetector.mask_secrets(token_with_hint)
+    assert masked
+    assert err_str is None
+    assert masked_str == "token=****"
+
+
 def test_token_false_positives():
     false_positive_token_str = (
         "2020-04-30 23:06:04,069 - MainThread auth.py:397"
@@ -202,6 +214,72 @@ def test_password():
     assert masked
     assert err_str is None
     assert masked_str == "password=****"
+
+
+@pytest.mark.parametrize(
+    "false_positive_str",
+    [
+        "...no ID password was not given",
+        "...no ID proxyPassword was not given",
+        "...no ID private_key_pwd was not given",
+    ],
+)
+def test_password_false_positives(false_positive_str):
+    # Ported from .NET's SecretDetectorTest.TestPasswordFalsePositive. Ordinary log
+    # prose must survive: the value group needs a 6 character floor, otherwise the
+    # "was" in these strings is treated as the password.
+    masked, masked_str, err_str = SecretDetector.mask_secrets(false_positive_str)
+    assert not masked
+    assert err_str is None
+    assert masked_str == false_positive_str
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("passcode: 123456", "passcode: ****"),
+        ("otp=987654", "otp=****"),
+        # The separator is captured and kept, as it is for every other pattern
+        # in this module, so surrounding whitespace survives the substitution.
+        ("pin = 4321", "pin = ****"),
+        ("otac:5555", "otac:****"),
+        # Quoted forms: the separator between the label and the digits includes
+        # the quotes, which a `\s*[:=]\s*` separator could not cross.
+        ('"passcode": "1234"', '"passcode": "****"'),
+        ("'otp' : '9876'", "'otp' : '****'"),
+        ('{"pin":"4321"}', '{"pin":"****"}'),
+    ],
+)
+def test_mask_passcodes(text, expected):
+    masked, masked_str, err_str = SecretDetector.mask_secrets(text)
+    assert masked
+    assert err_str is None
+    assert masked_str == expected
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("oauthClientId=myclientid123", "oauthClientId=****"),
+        ("oauthClientSecret=abcdefgh12345", "oauthClientSecret=****"),
+        ("clientSecret: someSecretValue", "clientSecret: ****"),
+    ],
+)
+def test_mask_oauth_client_secrets(text, expected):
+    masked, masked_str, err_str = SecretDetector.mask_secrets(text)
+    assert masked
+    assert err_str is None
+    assert masked_str == expected
+
+
+@pytest.mark.parametrize("token_name", ["access_token", "refresh_token"])
+def test_mask_oauth_tokens(token_name):
+    # Fixture data from JDBC's SecretDetectorTest.testMaskOAuthSecrets
+    text = f'"{token_name}" : "some:FAKE_token123"'
+    masked, masked_str, err_str = SecretDetector.mask_secrets(text)
+    assert masked
+    assert err_str is None
+    assert masked_str == f'"{token_name}":"XXXX"'
 
 
 def test_token_password():
