@@ -1792,6 +1792,11 @@ def test_describe(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_fetch_batches_with_sessions(conn_cnx):
+    """Verify result-batch downloads use the connection's sessions.
+
+    Patch the connection-level wrapper because OCSP checks reuse the underlying
+    session manager during TLS handshakes and must not count as batch downloads.
+    """
     rowcount = 250_000
     with conn_cnx() as con:
         with con.cursor() as cur:
@@ -1802,8 +1807,8 @@ def test_fetch_batches_with_sessions(conn_cnx):
             num_batches = len(cur.get_result_batches())
 
             with mock.patch(
-                "snowflake.connector.session_manager.SessionManager.use_requests_session",
-                side_effect=con._rest.session_manager.use_requests_session,
+                "snowflake.connector.network.SnowflakeRestful.use_requests_session",
+                side_effect=con._rest.use_requests_session,
             ) as get_session_mock:
                 result = cur.fetchall()
                 # all but one batch is downloaded using a session

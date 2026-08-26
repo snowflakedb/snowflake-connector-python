@@ -16,6 +16,7 @@ from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 import snowflake.connector.ssl_wrap_socket as ssw  # pylint: disable=import-error
 from snowflake.connector.constants import OCSPMode  # pylint: disable=import-error
+from snowflake.connector.vendored.urllib3.contrib.pyopenssl import _dnsname_to_stdlib
 from snowflake.connector.vendored.urllib3.util.ssl_match_hostname import (
     CertificateError,
 )
@@ -135,6 +136,21 @@ def _client_context_trusting(cert):
     return ctx
 
 
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("foo_bar.example.com", "foo_bar.example.com"),
+        ("*.foo_bar.example.com", "*.foo_bar.example.com"),
+        ("foo_bär.example.com", None),
+        ("foo_bar..example.com", None),
+        ("foo_bar-.example.com", None),
+    ],
+)
+def test_underscore_san_idna_conversion(name, expected):
+    """Only otherwise-valid ASCII SANs get the underscore compatibility path."""
+    assert _dnsname_to_stdlib(name) == expected
+
+
 def test_hostname_mismatch_is_rejected():
     """A valid chain with the wrong hostname must be rejected."""
     # Certificate is valid and trusted, but its SAN is 'localhost' only.
@@ -172,6 +188,48 @@ def test_hostname_match_succeeds():
         ssl_context=ctx,
     )
     assert hasattr(ws, "connection")
+    s.close()
+    stop_evt.wait(5)
+
+
+def test_hostname_with_underscore_matches_san():
+    """An ASCII SAN containing an account-locator underscore must be retained."""
+    hostname = "foo_bar.example.com"
+    cert, key = _create_self_signed_cert(hostname, [hostname])
+    (host, port), stop_evt = _start_server(cert, key)
+
+    ctx = _client_context_trusting(cert)
+    s = socket.socket()
+    s.settimeout(5)
+    s.connect((host, port))
+
+    ws = ssw.ssl_wrap_socket_with_ocsp(
+        sock=s,
+        server_hostname=hostname,
+        ssl_context=ctx,
+    )
+    assert hasattr(ws, "connection")
+    s.close()
+    stop_evt.wait(5)
+
+
+def test_hostname_with_underscore_rejects_mismatch():
+    """Retaining underscore SANs must not weaken hostname matching."""
+    cert_hostname = "foo_bar.example.com"
+    cert, key = _create_self_signed_cert(cert_hostname, [cert_hostname])
+    (host, port), stop_evt = _start_server(cert, key)
+
+    ctx = _client_context_trusting(cert)
+    s = socket.socket()
+    s.settimeout(5)
+    s.connect((host, port))
+
+    with pytest.raises(CertificateError):
+        ssw.ssl_wrap_socket_with_ocsp(
+            sock=s,
+            server_hostname="different_name.example.com",
+            ssl_context=ctx,
+        )
     s.close()
     stop_evt.wait(5)
 

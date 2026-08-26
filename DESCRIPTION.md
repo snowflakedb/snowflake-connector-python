@@ -7,6 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- NEXT_RELEASE(TBD)
+  - Fixed TLS hostname verification rejecting matching certificate SANs when a Snowflake account locator contains an underscore (SNOW-4011646).
+
 - v3.18.1(July 15,2026)
   - Improved verification of TLS connections (SNOW-3675579).
   - Fixed FIPS environments md5 hash issues with multipart upload on Azure.

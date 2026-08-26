@@ -198,20 +198,36 @@ def _dnsname_to_stdlib(name: str) -> str | None:
 
     def idna_encode(name: str) -> bytes | None:
         """
-        Borrowed wholesale from the Python Cryptography Project. It turns out
+        Based on the Python Cryptography Project implementation. It turns out
         that we can't just safely call `idna.encode`: it can explode for
-        wildcard names. This avoids that problem.
+        wildcard names. This avoids that problem and preserves Snowflake's
+        ASCII account-locator underscores.
         """
         import idna
 
+        prefix = ""
+        for candidate in ["*.", "."]:
+            if name.startswith(candidate):
+                prefix = candidate
+                name = name[len(candidate) :]
+                break
+
         try:
-            for prefix in ["*.", "."]:
-                if name.startswith(prefix):
-                    name = name[len(prefix) :]
-                    return prefix.encode("ascii") + idna.encode(name)
-            return idna.encode(name)
+            return prefix.encode("ascii") + idna.encode(name)
         except idna.core.IDNAError:
-            return None
+            # Snowflake account locators may contain underscores. Although an
+            # underscore is not valid IDNA, these ASCII names are valid DNS
+            # labels and can appear verbatim in both the requested hostname and
+            # its certificate SAN. Retain the name only when replacing the
+            # underscores makes the otherwise-unchanged name valid IDNA; this
+            # keeps rejecting names with any additional IDNA violation.
+            if not name.isascii() or "_" not in name:
+                return None
+            try:
+                idna.encode(name.replace("_", "a"))
+            except idna.core.IDNAError:
+                return None
+            return prefix.encode("ascii") + name.encode("ascii")
 
     # Don't send IPv6 addresses through the IDNA encoder.
     if ":" in name:
