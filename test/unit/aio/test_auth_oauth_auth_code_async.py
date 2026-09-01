@@ -157,7 +157,7 @@ async def test_auth_oauth_auth_code_single_use_refresh_tokens(
             "https://example.snowflakecomputing.com/oauth/authorize",
             "https://example.snowflakecomputing.com/oauth/token",
             False,
-            ProgrammingError,
+            None,
         ),
         (
             "Non-Snowflake IdP",
@@ -197,7 +197,17 @@ async def test_auth_oauth_auth_code_single_use_refresh_tokens(
             "https://example.snowflakecomputing.cn/oauth/authorize",
             "https://example.snowflakecomputing.cn/oauth/token",
             False,
-            ProgrammingError,
+            None,
+        ),
+        (
+            "Public PKCE client with None secret keeps custom client_id",
+            "custom-public-client-id",
+            None,
+            "example.snowflakecomputing.com",
+            "https://example.snowflakecomputing.com/oauth/authorize",
+            "https://example.snowflakecomputing.com/oauth/token-request",
+            False,
+            None,
         ),
     ],
 )
