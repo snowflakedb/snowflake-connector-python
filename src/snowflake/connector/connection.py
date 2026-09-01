@@ -1492,6 +1492,7 @@ class SnowflakeConnection:
                     self.host,
                     self.user,
                     self._session_parameters,
+                    role=self._role or "",
                 )
                 # Depending on whether self._rest.id_token is available we do different
                 #  auth_instance
@@ -1564,6 +1565,7 @@ class SnowflakeConnection:
                     refresh_token_enabled=self._oauth_enable_refresh_tokens,
                     external_browser_timeout=self._external_browser_timeout,
                     enable_single_use_refresh_tokens=self._oauth_enable_single_use_refresh_tokens,
+                    role=self._role or "",
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
                 if self._role and (self._oauth_scope == ""):
@@ -1591,6 +1593,7 @@ class SnowflakeConnection:
                         self.host,
                         self.user,
                         self._session_parameters,
+                        role="",
                     )
                 self.auth_class = AuthByUsrPwdMfa(
                     password=self._password,

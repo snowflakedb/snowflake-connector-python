@@ -35,11 +35,11 @@ from ...network import (
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
+from ...token_cache import TokenKey, TokenType
 from ...sqlstate import (
     SQLSTATE_AUTHORIZATION_FAILURE,
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
 )
-from ...token_cache import TokenType
 from ._no_auth import AuthNoAuth
 
 if TYPE_CHECKING:
@@ -292,7 +292,13 @@ class Auth(AuthSync):
                 # raise an exception for reauth without id_token
                 self._rest.id_token = None
                 self._delete_temporary_credential(
-                    self._rest._host, user, TokenType.ID_TOKEN
+                    TokenKey(
+                        token_type=TokenType.ID_TOKEN,
+                        idp=self._rest._host,
+                        snowflake=self._rest._host,
+                        username=user,
+                        role=role or "",
+                    )
                 )
                 raise ReauthenticationRequest(
                     ProgrammingError(
@@ -324,7 +330,13 @@ class Auth(AuthSync):
 
             if isinstance(auth_instance, AuthByUsrPwdMfa):
                 self._delete_temporary_credential(
-                    self._rest._host, user, TokenType.MFA_TOKEN
+                    TokenKey(
+                        token_type=TokenType.MFA_TOKEN,
+                        idp=self._rest._host,
+                        snowflake=self._rest._host,
+                        username=user,
+                        role="",
+                    )
                 )
             Error.errorhandler_wrapper(
                 self._rest._connection,
@@ -396,7 +408,7 @@ class Auth(AuthSync):
                 mfa_token=ret["data"].get("mfaToken"),
             )
             self.write_temporary_credentials(
-                self._rest._host, user, session_parameters, ret
+                self._rest._host, user, session_parameters, ret, role=role or ""
             )
             if ret["data"] and "sessionId" in ret["data"]:
                 self._rest._connection._session_id = ret["data"].get("sessionId")
