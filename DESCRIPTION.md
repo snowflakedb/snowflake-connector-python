@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - NEXT_RELEASE(TBD)
+  - Fixed OAuth authorization code flow replacing a custom public PKCE `client_id` with `LOCAL_APPLICATION` when `client_secret` was omitted (SNOW-4036712, #3011).
   - Added experimental Python 3.14t (free-threaded CPython) wheel support. **Experimental — not intended for production use.**
   - Fixed TLS hostname verification rejecting matching certificate SANs when a Snowflake account locator contains an underscore (SNOW-4011646).
   - Fixed `connect()` being significantly slower on deep call stacks (e.g. Django apps with several middleware/decorator layers) because `get_application_path()` used `inspect.stack()`, which reads and parses the source file of every frame on the stack. It now walks frame references directly instead (SNOW-3691001, #2908).
