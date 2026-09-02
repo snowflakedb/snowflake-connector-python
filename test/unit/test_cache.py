@@ -387,8 +387,10 @@ class TestSFDictFileCache:
         read_fd, write_fd = os.pipe()
         pid = os.fork()
         if pid == 0:
-            # Child: report back over the pipe, never raise into pytest and
-            # always leave via os._exit so no fixture teardown runs twice.
+            # Child: report the outcome back over the pipe. The os._exit in the
+            # finally block is what keeps anything raised here from reaching
+            # pytest and running fixture teardown a second time, so the except
+            # clause below only has to describe the failure to the parent.
             try:
                 os.close(read_fd)
                 c["b"] = 2
@@ -397,7 +399,7 @@ class TestSFDictFileCache:
                     c._file_lock is not parent_file_lock
                 ), "child reused the parent's file lock"
                 os.write(write_fd, b"ok")
-            except BaseException as e:
+            except Exception as e:
                 os.write(write_fd, f"{type(e).__name__}: {e}".encode())
             finally:
                 os._exit(0)
@@ -405,7 +407,9 @@ class TestSFDictFileCache:
         with os.fdopen(read_fd, "rb") as read_file:
             child_result = read_file.read().decode()
         assert os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]) == 0
-        assert child_result == "ok", f"child reported: {child_result}"
+        # An empty report means the child died without reaching either branch,
+        # e.g. on KeyboardInterrupt, which os._exit turns into a silent exit.
+        assert child_result == "ok", f"child reported: {child_result or '<nothing>'}"
         # The parent keeps its own lock, and it is still usable.
         assert c._file_lock is parent_file_lock
         with c._file_lock:
