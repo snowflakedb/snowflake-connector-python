@@ -1183,7 +1183,7 @@ def test_process_ocsp_response_accepts_matching_certid():
         "ER_OCSP_RESPONSE_INVALID_SIGNATURE",
     ],
 )
-def test_fail_open_treats_definitive_results_as_authoritative(errno_name):
+def test_fail_open_treats_definitive_results_as_authoritative(errno_name, monkeypatch):
     """SNOW-3675581: in fail-open mode, a definitive result -- a REVOKED verdict,
     a CertID mismatch, or an invalid signature -- is authoritative and must still
     fail the connection. Fail-open only tolerates an unavailable / unreachable
@@ -1195,6 +1195,11 @@ def test_fail_open_treats_definitive_results_as_authoritative(errno_name):
     """
     from snowflake.connector import errorcode as _errorcode
     from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
+
+    # SF_OCSP_FAIL_OPEN takes precedence over use_fail_open, so a value left in
+    # the environment by an earlier test in this process would silently invert
+    # what this test asserts.
+    monkeypatch.delenv("SF_OCSP_FAIL_OPEN", raising=False)
 
     errno = getattr(_errorcode, errno_name)
     ocsp = SFOCSP(use_fail_open=True)
@@ -1209,12 +1214,17 @@ def test_fail_open_treats_definitive_results_as_authoritative(errno_name):
 
 
 @pytest.mark.skipolddriver
-def test_fail_open_tolerates_unavailable_responder():
+def test_fail_open_tolerates_unavailable_responder(monkeypatch):
     """A soft/transient failure (responder unreachable) is still tolerated in
     fail-open mode -- that is the purpose of fail-open, and this change must not
     alter it."""
     from snowflake.connector import errorcode as _errorcode
     from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
+
+    # SF_OCSP_FAIL_OPEN takes precedence over use_fail_open, so a value left in
+    # the environment by an earlier test in this process would silently invert
+    # what this test asserts.
+    monkeypatch.delenv("SF_OCSP_FAIL_OPEN", raising=False)
 
     ocsp = SFOCSP(use_fail_open=True)
     assert ocsp.is_enabled_fail_open()
