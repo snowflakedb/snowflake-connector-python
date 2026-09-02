@@ -6,6 +6,9 @@
 [![License Apache-2.0](https://img.shields.io/:license-Apache%202-brightgreen.svg)](http://www.apache.org/licenses/LICENSE-2.0.txt)
 [![Codestyle Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
+> [!IMPORTANT]
+> A new version of the driver is being developed in [snowflakedb/drivers](https://github.com/snowflakedb/drivers) and is currently in public preview. See the [documentation](https://docs.snowflake.com/en/developer-guide/python-connector/python-connector-universal-core) for more information.
+
 This package includes the Snowflake Connector for Python, which conforms to the [Python DB API 2.0](https://www.python.org/dev/peps/pep-0249/) specification.
 
 The Snowflake Connector for Python provides an interface for developing Python
@@ -22,9 +25,6 @@ https://docs.snowflake.com/
 
 Feel free to file an issue or submit a PR here for general cases. For official support, contact Snowflake support at:
 https://community.snowflake.com/s/article/How-To-Submit-a-Support-Case-in-Snowflake-Lodge
-
-> [!IMPORTANT]
-> A new version of the driver is being developed in [snowflakedb/drivers](https://github.com/snowflakedb/drivers) and is currently in public preview. See the [documentation](https://docs.snowflake.com/en/developer-guide/python-connector/python-connector-universal-core) for more information.
 
 ## How to build
 
