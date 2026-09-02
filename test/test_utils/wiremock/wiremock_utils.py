@@ -2,18 +2,34 @@ import json
 import logging
 import os
 import pathlib
-import socket
+import re
 import subprocess
+import tempfile
 from contextlib import contextmanager
-from time import sleep
-from typing import Iterable, List, Optional, Union
+from time import monotonic, sleep
+from typing import Iterable, Optional, Tuple, Union
 
 try:
     from snowflake.connector.vendored import requests
 except ImportError:
     import requests
 
-WIREMOCK_START_MAX_RETRY_COUNT = 12
+# Total budget for a Wiremock instance to become usable: the JVM has to boot,
+# report the ports it bound and answer the health endpoint within this time.
+WIREMOCK_START_TIMEOUT_SECONDS = 12
+# How long to wait between polls while waiting for the startup banner / health.
+_WIREMOCK_START_POLL_INTERVAL_SECONDS = 0.1
+# Only the tail of the startup log is quoted in error messages.
+_MAX_REPORTED_STARTUP_OUTPUT_CHARS = 4000
+
+# Wiremock echoes its effective configuration on startup, one "key: value" pair
+# per line, *after* the server has bound its listeners. With ``--port 0`` /
+# ``--https-port 0`` those lines carry the ports the JVM actually got, e.g.
+#     port:                         45161
+#     https-port:                   43329
+_HTTP_PORT_BANNER_PATTERN = re.compile(r"^port:\s+(\d+)\s*$", re.MULTILINE)
+_HTTPS_PORT_BANNER_PATTERN = re.compile(r"^https-port:\s+(\d+)\s*$", re.MULTILINE)
+
 logger = logging.getLogger(__name__)
 
 # Base port for the local OAuth redirect callback server used by the auth code
@@ -46,6 +62,23 @@ def oauth_redirect_uri() -> str:
     return f"http://localhost:{oauth_redirect_port()}/snowflake/oauth-redirect"
 
 
+def _parse_wiremock_ports(
+    startup_output: str,
+) -> Optional[Tuple[int, Optional[int]]]:
+    """Extract the ports Wiremock actually bound from its startup output.
+
+    Returns ``(http_port, https_port)`` once the HTTP port has been reported, or
+    *None* while the banner has not been printed yet. ``https_port`` is *None*
+    when HTTPS is disabled, in which case Wiremock omits the line entirely.
+    """
+    http_match = _HTTP_PORT_BANNER_PATTERN.search(startup_output)
+    if http_match is None:
+        return None
+    https_match = _HTTPS_PORT_BANNER_PATTERN.search(startup_output)
+    https_port = int(https_match.group(1)) if https_match is not None else None
+    return int(http_match.group(1)), https_port
+
+
 def _get_mapping_str(mapping: Union[str, dict, pathlib.Path]) -> str:
     if isinstance(mapping, str):
         return mapping
@@ -66,14 +99,14 @@ class WiremockClient:
 
     def __init__(
         self,
-        forbidden_ports: Optional[List[int]] = None,
         additional_wiremock_process_args: Optional[Iterable[str]] = None,
     ) -> None:
         self.wiremock_filename = "wiremock-standalone.jar"
         self.wiremock_host = "localhost"
         self.wiremock_http_port = None
         self.wiremock_https_port = None
-        self.forbidden_ports = forbidden_ports if forbidden_ports is not None else []
+        self.wiremock_process = None
+        self._startup_log_path: Optional[pathlib.Path] = None
 
         self.wiremock_dir = (
             pathlib.Path(__file__).parent.parent.parent.parent / ".wiremock"
@@ -127,38 +160,126 @@ class WiremockClient:
         return placeholders
 
     def _start_wiremock(self):
-        self.wiremock_http_port = self._find_free_port(
-            forbidden_ports=self.forbidden_ports,
+        # Ports are chosen by the JVM itself (``--port 0`` / ``--https-port 0``)
+        # and read back from the startup banner. Picking a free port in Python
+        # and passing it to java used to be racy: the probing socket must be
+        # closed before java runs, so anything else on the machine -- most
+        # commonly a concurrent pytest-xdist worker booting its own Wiremock --
+        # could grab the port in that window and Wiremock would die with
+        # "FatalStartupException: Failed to bind to /0.0.0.0:<port>". Letting the
+        # kernel assign the port at bind() time closes the window entirely.
+        startup_log = tempfile.NamedTemporaryFile(
+            mode="w+",
+            prefix="wiremock-startup-",
+            suffix=".log",
+            delete=False,
         )
-        self.wiremock_https_port = self._find_free_port(
-            forbidden_ports=self.forbidden_ports + [self.wiremock_http_port]
+        self._startup_log_path = pathlib.Path(startup_log.name)
+        try:
+            try:
+                # stderr is merged into the same file so that a failed startup can
+                # be reported with the java stack trace that explains it.
+                self.wiremock_process = subprocess.Popen(
+                    [
+                        "java",
+                        "-jar",
+                        self.wiremock_jar_path,
+                        "--root-dir",
+                        self.wiremock_dir,
+                        "--enable-browser-proxying",  # work as forward proxy
+                        "--proxy-pass-through",
+                        "false",  # pass through only matched requests
+                        "--port",
+                        "0",  # let the JVM bind a free port and report it back
+                        "--https-port",
+                        "0",
+                        "--https-keystore",
+                        self.wiremock_dir / "ca-cert.jks",
+                        "--ca-keystore",
+                        self.wiremock_dir / "ca-cert.jks",
+                    ]
+                    + self._additional_wiremock_process_args,
+                    stdout=startup_log,
+                    stderr=subprocess.STDOUT,
+                )
+            finally:
+                # The child holds its own dup of the descriptor; the parent reads
+                # the file back by path instead.
+                startup_log.close()
+
+            # A single budget shared by "tell me your ports" and "answer /health",
+            # so that fixing the race does not silently extend the startup timeout.
+            deadline = monotonic() + WIREMOCK_START_TIMEOUT_SECONDS
+            self.wiremock_http_port, self.wiremock_https_port = self._await_ports(
+                deadline
+            )
+            self._wait_for_wiremock(deadline)
+        except BaseException:
+            # __exit__ is not called when __enter__ raises, so clean up here or
+            # the JVM (and the port it holds) would leak into the rest of the run.
+            self._kill_wiremock_process()
+            self._remove_startup_log()
+            raise
+
+    def _read_startup_output(self) -> str:
+        if self._startup_log_path is None:
+            return ""
+        try:
+            return self._startup_log_path.read_text(errors="replace")
+        except OSError as e:
+            return (
+                f"<could not read wiremock startup log {self._startup_log_path}: {e}>"
+            )
+
+    def _reported_startup_output(self) -> str:
+        output = self._read_startup_output().strip()
+        if not output:
+            return "<no output>"
+        if len(output) > _MAX_REPORTED_STARTUP_OUTPUT_CHARS:
+            return "...(truncated)...\n" + output[-_MAX_REPORTED_STARTUP_OUTPUT_CHARS:]
+        return output
+
+    def _raise_if_process_died(self) -> None:
+        """Fail fast with Wiremock's own output when the JVM exits on startup."""
+        return_code = self.wiremock_process.poll()
+        if return_code is None:
+            return
+        raise RuntimeError(
+            f"Wiremock process exited with code {return_code} during startup. "
+            f"Wiremock output:\n{self._reported_startup_output()}"
         )
-        self.wiremock_process = subprocess.Popen(
-            [
-                "java",
-                "-jar",
-                self.wiremock_jar_path,
-                "--root-dir",
-                self.wiremock_dir,
-                "--enable-browser-proxying",  # work as forward proxy
-                "--proxy-pass-through",
-                "false",  # pass through only matched requests
-                "--port",
-                str(self.wiremock_http_port),
-                "--https-port",
-                str(self.wiremock_https_port),
-                "--https-keystore",
-                self.wiremock_dir / "ca-cert.jks",
-                "--ca-keystore",
-                self.wiremock_dir / "ca-cert.jks",
-            ]
-            + self._additional_wiremock_process_args
-        )
-        self._wait_for_wiremock()
+
+    def _await_ports(self, deadline: float) -> Tuple[int, Optional[int]]:
+        """Wait until Wiremock reports the ports it bound, and return them."""
+        while True:
+            self._raise_if_process_died()
+            ports = _parse_wiremock_ports(self._read_startup_output())
+            if ports is not None:
+                return ports
+            if monotonic() >= deadline:
+                raise TimeoutError(
+                    "Wiremock did not report its ports within "
+                    f"{WIREMOCK_START_TIMEOUT_SECONDS} seconds. "
+                    f"Wiremock output:\n{self._reported_startup_output()}"
+                )
+            sleep(_WIREMOCK_START_POLL_INTERVAL_SECONDS)
+
+    def _kill_wiremock_process(self) -> None:
+        if self.wiremock_process is None or self.wiremock_process.poll() is not None:
+            return
+        self.wiremock_process.kill()
+        self.wiremock_process.wait()
+
+    def _remove_startup_log(self) -> None:
+        if self._startup_log_path is None:
+            return
+        self._startup_log_path.unlink(missing_ok=True)
+        self._startup_log_path = None
 
     def _stop_wiremock(self):
         if self.wiremock_process.poll() is not None:
             logger.warning("Wiremock process already exited, skipping shutdown")
+            self._remove_startup_log()
             return
 
         try:
@@ -173,18 +294,24 @@ class WiremockClient:
         except requests.exceptions.RequestException as e:
             logger.warning(f"Shutdown request failed: {e}. Killing process directly.")
             self.wiremock_process.kill()
+        finally:
+            self._remove_startup_log()
 
-    def _wait_for_wiremock(self):
-        retry_count = 0
-        while retry_count < WIREMOCK_START_MAX_RETRY_COUNT:
+    def _wait_for_wiremock(self, deadline: float):
+        while True:
+            # Wiremock has already reported its ports at this point, so a dead
+            # process here means it died right after binding -- report that
+            # instead of polling a port nobody listens on until the timeout.
+            self._raise_if_process_died()
             if self._health_check():
                 return
-            retry_count += 1
-            sleep(1)
-
-        raise TimeoutError(
-            f"WiremockClient did not respond within {WIREMOCK_START_MAX_RETRY_COUNT} seconds"
-        )
+            if monotonic() >= deadline:
+                raise TimeoutError(
+                    f"WiremockClient on port {self.wiremock_http_port} did not become "
+                    f"healthy within {WIREMOCK_START_TIMEOUT_SECONDS} seconds. "
+                    f"Wiremock output:\n{self._reported_startup_output()}"
+                )
+            sleep(_WIREMOCK_START_POLL_INTERVAL_SECONDS)
 
     def _health_check(self):
         mappings_endpoint = (
@@ -322,24 +449,6 @@ class WiremockClient:
             for r in reqs["requests"]
         )
 
-    def _find_free_port(self, forbidden_ports: Union[List[int], None] = None) -> int:
-        max_retries = 1 if forbidden_ports is None else 3
-        if forbidden_ports is None:
-            forbidden_ports = []
-
-        retry_count = 0
-        while retry_count < max_retries:
-            retry_count += 1
-            with socket.socket() as sock:
-                sock.bind((self.wiremock_host, 0))
-                port = sock.getsockname()[1]
-                if port not in forbidden_ports:
-                    return port
-
-        raise RuntimeError(
-            f"Unable to find a free port for wiremock in {max_retries} attempts"
-        )
-
     def __enter__(self):
         self._start_wiremock()
         logger.debug(
@@ -357,7 +466,6 @@ def get_configured_proxy_client(
     target_host_with_port: str,
     proxy_mapping_template: Union[str, dict, pathlib.Path, None] = None,
     additional_proxy_placeholders: Optional[dict[str, object]] = None,
-    forbidden_ports: Optional[List[int]] = None,
     additional_proxy_args: Optional[Iterable[str]] = None,
 ):
     """Context manager that starts and configures a proxy wiremock to forward to a target.
@@ -372,8 +480,6 @@ def get_configured_proxy_client(
     additional_proxy_placeholders
         Optional placeholders to be replaced in the proxy mapping *in addition* to
         ``{{TARGET_HTTP_HOST_WITH_PORT}}``.
-    forbidden_ports
-        List of ports that the proxy should avoid binding to.
     additional_proxy_args
         Extra command-line arguments passed to the proxy Wiremock instance.
 
@@ -396,7 +502,6 @@ def get_configured_proxy_client(
 
     # Start the *proxy* Wiremock
     with WiremockClient(
-        forbidden_ports=forbidden_ports or [],
         additional_wiremock_process_args=additional_proxy_args,
     ) as proxy_wm:
         # Prepare placeholders so that proxy forwards to the target
@@ -445,7 +550,6 @@ def get_clients_for_proxy_and_target(
             target_host_with_port=target_wm.http_host_with_port,
             proxy_mapping_template=proxy_mapping_template,
             additional_proxy_placeholders=additional_proxy_placeholders,
-            forbidden_ports=[target_wm.wiremock_http_port],
             additional_proxy_args=additional_proxy_args,
         ) as proxy_wm:
             # Yield control back to the caller with both Wiremocks ready
@@ -489,9 +593,7 @@ def get_clients_for_proxy_target_and_storage(
         additional_proxy_placeholders=additional_proxy_placeholders,
         additional_proxy_args=additional_proxy_args,
     ) as (target_wm, proxy_wm):
-        # Start storage with a port distinct from target and proxy
-        forbidden = [target_wm.wiremock_http_port, proxy_wm.wiremock_http_port]
-        with WiremockClient(forbidden_ports=forbidden) as storage_wm:
+        with WiremockClient() as storage_wm:
             yield target_wm, storage_wm, proxy_wm
 
 
@@ -525,8 +627,7 @@ def get_clients_for_two_proxies_and_target(
         additional_proxy_args=additional_proxy_args,
     ) as (target_wm, proxy1_wm):
         # Start second proxy and configure it to forward to target as well
-        forbidden = [target_wm.wiremock_http_port, proxy1_wm.wiremock_http_port]
-        with WiremockClient(forbidden_ports=forbidden) as proxy2_wm:
+        with WiremockClient() as proxy2_wm:
             # Configure proxy2 to forward to target with the same mapping
             if proxy_mapping_template is None:
                 proxy_mapping_template = (
