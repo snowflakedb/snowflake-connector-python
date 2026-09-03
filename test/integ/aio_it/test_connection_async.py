@@ -24,7 +24,6 @@ import pytest
 
 import snowflake.connector.aio
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
-from snowflake.connector.aio import SnowflakeConnection
 from snowflake.connector.aio._description import CLIENT_NAME
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.connection import DEFAULT_CLIENT_PREFETCH_THREADS
@@ -38,7 +37,8 @@ from snowflake.connector.errorcode import (
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
 from snowflake.connector.errors import Error
-from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
+from snowflake.connector.network import ReauthenticationRequest
+from snowflake.connector.ocsp_snowflake import OCSPServer
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
@@ -524,11 +524,31 @@ async def test_us_west_connection(tmpdir):
 
 
 @pytest.mark.timeout(60)
-async def test_privatelink(conn_cnx):
-    """Ensure the OCSP cache server URL is overridden if privatelink connection is used."""
-    try:
-        os.environ["SF_OCSP_FAIL_OPEN"] = "false"
-        os.environ["SF_OCSP_DO_RETRY"] = "false"
+async def test_privatelink(conn_cnx, monkeypatch):
+    """A PrivateLink host gets its own OCSP cache server URL.
+
+    The URL is derived per connection inside OCSPServer and is deliberately not
+    written to the process-global SF_OCSP_RESPONSE_CACHE_SERVER_URL environment
+    variable (SNOW-3675581), so connecting to a PrivateLink host must not change
+    the cache server any other connection in the process uses.
+
+    Every environment variable here is set through monkeypatch so it is restored
+    even if an assertion fails: a leaked SF_OCSP_FAIL_OPEN would disable
+    fail-open for every later test in this worker process.
+    """
+    monkeypatch.setenv("SF_OCSP_FAIL_OPEN", "false")
+    monkeypatch.setenv("SF_OCSP_DO_RETRY", "false")
+    monkeypatch.delenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", raising=False)
+
+    hostname = "testaccount.eu-central-1.privatelink.snowflakecomputing.com"
+    assert (
+        OCSPServer(hostname=hostname).CACHE_SERVER_URL
+        == "http://ocsp.testaccount.eu-central-1."
+        "privatelink.snowflakecomputing.com/"
+        "ocsp_response_cache.json"
+    )
+
+    with pytest.raises(OperationalError):
         async with snowflake.connector.aio.SnowflakeConnection(
             account="testaccount",
             user="testuser",
@@ -537,23 +557,16 @@ async def test_privatelink(conn_cnx):
             login_timeout=5,
         ):
             pass
-        pytest.fail("should not make connection")
-    except OperationalError:
-        ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
-        assert ocsp_url is not None, "OCSP URL should not be None"
-        assert (
-            ocsp_url == "http://ocsp.testaccount.eu-central-1."
-            "privatelink.snowflakecomputing.com/"
-            "ocsp_response_cache.json"
-        )
+
+    # The PrivateLink connection attempt must not have touched the environment.
+    ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
+    assert ocsp_url is None, f"OCSP URL should be None: {ocsp_url}"
 
     async with conn_cnx(timezone="UTC") as cnx:
         assert cnx, "invalid cnx"
 
     ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
     assert ocsp_url is None, f"OCSP URL should be None: {ocsp_url}"
-    del os.environ["SF_OCSP_DO_RETRY"]
-    del os.environ["SF_OCSP_FAIL_OPEN"]
 
 
 async def test_disable_request_pooling(conn_cnx):
@@ -562,103 +575,82 @@ async def test_disable_request_pooling(conn_cnx):
         assert cnx.disable_request_pooling
 
 
-async def test_privatelink_ocsp_url_creation():
+async def test_privatelink_ocsp_url_creation(monkeypatch):
+    monkeypatch.delenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", raising=False)
     hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
-    await SnowflakeConnection.setup_ocsp_privatelink(APPLICATION_SNOWSQL, hostname)
 
-    ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
     assert (
-        ocsp_cache_server
+        OCSPServer(hostname=hostname).CACHE_SERVER_URL
         == "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
     )
 
-    del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
-
-    await SnowflakeConnection.setup_ocsp_privatelink(CLIENT_NAME, hostname)
-    ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
-    assert (
-        ocsp_cache_server
-        == "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
-    )
+    # The derived URL is per OCSPServer instance, not process-global state.
+    assert os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL") is None
 
 
-async def test_privatelink_ocsp_url_concurrent():
+async def test_privatelink_ocsp_url_operator_override_wins(monkeypatch):
+    """An operator-set SF_OCSP_RESPONSE_CACHE_SERVER_URL takes precedence over
+    the derived PrivateLink URL (SNOW-3675581, restoring the SNOW-70884 contract).
+    """
+    operator_url = "http://ocsp.operator.example/ocsp_response_cache.json"
+    monkeypatch.setenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", operator_url)
+
+    hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
+    assert OCSPServer(hostname=hostname).CACHE_SERVER_URL == operator_url
+
+
+async def test_privatelink_ocsp_url_concurrent(monkeypatch):
+    monkeypatch.delenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", raising=False)
     bucket = queue.Queue()
 
     hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
     expectation = "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
-    task = []
-
-    for _ in range(15):
-        task.append(
-            asyncio.create_task(
-                ExecPrivatelinkAsyncTask(
-                    bucket, hostname, expectation, CLIENT_NAME
-                ).run()
-            )
+    task = [
+        asyncio.create_task(
+            ExecPrivatelinkAsyncTask(bucket, hostname, expectation).run()
         )
+        for _ in range(15)
+    ]
 
     await asyncio.gather(*task)
     assert bucket.qsize() == 15
-    for _ in range(15):
-        if bucket.get() != "Success":
-            raise AssertionError()
+    results = [bucket.get() for _ in range(15)]
+    assert results == ["Success"] * 15, results
 
-    if os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None) is not None:
-        del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
-
-
-async def test_privatelink_ocsp_url_concurrent_snowsql():
-    bucket = queue.Queue()
-
-    hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
-    expectation = "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
-    task = []
-
-    for _ in range(15):
-        task.append(
-            asyncio.create_task(
-                ExecPrivatelinkAsyncTask(
-                    bucket, hostname, expectation, APPLICATION_SNOWSQL
-                ).run()
-            )
-        )
-
-    await asyncio.gather(*task)
-    assert bucket.qsize() == 15
-    for _ in range(15):
-        if bucket.get() != "Success":
-            raise AssertionError()
+    # Concurrent derivation must not have leaked into the environment either.
+    assert os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL") is None
 
 
 @pytest.mark.skipolddriver
-async def test_uppercase_privatelink_ocsp_url_creation():
+async def test_uppercase_privatelink_ocsp_url_creation(monkeypatch):
+    monkeypatch.delenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", raising=False)
     account = "TESTACCOUNT.US-EAST-1.PRIVATELINK"
     hostname = account + ".snowflakecomputing.com"
 
-    await SnowflakeConnection.setup_ocsp_privatelink(CLIENT_NAME, hostname)
-    ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
     assert (
-        ocsp_cache_server
+        OCSPServer(hostname=hostname).CACHE_SERVER_URL
         == "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
     )
 
 
 class ExecPrivatelinkAsyncTask:
-    def __init__(self, bucket, hostname, expectation, client_name):
+    def __init__(self, bucket, hostname, expectation):
         self.bucket = bucket
         self.hostname = hostname
         self.expectation = expectation
-        self.client_name = client_name
 
     async def run(self):
-        await SnowflakeConnection.setup_ocsp_privatelink(
-            self.client_name, self.hostname
-        )
-        ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
-        if ocsp_cache_server is not None and ocsp_cache_server != self.expectation:
-            print(f"Got {ocsp_cache_server} Expected {self.expectation}")
-            self.bucket.put("Fail")
+        try:
+            ocsp_cache_server = OCSPServer(hostname=self.hostname).CACHE_SERVER_URL
+        except Exception as e:
+            # Never let the task die silently: a short bucket would surface as an
+            # unrelated qsize assertion failure in the gathering test.
+            self.bucket.put(f"Error: {e!r}")
+            return
+        if ocsp_cache_server != self.expectation:
+            self.bucket.put(
+                f"Fail: got {ocsp_cache_server} expected {self.expectation}"
+            )
         else:
             self.bucket.put("Success")
 
