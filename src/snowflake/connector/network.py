@@ -1084,9 +1084,11 @@ class SnowflakeRestful:
             _, masked_data, err_str = SecretDetector.mask_secrets(data)
             if err_str is None:
                 data = masked_data
+        _, masked_headers, _ = SecretDetector.mask_secrets(str(headers))
+        _, masked_url, _ = SecretDetector.mask_secrets(full_url)
         logger.error(
             f"Failed to get the response. Hanging? "
-            f"method: {method}, url: {full_url}, headers:{headers}, "
+            f"method: {method}, url: {masked_url}, headers:{masked_headers}, "
             f"data: {data}"
         )
         Error.errorhandler_wrapper(
@@ -1094,7 +1096,7 @@ class SnowflakeRestful:
             None,
             OperationalError,
             {
-                "msg": f"Failed to get the response. Hanging? method: {method}, url: {full_url}",
+                "msg": f"Failed to get the response. Hanging? method: {method}, url: {masked_url}",
                 "errno": ER_FAILED_TO_REQUEST,
             },
         )

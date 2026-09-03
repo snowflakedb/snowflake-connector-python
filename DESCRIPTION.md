@@ -8,11 +8,26 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - NEXT_RELEASE(TBD)
+
+- v4.7.3(Sep 3,2026)
   - Added experimental Python 3.14t (free-threaded CPython) wheel support. **Experimental — not intended for production use.**
   - Fixed TLS hostname verification rejecting matching certificate SANs when a Snowflake account locator contains an underscore (SNOW-4011646).
   - Fixed `connect()` being significantly slower on deep call stacks (e.g. Django apps with several middleware/decorator layers) because `get_application_path()` used `inspect.stack()`, which reads and parses the source file of every frame on the stack. It now walks frame references directly instead (SNOW-3691001, #2908).
   - Fixed `split_statements` truncating unquoted URLs containing `://` at the `//`, misreading it as a line comment. The guards added alongside `//` comment support in 4.7.2 (SNOW-3772985) only recognized `file://`, so every other scheme (`http://`, `https://`, `s3://`, `snow://`, `azure://`) was cut short. Any `scheme://` is now recognized, on both the line-comment and block-comment paths (the latter affected globs such as `s3://bucket/*.csv`) (SNOW-3930192).
   - Fixed the on-disk OCSP response validation cache failing with `RuntimeError: UnixFileLock on ... was inherited across fork; construct a new instance` when it was written from a forked child process. This could surface on fork-based platforms when fetching results with `client_fetch_use_mp=True`, where chunk downloads run in worker processes that perform their own certificate revocation checks. The cache's file lock is now re-created when the owning process changes, matching what already happened for the `spawn` start method.
+  - Result batch construction now logs only whether a `qrmk` is present, for both the sync and async result paths (SNOW-3675590).
+  - DEBUG logging in `create_batches_from_response()` reports chunk-header names with type/length value metadata (SNOW-3675590).
+  - The malformed-response ERROR log in `create_batches_from_response()` reports a structural summary of the response (SNOW-3675590).
+  - SQL text is masked before it is written to DEBUG logs: `_format_query_for_log()` runs the query through `SecretDetector`, covering the cursor and connection paths on both sync and async. The cancel-query log paths use the same masking (SNOW-3675590).
+  - Deferred the SQL-masking cost to log emit-time: query DEBUG lines pass a lazy `_format_query_for_log_lazy()` wrapper whose `__str__` masks only when a handler emits the record (SNOW-3675590).
+  - Corrected the invalid-account-identifier error message so it matches the validator, which allows '.' as a label separator.
+  - The `WORKLOAD_IDENTITY` authenticator runs only against recognized Snowflake hosts: the connection host is normalized and suffix-anchored against `snowflakecomputing.com`, `.cn`, and `.mil` before the workload-identity flow proceeds. The `SNOWFLAKE_WIF_ALLOWED_HOST_SUFFIXES` environment variable additively extends the recognized-host list (SNOW-3675580).
+  - Improved the robustness and correctness of OCSP revocation checking (SNOW-3675581).
+    - When `SF_OCSP_RESPONSE_CACHE_SERVER_URL` is set, the connector uses it as the OCSP cache server, including on PrivateLink hosts.
+    - A PrivateLink OCSP cache URL is derived only for hosts that consist of hostname characters, include a `.privatelink.` label, and end at `snowflakecomputing.com`, `.cn`, or `.mil`. Other hosts use the public default cache URL; set `SF_OCSP_RESPONSE_CACHE_SERVER_URL` to use a different cache server.
+  - Extended log secret masking coverage (SNOW-3675583). The connection-token pattern accepts `:` and `%` in the token value. Added patterns for OAuth access and refresh tokens in serialized JSON, for one-time passcodes, and for OAuth client identifiers and secrets. The passcode pattern accepts quoted values. The password pattern requires at least six characters in the value, so ordinary prose following the word "password" is not redacted.
+  - Request headers are copied before mutation on the async path, and masking is applied to the `Authorization` header in error logs (SNOW-3675593).
+  - Applied secret masking to the `snowflake.connector` loggers by default, independent of how application logging is configured. The same filter also covers the third-party loggers the connector uses (`botocore`, `boto3`, `aiohttp`, `aiobotocore`, `aioboto3`, vendored `urllib3`). Set `SNOWFLAKE_DISABLE_LOG_SECRET_MASKING=true` to opt out; it is honored at emit time, including after import (SNOW-3675583).
 
 - v4.7.2(Aug 6,2026)
   - Fixed a thread leak in the file transfer agent by properly shutting down ThreadPoolExecutors after PUT/GET transfers (SNOW-3556240, #2878).

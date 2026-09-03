@@ -17,6 +17,7 @@ except ImportError:
 # Total budget for a Wiremock instance to become usable: the JVM has to boot,
 # report the ports it bound and answer the health endpoint within this time.
 WIREMOCK_START_TIMEOUT_SECONDS = 12
+WIREMOCK_STOP_TIMEOUT_SECONDS = 10
 # How long to wait between polls while waiting for the startup banner / health.
 _WIREMOCK_START_POLL_INTERVAL_SECONDS = 0.1
 # Only the tail of the startup log is quoted in error messages.
@@ -225,7 +226,9 @@ class WiremockClient:
         if self._startup_log_path is None:
             return ""
         try:
-            return self._startup_log_path.read_text(errors="replace")
+            # Explicit encoding: the default is locale-dependent, and on Windows
+            # (cp1252) java's UTF-8 output would decode into mojibake.
+            return self._startup_log_path.read_text(encoding="utf-8", errors="replace")
         except OSError as e:
             return (
                 f"<could not read wiremock startup log {self._startup_log_path}: {e}>"
@@ -273,8 +276,37 @@ class WiremockClient:
     def _remove_startup_log(self) -> None:
         if self._startup_log_path is None:
             return
-        self._startup_log_path.unlink(missing_ok=True)
+        try:
+            self._startup_log_path.unlink(missing_ok=True)
+        except OSError as e:
+            # Windows refuses to unlink a file while another process still holds a
+            # handle to it, so a JVM that has not fully exited yet would make this
+            # raise. Leaking one file in the OS temp directory is much better than
+            # failing teardown, which would mask the result of the test itself.
+            logger.debug(f"Could not remove wiremock startup log: {e}")
         self._startup_log_path = None
+
+    def _wait_for_process_exit(self) -> None:
+        """Wait for the JVM to actually exit, killing it if it overstays.
+
+        Deleting the startup log requires the process holding it to be gone on
+        Windows, and a lingering JVM would also keep its ports bound.
+        """
+        if self.wiremock_process is None:
+            return
+        try:
+            self.wiremock_process.wait(timeout=WIREMOCK_STOP_TIMEOUT_SECONDS)
+            return
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                f"Wiremock did not exit within {WIREMOCK_STOP_TIMEOUT_SECONDS}s, "
+                "killing it"
+            )
+        self.wiremock_process.kill()
+        try:
+            self.wiremock_process.wait(timeout=WIREMOCK_STOP_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            logger.warning("Wiremock process is still alive after kill")
 
     def _stop_wiremock(self):
         if self.wiremock_process.poll() is not None:
@@ -295,6 +327,9 @@ class WiremockClient:
             logger.warning(f"Shutdown request failed: {e}. Killing process directly.")
             self.wiremock_process.kill()
         finally:
+            # Reap the JVM before touching its log: /__admin/shutdown returns as soon
+            # as the request is accepted, so the process is usually still running here.
+            self._wait_for_process_exit()
             self._remove_startup_log()
 
     def _wait_for_wiremock(self, deadline: float):

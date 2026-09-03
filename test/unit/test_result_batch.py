@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import logging
 from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http import HTTPStatus
@@ -11,6 +12,7 @@ from unittest import mock
 
 import pytest
 
+import snowflake.connector
 from snowflake.connector import DatabaseError
 from snowflake.connector.compat import (
     BAD_GATEWAY,
@@ -342,3 +344,235 @@ class TestGzipDecompressionFallback:
 
         loaded = batch._load(response)
         assert loaded == rows
+
+
+@pytest.mark.skipolddriver
+def test_create_batches_does_not_log_chunk_header_values(caplog):
+    """SNOW-3675590: chunk header *values* can be secrets (e.g. the SSE-C
+    customer key), so create_batches_from_response must log only header names.
+
+    The previous guard ``if "encryption" not in header_key`` was a fragile
+    case-sensitive substring check: it suppressed names containing the lowercase
+    substring "encryption" but logged the value of every other header, including
+    ones whose name merely differed in case (e.g. "Accept-Encoding").
+    """
+    from snowflake.connector.result_batch import create_batches_from_response
+
+    secret_value = "U1NFLUMtY3VzdG9tZXIta2V5LXNlY3JldA=="
+    data = {
+        "rowtype": [],
+        "total": 1,
+        "rowset": [],
+        "chunks": [
+            {
+                "url": "https://example.invalid/chunk0",
+                "rowCount": 1,
+                "uncompressedSize": 10,
+                "compressedSize": 5,
+            }
+        ],
+        "chunkHeaders": {
+            # header name that does not contain "encryption"
+            "Accept-Encoding": "gzip",
+            # the real SSE-C key
+            "x-amz-server-side-encryption-customer-key": secret_value,
+        },
+    }
+
+    cursor = mock.MagicMock()
+    with caplog.at_level(logging.DEBUG, logger="snowflake.connector.result_batch"):
+        create_batches_from_response(cursor, "json", data, schema=[])
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    # header NAMES are safe to log, plus non-sensitive value metadata (type/len)
+    assert "added chunk header: key=Accept-Encoding" in logged
+    assert "value=str len=4" in logged  # metadata for "gzip" (len 4), not the value
+    # but no header VALUE is ever logged (neither the benign one nor the secret)
+    assert "gzip" not in logged
+    assert secret_value not in logged
+
+
+def test_describe_value_hides_secrets_in_response_dict():
+    """SNOW-3675590: describe_value on a response dict must expose keys/types/sizes
+    only, never the values (which can include secrets like qrmk or presigned URLs)."""
+    from snowflake.connector.secret_detector import SecretDetector
+
+    secret = "U0VDUkVULXFybWstdmFsdWU="
+    result = SecretDetector.describe_value(
+        {
+            "rowtype": [],
+            "total": 5,
+            "qrmk": secret,
+            "chunkHeaders": {"x-amz-...": "secret-header-value"},
+            "chunks": [{"url": "https://x.invalid?X-Amz-Signature=sig"}],
+        }
+    )
+    assert "qrmk: str len=24" in result
+    assert "chunks: list len=1" in result
+    assert "chunkHeaders: dict{x-amz-...: str len=19}" in result
+    assert "total: int" in result
+    # no value (secret or otherwise) leaks into the summary
+    assert secret not in result
+    assert "secret-header-value" not in result
+    assert "X-Amz-Signature" not in result
+
+
+@pytest.mark.skipolddriver
+def test_create_batches_error_logs_shape_not_raw_response(caplog):
+    """SNOW-3675590: the malformed-response ERROR must log the structural shape
+    rather than the response object — and it fires at ERROR level regardless of
+    DEBUG."""
+    from snowflake.connector.result_batch import create_batches_from_response
+
+    secret_qrmk = "U0VDUkVULXFybWstdmFsdWU="
+    secret_url = "https://x.invalid/c?X-Amz-Signature=DEADBEEFsignature"
+    # arrow format with neither rowsetBase64 nor chunks -> malformed -> else branch
+    data = {"rowtype": [], "total": 0, "qrmk": secret_qrmk, "extra": secret_url}
+
+    cursor = mock.MagicMock()
+    cursor._connection._session_parameters = {}
+    with caplog.at_level(logging.ERROR, logger="snowflake.connector.result_batch"):
+        try:
+            create_batches_from_response(cursor, "arrow", data, schema=[])
+        except Exception:
+            # the empty-arrow fallback may raise under a mock cursor; the ERROR
+            # line is emitted before it, which is what we are asserting on.
+            pass
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert "Don't know how to construct ResultBatches" in logged
+    assert "format='arrow'" in logged and "shape=" in logged
+    assert secret_qrmk not in logged
+    assert secret_url not in logged
+
+
+@pytest.mark.skipolddriver
+def test_create_batches_does_not_log_qrmk_value(caplog):
+    """SNOW-3675590: the bare-qrmk (no chunkHeaders) path must not log the key.
+
+    Drives the real create_batches_from_response into the `elif qrmk` branch and
+    asserts it ran (SSE-C key plumbed into chunk headers) while the key is not
+    logged.
+    """
+    from snowflake.connector.result_batch import (
+        SSE_C_ALGORITHM,
+        SSE_C_KEY,
+        create_batches_from_response,
+    )
+
+    secret_qrmk = "U1NFLUMtYWVzMjU2LXFybWstc2VjcmV0LWtleQ=="
+    data = {
+        "rowtype": [],
+        "total": 1,
+        "rowset": [],
+        "qrmk": secret_qrmk,
+        # no chunkHeaders -> the elif qrmk branch is taken
+        "chunks": [
+            {
+                "url": "https://example.invalid/chunk0",
+                "rowCount": 1,
+                "uncompressedSize": 10,
+                "compressedSize": 5,
+            }
+        ],
+    }
+
+    cursor = mock.MagicMock()
+    with caplog.at_level(logging.DEBUG, logger="snowflake.connector.result_batch"):
+        batches = create_batches_from_response(cursor, "json", data, schema=[])
+
+    # Prove the elif-qrmk branch actually ran: the SSE-C key is plumbed from
+    # qrmk into the remote chunk's headers (so this is really testing that path).
+    remote_batch = batches[1]
+    assert remote_batch._chunk_headers[SSE_C_ALGORITHM] == "AES256"
+    assert remote_batch._chunk_headers[SSE_C_KEY] == secret_qrmk
+
+    # ...but the key is never written to the log.
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert "qrmk is present" in logged
+    assert secret_qrmk not in logged
+    assert "MaskedMessageData" not in logged
+
+
+@pytest.mark.skipolddriver
+def test_qrmk_branch_does_not_log_qrmk_value_e2e(
+    caplog,
+    wiremock_generic_mappings_dir,
+    wiremock_target_proxy_pair,
+    wiremock_mapping_dir,
+):
+    """SNOW-3675590: end-to-end check that the qrmk value never reaches the logs.
+
+    Drives the real connector into the ``elif qrmk`` branch via Wiremock: the
+    query response carries a bare ``qrmk`` but no ``chunkHeaders``, so
+    ``create_batches_from_response`` builds the SSE-C headers from the qrmk and
+    downloads the chunk. Asserts:
+
+    * the connector logged that a qrmk is present (branch ran),
+    * the literal qrmk value is absent from DEBUG logs,
+    * the chunk GET carried the SSE-C headers (key was correctly plumbed through).
+    """
+    target_wm, _proxy_wm = wiremock_target_proxy_pair
+    qrmk_secret = "QRMKsecretAES256keyDoNotLogXYZ0123456789abcd="
+
+    password_mapping = wiremock_mapping_dir / "auth/password/successful_flow.json"
+    qrmk_query_mapping = (
+        wiremock_mapping_dir / "queries/select_qrmk_only_successful.json"
+    )
+    disconnect_mapping = (
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+    telemetry_mapping = wiremock_generic_mappings_dir / "telemetry.json"
+    chunk_1_mapping = wiremock_mapping_dir / "queries/chunk_1.json"
+
+    target_wm.import_mapping_with_default_placeholders(password_mapping)
+    target_wm.add_mapping(
+        qrmk_query_mapping,
+        placeholders={
+            "{{STORAGE_WIREMOCK_HTTP_HOST_WITH_PORT}}": target_wm.http_host_with_port,
+            "{{QRMK_SECRET}}": qrmk_secret,
+        },
+    )
+    target_wm.add_mapping(disconnect_mapping)
+    target_wm.add_mapping(telemetry_mapping)
+    target_wm.add_mapping_with_default_placeholders(chunk_1_mapping)
+
+    connect_kwargs = {
+        "user": "testUser",
+        "password": "testPassword",
+        "account": "testAccount",
+        "host": target_wm.wiremock_host,
+        "port": target_wm.wiremock_http_port,
+        "protocol": "http",
+        "warehouse": "TEST_WH",
+        "platform_detection_timeout_seconds": 0,
+    }
+
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
+    with snowflake.connector.connect(**connect_kwargs) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM large_table")
+            rows = cur.fetchall()
+            assert len(cur._result_set.batches) > 1
+
+    assert len(rows) > 0
+
+    assert (
+        "qrmk is present" in caplog.text
+    ), "qrmk branch did not run; secret-absence check below would be meaningless"
+    assert qrmk_secret not in caplog.text
+    assert "MaskedMessageData" not in caplog.text
+
+    chunk_requests = [
+        r
+        for r in target_wm.get_requests()["requests"]
+        if "/amazonaws/" in r["request"]["url"]
+    ]
+    assert chunk_requests, "expected at least one chunk download request"
+    lower_headers = {
+        k.lower(): v for k, v in chunk_requests[0]["request"]["headers"].items()
+    }
+    assert (
+        lower_headers.get("x-amz-server-side-encryption-customer-algorithm") == "AES256"
+    )
+    assert qrmk_secret == lower_headers.get("x-amz-server-side-encryption-customer-key")

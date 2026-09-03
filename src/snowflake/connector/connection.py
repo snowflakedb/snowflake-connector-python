@@ -137,6 +137,7 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
+from .secret_detector import SecretDetector
 from .session_manager import (
     HttpConfig,
     ProxySupportAdapterFactory,
@@ -523,6 +524,25 @@ for m in [method for method in dir(errors) if callable(getattr(errors, method))]
 logger = getLogger(__name__)
 
 
+class _LazyQueryLog:
+    """Defer query mask+format until a DEBUG record is actually emitted.
+
+    ``logging`` only calls ``str()`` on a positional arg when a handler emits
+    the record (i.e. after the level check passes), so wrapping the
+    ``SecretDetector`` masking here avoids paying for it when DEBUG is disabled,
+    without a ``getEffectiveLevel()`` guard at each call site.
+    """
+
+    __slots__ = ("_format", "_query")
+
+    def __init__(self, format_fn: Callable[[str], str], query: str) -> None:
+        self._format = format_fn
+        self._query = query
+
+    def __str__(self) -> str:
+        return self._format(self._query)
+
+
 class TypeAndBinding(NamedTuple):
     """Stores the type name and the Snowflake binding."""
 
@@ -597,8 +617,6 @@ class SnowflakeConnection:
         unsafe_file_write: When true, files downloaded by GET will be saved with 644 permissions. Otherwise, files will be saved with safe - owner-only permissions: 600.
         check_arrow_conversion_error_on_every_column: When true, the error check after the conversion from arrow to python types will happen for every column in the row. This is a new behaviour which fixes the bug that caused the type errors to trigger silently when occurring at any place other than last column in a row. To revert the previous (faulty) behaviour, please set this flag to false.
     """
-
-    OCSP_ENV_LOCK = Lock()
 
     def __init__(
         self,
@@ -730,7 +748,7 @@ class SnowflakeConnection:
                 None,
                 ProgrammingError,
                 {
-                    "msg": "Invalid account identifier: only letters, digits, '_' and '-' allowed; no dots or slashes",
+                    "msg": "Invalid account identifier: only letters, digits, '_', '-' and '.' (as a label separator) allowed; no slashes or backslashes",
                     "errno": ER_NO_ACCOUNT_NAME,
                 },
             )
@@ -1375,15 +1393,6 @@ class SnowflakeConnection:
             name = m if not m.startswith("_") else m[1:]
             setattr(self, name, getattr(errors, m))
 
-    @staticmethod
-    def setup_ocsp_privatelink(app, hostname) -> None:
-        hostname = hostname.lower()
-        SnowflakeConnection.OCSP_ENV_LOCK.acquire()
-        ocsp_cache_server = f"http://ocsp.{hostname}/ocsp_response_cache.json"
-        os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"] = ocsp_cache_server
-        logger.debug("OCSP Cache Server is updated: %s", ocsp_cache_server)
-        SnowflakeConnection.OCSP_ENV_LOCK.release()
-
     def __open_connection(self):
         """Opens a new network connection."""
         self.converter = self._converter_class(
@@ -1400,17 +1409,16 @@ class SnowflakeConnection:
         )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
 
+        # The PrivateLink OCSP cache URL is now derived per-connection inside
+        # OCSPServer from this connection's hostname (SNOW-3675581); the driver
+        # does not write SF_OCSP_RESPONSE_CACHE_SERVER_URL to the process
+        # environment. An operator-set value is still honored (and takes
+        # precedence) -- log it if present.
         if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
             logger.debug(
                 "Custom OCSP Cache Server URL found in environment - %s",
                 os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"],
             )
-
-        if ".privatelink.snowflakecomputing." in self.host.lower():
-            SnowflakeConnection.setup_ocsp_privatelink(self.application, self.host)
-        else:
-            if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
-                del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
 
         if self._session_parameters is None:
             self._session_parameters = {}
@@ -2285,7 +2293,11 @@ class SnowflakeConnection:
 
     def _cancel_query(self, sql: str, request_id: UUID) -> dict[str, bool | None]:
         """Cancels the query with the exact SQL query and requestId."""
-        logger.debug("_cancel_query sql=[%s], request_id=[%s]", sql, request_id)
+        logger.debug(
+            "_cancel_query sql=[%s], request_id=[%s]",
+            self._format_query_for_log_lazy(sql),
+            request_id,
+        )
         url_parameters = {REQUEST_ID: str(uuid.uuid4())}
 
         return self.rest.request(
@@ -2403,11 +2415,19 @@ class SnowflakeConnection:
 
     def _format_query_for_log(self, query: str) -> str:
         ret = " ".join(line.strip() for line in query.split("\n"))
+        # SNOW-3675590: SQL text can embed cloud credentials (e.g. COPY/CREATE
+        # STAGE CREDENTIALS=(...), PUT/GET), so mask before the query reaches
+        # any log handler.
+        ret = SecretDetector.mask_secrets(ret).masked_text
         return (
             ret
             if len(ret) < self.log_max_query_length
             else ret[0 : self.log_max_query_length] + "..."
         )
+
+    def _format_query_for_log_lazy(self, query: str) -> _LazyQueryLog:
+        """Lazy ``_format_query_for_log`` — masks only if the record is emitted."""
+        return _LazyQueryLog(self._format_query_for_log, query)
 
     def __enter__(self) -> SnowflakeConnection:
         """Context manager."""
