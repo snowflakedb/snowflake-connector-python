@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import logging.config
 import os
 import subprocess
 import threading
 import webbrowser
+from collections.abc import Sequence
 from enum import Enum
-from typing import Union
 
 import requests
 
@@ -53,14 +55,99 @@ def get_access_token_oauth(cfg):
         raise
 
 
+_EXTERNAL_BROWSER_DIR = "/externalbrowser"
+_NODE_SCRIPT_TIMEOUT = 15
+
+
+def _redact(text: str | bytes | None, secrets: Sequence[str]) -> str:
+    """Replaces every non-empty secret in ``text`` with a placeholder.
+
+    Accepts bytes as well as str: ``subprocess.TimeoutExpired`` carries the
+    partial output as raw bytes even when the call passed ``text=True``, because
+    the exception is raised before the streams are decoded.
+    """
+    if not text:
+        return ""
+    if isinstance(text, bytes):
+        text = text.decode("utf-8", errors="replace")
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, "****")
+    return text
+
+
+def _log_node_output(
+    label: str,
+    stdout: str | bytes | None,
+    stderr: str | bytes | None,
+    secrets: Sequence[str],
+    level: int,
+) -> None:
+    for stream_name, content in (("stdout", stdout), ("stderr", stderr)):
+        redacted = _redact(content, secrets).strip()
+        if redacted:
+            logger.log(level, "%s %s:\n%s", label, stream_name, redacted)
+
+
+def _run_node_script(
+    script_name: str,
+    args: Sequence[str] | None = None,
+    *,
+    timeout: int = _NODE_SCRIPT_TIMEOUT,
+    context: str = "",
+    secrets: Sequence[str] = (),
+) -> subprocess.CompletedProcess:
+    """Runs one of the browser-automation scripts shipped inside the test image.
+
+    Captures and logs the script's own output on failure. Without this, a broken
+    browser automation is invisible: the node process is killed at ``timeout``,
+    its error is discarded, and the only thing that reaches the log is the
+    connector's generic "Unable to receive the OAuth message within a given
+    timeout" ~120s later, which points at the redirect URI rather than at the
+    browser.
+
+    The argv is deliberately kept out of both the log and any raised exception:
+    these scripts take the IdP login and password as positional arguments, and
+    ``subprocess.TimeoutExpired``/``CalledProcessError`` echo the whole argv in
+    ``str(exc)``. Re-raising those verbatim has published live browser
+    credentials into CI logs.
+
+    Raises only on timeout, matching what the individual call sites did before
+    they were funnelled through here: ``subprocess.run`` was never called with
+    ``check=True``, so a non-zero exit was tolerated. A non-zero exit is logged
+    at ERROR rather than raised, to keep this change from turning a previously
+    silent ``cleanBrowserProcesses.js`` failure into an error in the autouse
+    setup/teardown fixture.
+    """
+    script_path = f"{_EXTERNAL_BROWSER_DIR}/{script_name}"
+    label = f"{script_name}({context})" if context else script_name
+    try:
+        process = subprocess.run(
+            ["node", script_path, *(args or ())],
+            timeout=timeout,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.TimeoutExpired as e:
+        # Whatever the script managed to print before being killed usually names
+        # the real failure (a missing selector, a navigation timeout, ...).
+        _log_node_output(label, e.stdout, e.stderr, secrets, logging.ERROR)
+        raise RuntimeError(
+            f"{label} did not complete within {timeout}s: browser automation "
+            f"failed. See the captured node output above for the cause."
+        ) from None
+
+    if process.returncode != 0:
+        logger.error("%s exited with code %s", label, process.returncode)
+        _log_node_output(label, process.stdout, process.stderr, secrets, logging.ERROR)
+    else:
+        _log_node_output(label, process.stdout, process.stderr, secrets, logging.DEBUG)
+    return process
+
+
 def clean_browser_processes():
     if os.getenv("AUTHENTICATION_TESTS_ENV") == "docker":
-        try:
-            clean_browser_processes_path = "/externalbrowser/cleanBrowserProcesses.js"
-            process = subprocess.run(["node", clean_browser_processes_path], timeout=15)
-            logger.debug(f"OUTPUT:  {process.stdout}, ERRORS: {process.stderr}")
-        except Exception as e:
-            raise RuntimeError(e)
+        _run_node_script("cleanBrowserProcesses.js")
 
 
 class AuthorizationTestHelper:
@@ -136,46 +223,33 @@ class AuthorizationTestHelper:
     def _provide_credentials(self, scenario: Scenario, login: str, password: str):
         try:
             webbrowser.register("xdg-open", None, webbrowser.GenericBrowser("xdg-open"))
-            provide_browser_credentials_path = (
-                "/externalbrowser/provideBrowserCredentials.js"
+            _run_node_script(
+                "provideBrowserCredentials.js",
+                [scenario.value, login, password],
+                context=scenario.value,
+                secrets=(login, password),
             )
-            process = subprocess.run(
-                [
-                    "node",
-                    provide_browser_credentials_path,
-                    scenario.value,
-                    login,
-                    password,
-                ],
-                timeout=15,
-            )
-            logger.debug(f"OUTPUT:  {process.stdout}, ERRORS: {process.stderr}")
         except Exception as e:
             self.error_msg = e
-            raise RuntimeError(e)
+            raise
 
     def get_totp(self, seed: str = "") -> []:
         if self.auth_test_env == "docker":
             try:
-                provide_totp_generator_path = "/externalbrowser/totpGenerator.js"
-                process = subprocess.run(
-                    ["node", provide_totp_generator_path, seed],
-                    timeout=40,
-                    capture_output=True,
-                    text=True,
+                process = _run_node_script(
+                    "totpGenerator.js", [seed], timeout=40, secrets=(seed,)
                 )
-                logger.debug(f"OUTPUT:  {process.stdout}, ERRORS: {process.stderr}")
                 return process.stdout.strip().split()
             except Exception as e:
                 self.error_msg = e
-                raise RuntimeError(e)
+                raise
         else:
             logger.info("TOTP generation is not supported in this environment")
             return ""
 
     def connect_using_okta_connection_and_execute_custom_command(
         self, command: str, return_token: bool = False
-    ) -> Union[bool, str]:
+    ) -> bool | str:
         try:
             logger.info("Setup PAT")
             with snowflake.connector.connect(**self.configuration) as con:
