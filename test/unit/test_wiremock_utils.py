@@ -43,9 +43,19 @@ class _FakeProcess:
 
     def __init__(self, return_code: int | None) -> None:
         self._return_code = return_code
+        self.wait_calls = 0
+        self.kill_calls = 0
 
     def poll(self) -> int | None:
         return self._return_code
+
+    def wait(self, timeout: float | None = None) -> int:
+        self.wait_calls += 1
+        self._return_code = 0
+        return 0
+
+    def kill(self) -> None:
+        self.kill_calls += 1
 
 
 def _client_for_startup_checks(
@@ -63,7 +73,9 @@ def _client_for_startup_checks(
     client.wiremock_http_port = 45161
     client.wiremock_https_port = None
     log_path = tmp_path / "wiremock-startup.log"
-    log_path.write_text(startup_output)
+    # Explicit encoding: the default is locale-dependent, and non-ASCII in a canned
+    # startup log is unwritable under Windows' cp1252.
+    log_path.write_text(startup_output, encoding="utf-8")
     client._startup_log_path = log_path
     client.wiremock_process = _FakeProcess(return_code)
     return client
@@ -140,3 +152,57 @@ def test_missing_banner_times_out_with_the_captured_output(tmp_path):
     message = str(excinfo.value)
     assert f"{WIREMOCK_START_TIMEOUT_SECONDS} seconds" in message
     assert "still booting" in message
+
+
+def test_startup_log_removal_survives_a_locked_file(tmp_path, monkeypatch):
+    """Teardown must not fail because the log file cannot be unlinked.
+
+    Windows refuses to unlink a file while another process holds a handle to it,
+    so a JVM that has not fully exited yet made ``__exit__`` raise
+    ``PermissionError`` and mask the result of the test that was running.
+    """
+    client = _client_for_startup_checks(BANNER, None, tmp_path)
+
+    def _locked_unlink(*args, **kwargs):
+        raise PermissionError(
+            32,
+            "The process cannot access the file because it is being used by "
+            "another process",
+        )
+
+    monkeypatch.setattr(pathlib.Path, "unlink", _locked_unlink)
+
+    client._remove_startup_log()
+
+    assert client._startup_log_path is None, "the path must be cleared regardless"
+
+
+def test_process_is_reaped_before_its_log_is_removed(tmp_path):
+    """``/__admin/shutdown`` returns before the JVM exits, so wait for it.
+
+    Removing the log while the process still holds it is what fails on Windows,
+    and a lingering JVM would also keep its ports bound.
+    """
+    client = _client_for_startup_checks(BANNER, None, tmp_path)
+    removal_order = []
+
+    def _record_removal():
+        removal_order.append("removed")
+
+    client._remove_startup_log = _record_removal
+    client._wiremock_post = lambda url: pytest.fail(
+        "shutdown should not be attempted in this test"
+    )
+    client.wiremock_process._return_code = 0  # already exited: skips the POST
+
+    client._stop_wiremock()
+
+    assert removal_order == ["removed"]
+
+    # And when the process is still alive, it is waited on before removal.
+    client = _client_for_startup_checks(BANNER, None, tmp_path)
+    client._wiremock_post = lambda url: type("R", (), {"status_code": 200})()
+    client._stop_wiremock()
+
+    assert client.wiremock_process.wait_calls >= 1, "the JVM must be reaped"
+    assert client._startup_log_path is None
