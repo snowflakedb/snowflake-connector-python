@@ -5,8 +5,10 @@ import hashlib
 import json
 import logging
 import os
+import re
 import stat
 import sys
+import urllib.parse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -30,10 +32,18 @@ class TokenType(Enum):
     - OAUTH_REFRESH_TOKEN: Long-lived OAuth token to obtain new access tokens
     """
 
-    ID_TOKEN = "ID_TOKEN"
-    MFA_TOKEN = "MFA_TOKEN"
-    OAUTH_ACCESS_TOKEN = "OAUTH_ACCESS_TOKEN"
-    OAUTH_REFRESH_TOKEN = "OAUTH_REFRESH_TOKEN"
+    ID_TOKEN = "IdToken"
+    MFA_TOKEN = "MfaToken"
+    OAUTH_ACCESS_TOKEN = "OauthAccessToken"
+    OAUTH_REFRESH_TOKEN = "OauthRefreshToken"
+
+
+_LEGACY_TOKEN_TYPE_VALUES: dict[TokenType, str] = {
+    TokenType.ID_TOKEN: "ID_TOKEN",
+    TokenType.MFA_TOKEN: "MFA_TOKEN",
+    TokenType.OAUTH_ACCESS_TOKEN: "OAUTH_ACCESS_TOKEN",
+    TokenType.OAUTH_REFRESH_TOKEN: "OAUTH_REFRESH_TOKEN",
+}
 
 
 class _InvalidTokenKeyError(Exception):
@@ -42,21 +52,124 @@ class _InvalidTokenKeyError(Exception):
 
 @dataclass
 class TokenKey:
-    user: str
-    host: str
-    tokenType: TokenType
+    """Key identifying a cached token.
 
-    def string_key(self) -> str:
-        if len(self.host) == 0:
-            raise _InvalidTokenKeyError("Invalid key, host is empty")
-        if len(self.user) == 0:
-            raise _InvalidTokenKeyError("Invalid key, user is empty")
-        return f"{self.host.upper()}:{self.user.upper()}:{self.tokenType.value}"
+    ``snowflake`` and ``username`` are required for all flows.
+    ``idp`` and ``role`` are used only for OAuth flows; they default to ``""``
+    and are ignored by ``build_cache_key`` for MFA and ID token flows.
+    Raw (un-normalized) values are acceptable; ``build_cache_key`` normalizes
+    them before hashing.
 
-    def hash_key(self) -> str:
-        m = hashlib.sha256()
-        m.update(self.string_key().encode(encoding="utf-8"))
-        return m.hexdigest()
+    Fields:
+        token_type: The type of token being cached.
+        snowflake: Snowflake server URL.
+        username: Snowflake login name.
+        idp: IdP / token-endpoint URL (OAuth flows only).
+        role: Snowflake role (OAuth flows only).
+    """
+
+    token_type: TokenType
+    snowflake: str
+    username: str
+    idp: str = ""
+    role: str = ""
+
+
+def normalize_url(url: str) -> str:
+    """Strip scheme and userinfo, drop query/fragment, trim root slash, lowercase."""
+    s = re.sub(r"^https?://", "", url)
+    at = s.find("@")
+    if at >= 0:
+        s = s[at + 1 :]
+    s = s.split("?")[0].split("#")[0]
+    s = s.rstrip("/")
+    return s.lower()
+
+
+def normalize_identifier(identifier: str) -> str:
+    """Return verbatim if the value contains any double-quote character; otherwise lowercase."""
+    if '"' in identifier:
+        return identifier
+    return identifier.lower()
+
+
+_OAUTH_TYPES: frozenset[str] = frozenset(
+    {
+        "OauthAccessToken",
+        "OauthRefreshToken",
+        "DpopBundledAccessToken",
+    }
+)
+
+
+def build_cache_key(key: TokenKey) -> str:
+    """Build the versioned, uniformly-hashed v2 cache key.
+
+    Format: ``SnowflakeTokenCache.v2.<TokenType>.<sha256hex(canonical_json)>``
+
+    ``keyData`` is flow-dependent and never contains ``token_type``:
+
+    - OAuth (``OauthAccessToken``, ``OauthRefreshToken``,
+      ``DpopBundledAccessToken``): 4 fields — ``idp``, ``role``,
+      ``snowflake``, ``username``.
+    - MFA / ID token (``MfaToken``, ``IdToken``): 2 fields —
+      ``snowflake``, ``username`` only.
+
+    The canonical JSON is compact (no whitespace) with keys sorted
+    lexicographically, serialized to UTF-8. Hashing occurs exactly once here;
+    cache backends store and retrieve the returned string verbatim.
+    """
+    if not key.snowflake:
+        raise _InvalidTokenKeyError("snowflake URL must not be empty")
+    if not key.username:
+        raise _InvalidTokenKeyError("username must not be empty")
+
+    token_type_value = key.token_type.value
+
+    if token_type_value in _OAUTH_TYPES:
+        key_data: dict[str, str] = {
+            "idp": normalize_url(key.idp or ""),
+            "role": normalize_identifier(key.role or ""),
+            "snowflake": normalize_url(key.snowflake),
+            "username": normalize_identifier(key.username),
+        }
+    else:
+        # MFA_TOKEN, ID_TOKEN — idp and role are not part of the key
+        key_data = {
+            "snowflake": normalize_url(key.snowflake),
+            "username": normalize_identifier(key.username),
+        }
+
+    canonical = json.dumps(key_data, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return f"SnowflakeTokenCache.v2.{token_type_value}.{digest}"
+
+
+def _legacy_string_key(key: TokenKey) -> str:
+    """Reconstruct the pre-v2 ``{HOST}:{USER}:{TOKEN_TYPE}`` string key.
+
+    OAuth tokens historically keyed on the IdP hostname
+    (``urlparse(token_request_url).hostname``); all other flows keyed on the
+    Snowflake host. Used only to locate and migrate legacy cache entries.
+    """
+    if key.token_type in (
+        TokenType.OAUTH_ACCESS_TOKEN,
+        TokenType.OAUTH_REFRESH_TOKEN,
+    ):
+        host = urllib.parse.urlparse(key.idp).hostname or key.idp
+    else:
+        host = key.snowflake
+    if not host:
+        raise _InvalidTokenKeyError("Invalid key, host is empty")
+    if not key.username:
+        raise _InvalidTokenKeyError("Invalid key, user is empty")
+    legacy_type = _LEGACY_TOKEN_TYPE_VALUES.get(key.token_type, key.token_type.value)
+    return f"{host.upper()}:{key.username.upper()}:{legacy_type}"
+
+
+def _legacy_hash_key(key: TokenKey) -> str:
+    """SHA-256 hex of the legacy string key (the pre-v2 ``hash_key`` layout)."""
+    return hashlib.sha256(_legacy_string_key(key).encode("utf-8")).hexdigest()
 
 
 def _warn(warning: str) -> None:
@@ -72,7 +185,10 @@ class TokenCache(ABC):
     - Linux: Uses JSON file in ~/.cache/snowflake/ with 0o600 permissions
     - Fallback: NoopTokenCache (no caching) if secure storage unavailable
 
-    Tokens are keyed by (host, user, token_type) to support multiple accounts.
+    Tokens are keyed by a versioned, SHA-256-hashed canonical-JSON key (v2 format):
+    ``SnowflakeTokenCache.v2.<TokenType>.<sha256hex>``.  OAuth flows include
+    ``idp`` and ``role`` in the hashed JSON; MFA and ID token flows use only
+    ``snowflake`` and ``username``.
     """
 
     @staticmethod
@@ -154,6 +270,17 @@ class FileTokenCache(TokenCache):
 
     Security: File must have 0o600 permissions and be owned by current user.
     Uses file locks to prevent concurrent access corruption.
+
+    JSON map keys are the full ``SnowflakeTokenCache.v2.<TokenType>.<sha256hex>``
+    strings produced by ``build_cache_key``; hashing is performed once before
+    dispatch.
+    Note: the filename (``credential_cache_v1.json``) is unchanged for
+    backward compatibility; the ``v2`` in the key prefix refers to the
+    key-format version, not the file format.
+
+    For backward compatibility, :meth:`retrieve` also checks the legacy layout
+    where the map key was ``sha256("{HOST}:{USER}:{TOKEN_TYPE}")``; matching
+    entries are silently migrated to the v2 key on first use.
     """
 
     @staticmethod
@@ -178,12 +305,13 @@ class FileTokenCache(TokenCache):
 
     def store(self, key: TokenKey, token: str) -> None:
         try:
+            final_key = build_cache_key(key)
             FileTokenCache.validate_cache_dir(
                 self.cache_dir, self._skip_file_permissions_check
             )
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
-                cache["tokens"][key.hash_key()] = token
+                cache["tokens"][final_key] = token
                 self._write_cache_file(cache)
         except _FileTokenCacheError as e:
             self.logger.error(f"Failed to store token: {e=}")
@@ -194,16 +322,29 @@ class FileTokenCache(TokenCache):
 
     def retrieve(self, key: TokenKey) -> str | None:
         try:
+            final_key = build_cache_key(key)
             FileTokenCache.validate_cache_dir(
                 self.cache_dir, self._skip_file_permissions_check
             )
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
-                token = cache["tokens"].get(key.hash_key(), None)
+                tokens = cache["tokens"]
+                token = tokens.get(final_key, None)
                 if isinstance(token, str):
                     return token
-                else:
-                    return None
+                # Legacy v1 fallback: entries keyed by sha256("{HOST}:{USER}:{TYPE}").
+                legacy_key = _legacy_hash_key(key)
+                legacy_token = tokens.get(legacy_key, None)
+                if isinstance(legacy_token, str):
+                    tokens[final_key] = legacy_token
+                    tokens.pop(legacy_key, None)
+                    self._write_cache_file(cache)
+                    self.logger.debug(
+                        "migrated legacy file cache entry for %s",
+                        key.token_type.value,
+                    )
+                    return legacy_token
+                return None
         except _FileTokenCacheError as e:
             self.logger.error(f"Failed to retrieve token: {e=}")
             return None
@@ -216,12 +357,13 @@ class FileTokenCache(TokenCache):
 
     def remove(self, key: TokenKey) -> None:
         try:
+            final_key = build_cache_key(key)
             FileTokenCache.validate_cache_dir(
                 self.cache_dir, self._skip_file_permissions_check
             )
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
-                cache["tokens"].pop(key.hash_key(), None)
+                cache["tokens"].pop(final_key, None)
                 self._write_cache_file(cache)
         except _FileTokenCacheError as e:
             self.logger.error(f"Failed to remove token: {e=}")
@@ -398,14 +540,21 @@ class KeyringTokenCache(TokenCache):
     - macOS: Stores tokens in Keychain
     - Windows: Stores tokens in Windows Credential Manager
 
-    All tokens share a single keyring service name so that on macOS they fall
-    under one Keychain ACL entry, requiring only a single "Allow" prompt
-    instead of one per token. The keyring *account* field stores a SHA-256 hash
-    of ``{HOST}:{USER}:{TOKEN_TYPE}`` to avoid exposing plaintext identifiers
-    in the OS credential store.
+    The v2 cache key (``SnowflakeTokenCache.v2.<TokenType>.<sha256hex>``) is
+    used as the keyring service name, and the uppercase username is used as the
+    account field. This ensures a distinct entry per token dimension while still
+    letting related tokens share Keychain visibility per account.
 
-    For backward compatibility, :meth:`retrieve` also checks the legacy layout
-    where the service was the full string key and the account was the username.
+    For backward compatibility, :meth:`retrieve` also checks two legacy layouts
+    and silently migrates matching entries to v2 on first use:
+
+    - hash layout (immediately prior): service ``com.snowflake.connector.python``
+      with account ``sha256("{HOST}:{USER}:{TOKEN_TYPE}")``
+    - string layout (oldest): service ``{HOST}:{USER}:{TOKEN_TYPE}`` with account
+      equal to the uppercase username
+
+    where ``string_key`` is ``{HOST}:{USER}:{TOKEN_TYPE}`` (HOST being the
+    IdP hostname for OAuth tokens and the Snowflake host otherwise).
     """
 
     SERVICE_NAME = "com.snowflake.connector.python"
@@ -415,61 +564,76 @@ class KeyringTokenCache(TokenCache):
 
     def store(self, key: TokenKey, token: str) -> None:
         try:
-            keyring.set_password(
-                self.SERVICE_NAME,
-                key.hash_key(),
-                token,
-            )
+            final_key = build_cache_key(key)
+            keyring.set_password(final_key, key.username.upper(), token)
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Could not store {key.tokenType} in keyring, {e=}")
+            self.logger.error(f"Could not store {key.token_type} in keyring, {e=}")
         except keyring.errors.KeyringError as ke:
             self.logger.error("Could not store token in keyring, %s", str(ke))
 
     def retrieve(self, key: TokenKey) -> str | None:
         try:
-            token = keyring.get_password(
-                self.SERVICE_NAME,
-                key.hash_key(),
-            )
+            final_key = build_cache_key(key)
+            token = keyring.get_password(final_key, key.username.upper())
             if token is not None:
                 return token
             return self._retrieve_legacy(key)
         except keyring.errors.KeyringError as ke:
             self.logger.error(
                 "Could not retrieve {} from secure storage : {}".format(
-                    key.tokenType.value, str(ke)
+                    key.token_type.value, str(ke)
                 )
             )
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Could not retrieve {key.tokenType} from keyring, {e=}")
+            self.logger.error(
+                f"Could not retrieve {key.token_type} from keyring, {e=}"
+            )
 
     def _retrieve_legacy(self, key: TokenKey) -> str | None:
-        """Try to read from the old per-token-type service layout and migrate."""
+        """Read from pre-v2 keyring layouts and migrate matching entries to v2.
+
+        Two historical layouts are checked, newest first:
+        - hash layout: service ``SERVICE_NAME``, account ``sha256(string_key)``
+        - string layout: service ``string_key``, account uppercase username
+
+        where ``string_key`` is ``{HOST}:{USER}:{TOKEN_TYPE}`` (HOST being the
+        IdP hostname for OAuth tokens and the Snowflake host otherwise).
+        """
         try:
-            token = keyring.get_password(
-                key.string_key(),
-                key.user.upper(),
+            legacy_string_key = _legacy_string_key(key)
+            legacy_hash_key = _legacy_hash_key(key)
+        except _InvalidTokenKeyError:
+            return None
+
+        account = key.username.upper()
+        lookups = [
+            (self.SERVICE_NAME, legacy_hash_key),
+            (legacy_string_key, account),
+        ]
+        for service, acct in lookups:
+            try:
+                token = keyring.get_password(service, acct)
+            except (keyring.errors.KeyringError, _InvalidTokenKeyError):
+                continue
+            if token is None:
+                continue
+            self.store(key, token)
+            try:
+                keyring.delete_password(service, acct)
+            except Exception:
+                pass
+            self.logger.debug(
+                "migrated legacy keyring entry for %s", key.token_type.value
             )
-        except (keyring.errors.KeyringError, _InvalidTokenKeyError):
-            return None
-        if token is None:
-            return None
-        self.store(key, token)
-        try:
-            keyring.delete_password(key.string_key(), key.user.upper())
-        except Exception:
-            pass
-        self.logger.debug("migrated legacy keyring entry for %s", key.tokenType.value)
-        return token
+            return token
+        return None
 
     def remove(self, key: TokenKey) -> None:
         try:
-            keyring.delete_password(
-                self.SERVICE_NAME,
-                key.hash_key(),
-            )
+            final_key = build_cache_key(key)
+            keyring.delete_password(final_key, key.username.upper())
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Could not remove {key.tokenType} from keyring, {e=}")
+            self.logger.error(f"Could not remove {key.token_type} from keyring, {e=}")
         except Exception as ex:
             self.logger.error(
                 "Failed to delete credential in the keyring: err=[%s]", ex
