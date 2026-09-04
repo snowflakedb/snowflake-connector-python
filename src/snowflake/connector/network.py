@@ -1222,7 +1222,7 @@ class SnowflakeRestful:
             finally:
                 raw_ret.close()  # ensure response is closed
         except SSLError as se:
-            if is_econnreset_exception(se):
+            if is_econnreset_exception(se) or "Unexpected EOF" in repr(se):
                 raise RetryRequest(se)
             msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
             logger.debug(msg)

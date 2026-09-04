@@ -816,7 +816,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             finally:
                 raw_ret.close()  # ensure response is closed
         except (aiohttp.ClientSSLError, aiohttp.ClientConnectorSSLError) as se:
-            if is_econnreset_exception(se):
+            if is_econnreset_exception(se) or "Unexpected EOF" in repr(se):
                 raise RetryRequest(se.os_error)
             msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
             logger.debug(msg)

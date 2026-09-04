@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - NEXT_RELEASE(TBD)
+  - Fixed a bug where a TLS handshake terminated by the peer (`SSLError` containing `SysCallError(-1, 'Unexpected EOF')`) was classified as non-retryable and surfaced as an `OperationalError`, unlike `ECONNRESET`. Such handshake `Unexpected EOF` errors are now retried, on both the sync and async request paths (SNOW-4058589).
 
 - v4.7.3(Sep 3,2026)
   - Added experimental Python 3.14t (free-threaded CPython) wheel support. **Experimental — not intended for production use.**

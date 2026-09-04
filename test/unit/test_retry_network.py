@@ -535,8 +535,8 @@ def test_sslerror_with_econnreset_retries():
         rest._request_exec(session=session, **default_parameters)
 
 
-def test_sslerror_without_econnreset_does_not_retry():
-    """Test that SSLError without ECONNRESET does not retry but raises OperationalError."""
+def test_sslerror_without_econnreset_or_unexpected_eof_does_not_retry():
+    """Test that an SSLError with neither ECONNRESET nor 'Unexpected EOF' does not retry but raises OperationalError."""
     connection = mock_connection()
     connection.errorhandler = Error.default_errorhandler
     rest = SnowflakeRestful(
@@ -560,6 +560,34 @@ def test_sslerror_without_econnreset_does_not_retry():
 
     # This should raise OperationalError, not RetryRequest
     with pytest.raises(OperationalError):
+        rest._request_exec(session=session, **default_parameters)
+
+
+def test_sslerror_with_unexpected_eof_retries():
+    """Test that SSLError with 'Unexpected EOF' raises RetryRequest."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    default_parameters = {
+        "method": "POST",
+        "full_url": "https://testaccount.snowflakecomputing.com/",
+        "headers": {},
+        "data": '{"code": 12345}',
+        "token": None,
+    }
+
+    unexpected_eof_ssl_error = SSLError(
+        "bad handshake: SysCallError(-1, 'Unexpected EOF')"
+    )
+    session = MagicMock()
+    session.request = Mock(side_effect=unexpected_eof_ssl_error)
+
+    with pytest.raises(RetryRequest, match="Unexpected EOF"):
         rest._request_exec(session=session, **default_parameters)
 
 
