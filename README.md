@@ -1,10 +1,7 @@
 # Snowflake Connector for Python
 
-[![Build and Test](https://github.com/snowflakedb/snowflake-connector-python/actions/workflows/build_test.yml/badge.svg)](https://github.com/snowflakedb/snowflake-connector-python/actions/workflows/build_test.yml)
-[![codecov](https://codecov.io/gh/snowflakedb/snowflake-connector-python/branch/main/graph/badge.svg?token=MVKSNtnLr0)](https://codecov.io/gh/snowflakedb/snowflake-connector-python)
-[![PyPi](https://img.shields.io/pypi/v/snowflake-connector-python.svg)](https://pypi.python.org/pypi/snowflake-connector-python/)
-[![License Apache-2.0](https://img.shields.io/:license-Apache%202-brightgreen.svg)](http://www.apache.org/licenses/LICENSE-2.0.txt)
-[![Codestyle Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+> [!IMPORTANT]
+> A new version of the driver is being developed in [snowflakedb/drivers](https://github.com/snowflakedb/drivers) and is currently in public preview. See the [documentation](https://docs.snowflake.com/en/developer-guide/python-connector/python-connector-universal-core) for more information.
 
 This package includes the Snowflake Connector for Python, which conforms to the [Python DB API 2.0](https://www.python.org/dev/peps/pep-0249/) specification.
 
@@ -52,6 +49,29 @@ These tools are integrated into `tox` to allow us to easily set them up universa
 * **coverage**: Runs `coverage.py` to combine generated coverage data files. Useful when multiple categories were run
   and we would like to have an overall coverage data file created for them.
 * **flake8**: (Deprecated) Similar to `fix_lint`, but only runs `flake8` checks.
+
+## Log secret masking
+
+By default, the connector masks secrets (tokens, passwords, cloud credentials,
+private keys) in records emitted by `snowflake.connector` loggers and by the
+third-party loggers it uses (`botocore`, `boto3`, `aiohttp`, `aiobotocore`,
+`aioboto3`, and vendored `urllib3`). Masking applies even when logging is
+configured with `logging.basicConfig`, not only when Easy Logging
+(`save_logs = true` in `config.toml`) is enabled. The same opt-out covers
+those trees: they also interpolate the message and clear `record.args`.
+
+To disable masking, set `SNOWFLAKE_DISABLE_LOG_SECRET_MASKING` to `true`.
+The connector reads this on every log record, so it is an escape hatch if
+masking is incompatible with a log pipeline (for example one that depends
+on structured `record.args`). Setting it **before** importing
+`snowflake.connector` also skips installing the masking hook:
+
+```bash
+export SNOWFLAKE_DISABLE_LOG_SECRET_MASKING=true
+```
+
+The masker interpolates each log record and clears `record.args`. Leave
+masking enabled unless you need that escape hatch.
 
 ## Disable telemetry
 

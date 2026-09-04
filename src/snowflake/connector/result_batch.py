@@ -162,12 +162,19 @@ def create_batches_from_response(
             chunk_headers = {}
             for header_key, header_value in data["chunkHeaders"].items():
                 chunk_headers[header_key] = header_value
-                if "encryption" not in header_key:
-                    logger.debug(
-                        f"added chunk header: key={header_key}, value={header_value}"
-                    )
+                # SNOW-3675590: never log the value — chunk-header values can be
+                # secrets (SSE-C customer key). Log the header name plus
+                # non-sensitive value metadata only. Capture real headers via a
+                # proxy (drivers-usage PROXY=1) when debugging.
+                logger.debug(
+                    f"added chunk header: key={header_key} "
+                    f"value={SecretDetector.describe_value(header_value)}"
+                )
         elif qrmk is not None:
-            logger.debug(f"qrmk={SecretDetector.mask_secrets(qrmk)}")
+            # SNOW-3675590: never log the qrmk value — it is the AES-256 SSE-C
+            # result-encryption key. Log only its presence; do not route it
+            # through masking helpers as a substitute.
+            logger.debug("qrmk is present in the result response")
             chunk_headers[SSE_C_ALGORITHM] = SSE_C_AES
             chunk_headers[SSE_C_KEY] = qrmk
 
@@ -230,7 +237,12 @@ def create_batches_from_response(
             session_manager=cursor._connection._session_manager.clone(),
         )
     else:
-        logger.error(f"Don't know how to construct ResultBatches from response: {data}")
+        # SNOW-3675590: log only the structural shape — the raw response can
+        # carry secrets, and this ERROR line is emitted regardless of DEBUG level.
+        logger.error(
+            "Don't know how to construct ResultBatches from response: "
+            f"format={_format!r}, shape={SecretDetector.describe_value(data)}"
+        )
         first_chunk = ArrowResultBatch.from_data(
             "",
             0,

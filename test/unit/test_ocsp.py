@@ -39,6 +39,7 @@ from snowflake.connector.ssl_wrap_socket import _openssl_connect
 try:
     from snowflake.connector.cache import SFDictFileCache
     from snowflake.connector.errorcode import (
+        ER_OCSP_RESPONSE_CERT_ID_MISMATCH,
         ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
         ER_OCSP_RESPONSE_FETCH_FAILURE,
     )
@@ -57,6 +58,7 @@ try:
             os.unlink(tmp_cache_file)
 
 except ImportError:
+    ER_OCSP_RESPONSE_CERT_ID_MISMATCH = None
     ER_OCSP_RESPONSE_CERT_STATUS_REVOKED = None
     ER_OCSP_RESPONSE_FETCH_FAILURE = None
     OCSP_CACHE = None
@@ -778,6 +780,160 @@ def test_ocsp_server_domain_name():
         == f"{default_ocsp_server.DEFAULT_CACHE_SERVER_URL}/{OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME}"
     )
 
+
+@pytest.mark.skipolddriver
+def test_privatelink_ocsp_cache_url_is_per_connection(monkeypatch):
+    """SNOW-3675581: a PrivateLink host's OCSP cache URL is derived from that
+    connection's own hostname and stored on the per-connection OCSPServer,
+    without touching the process-global SF_OCSP_RESPONSE_CACHE_SERVER_URL. Two
+    connections with different hosts in the same process each keep their own
+    cache URL and do not affect one another."""
+    monkeypatch.delenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", raising=False)
+    monkeypatch.delenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT", raising=False)
+
+    host_a = "accta.us-east-1.privatelink.snowflakecomputing.com"
+    host_b = "acctb.us-west-2.privatelink.snowflakecomputing.com"
+
+    ocsp_a = SFOCSP(hostname=host_a)
+    ocsp_b = SFOCSP(hostname=host_b)
+
+    assert (
+        ocsp_a.OCSP_CACHE_SERVER.CACHE_SERVER_URL
+        == f"http://ocsp.{host_a}/{OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME}"
+    )
+    assert (
+        ocsp_b.OCSP_CACHE_SERVER.CACHE_SERVER_URL
+        == f"http://ocsp.{host_b}/{OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME}"
+    )
+    # No process-global env var was written -> connections stay independent.
+    assert "SF_OCSP_RESPONSE_CACHE_SERVER_URL" not in os.environ
+
+
+@pytest.mark.skipolddriver
+def test_operator_ocsp_cache_url_takes_precedence_over_privatelink(monkeypatch):
+    """An operator-set SF_OCSP_RESPONSE_CACHE_SERVER_URL (trusted, process-wide)
+    wins over the connector-derived PrivateLink URL."""
+    monkeypatch.delenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT", raising=False)
+    monkeypatch.setenv(
+        "SF_OCSP_RESPONSE_CACHE_SERVER_URL", "http://operator.example/cache.json"
+    )
+    ocsp = SFOCSP(hostname="acct.us-east-1.privatelink.snowflakecomputing.com")
+    assert (
+        ocsp.OCSP_CACHE_SERVER.CACHE_SERVER_URL == "http://operator.example/cache.json"
+    )
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "host,is_privatelink",
+    [
+        ("acct.us-east-1.privatelink.snowflakecomputing.com", True),
+        ("acct.privatelink.snowflakecomputing.cn", True),
+        ("ACCT.PrivateLink.SnowflakeComputing.com", True),  # case-insensitive
+        (
+            "my_account.us-east-1.privatelink.snowflakecomputing.com",
+            True,
+        ),  # underscore in account
+        ("my_acct.privatelink.snowflakecomputing.com", True),  # underscore only
+        (
+            "testacct.us-east-1.aws.privatelink.snowflakecomputing.com",
+            True,
+        ),  # multi-label regional prefix
+        ("testacct.privatelink.snowflakecomputing.mil", True),  # alternate TLD
+        ("acct.privatelink.snowflakecomputing.com.", True),  # FQDN trailing dot
+        (
+            "acct.privatelink.snowflakecomputing.com.:443",
+            True,
+        ),  # FQDN trailing dot + port
+        ("  acct.privatelink.snowflakecomputing.com  ", True),  # surrounding whitespace
+        # Hosts that merely contain the PrivateLink domain as a non-terminal label:
+        ("acct.privatelink.snowflakecomputing.com.unrelated.example", False),
+        ("acct.privatelink.snowflakecomputing.unrelated.example", False),
+        ("privatelink.snowflakecomputing.com.unrelated.example", False),
+        # Well-formed hosts whose apex is not a recognized Snowflake domain.
+        ("evil.privatelink.totally-unrelated.example", False),
+        # Characters a URL parser may treat as ending the authority. Each of these
+        # carries a recognized Snowflake domain but resolves to something else, so
+        # the character allow-list has to reject them rather than enumerate them.
+        ("acct.privatelink.snowflakecomputing.com@other.example", False),
+        ("other.example x.privatelink.snowflakecomputing.com", False),
+        ("acct.privatelink.snowflakecomputing.com;x.example", False),
+        ("acct.privatelink.snowflakecomputing.com/x.example", False),
+        # Non-ASCII that full Unicode case folding would map into the recognized
+        # apex (U+212A KELVIN SIGN -> "k") while DNS resolves the original name.
+        ("acct.privatelink.snowflaKecomputing.com", False),
+        # Malformed label structure.
+        ("acct..privatelink.snowflakecomputing.com", False),
+        ("", False),
+        # Not a PrivateLink host at all.
+        ("acct.us-east-1.snowflakecomputing.com", False),
+        ("unrelated.example", False),
+    ],
+)
+def test_privatelink_host_detection_is_label_boundary_anchored(host, is_privatelink):
+    """SNOW-3675581: only a host that genuinely *ends* at a recognized Snowflake
+    domain, carries a ".privatelink." label and is made purely of hostname
+    characters drives the OCSP cache URL. Anything else falls through to the
+    default cache URL."""
+    from snowflake.connector.ocsp_snowflake import OCSPServer
+
+    assert OCSPServer._is_privatelink_host(host) is is_privatelink
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "host,expected_authority",
+    [
+        (
+            "ACCT.PrivateLink.SnowflakeComputing.com",
+            "acct.privatelink.snowflakecomputing.com",
+        ),
+        (
+            "acct.privatelink.snowflakecomputing.com.",
+            "acct.privatelink.snowflakecomputing.com",
+        ),
+        (
+            "acct.privatelink.snowflakecomputing.com:443",
+            "acct.privatelink.snowflakecomputing.com",
+        ),
+        # The gate reads the host up to the first ':', so the cache URL must be
+        # built from that same normalized value. Deriving it from the raw string
+        # would authorize one authority and then contact another.
+        (
+            "acct.privatelink.snowflakecomputing.com:0@other.example",
+            "acct.privatelink.snowflakecomputing.com",
+        ),
+    ],
+)
+def test_privatelink_cache_url_is_built_from_the_normalized_host(
+    monkeypatch, host, expected_authority
+):
+    """The derived cache URL uses exactly the normalized host the gate judged,
+    never the raw input."""
+    monkeypatch.delenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", raising=False)
+    monkeypatch.delenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT", raising=False)
+
+    ocsp = SFOCSP(hostname=host)
+
+    assert ocsp.OCSP_CACHE_SERVER.CACHE_SERVER_URL == (
+        f"http://ocsp.{expected_authority}/{OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME}"
+    )
+
+
+@pytest.mark.skipolddriver
+def test_non_privatelink_host_uses_default_cache_url(monkeypatch):
+    """A host that merely contains the PrivateLink domain as a non-terminal
+    label falls through to the default OCSP cache URL, and its trailing labels
+    do not appear in the derived URL."""
+    monkeypatch.delenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", raising=False)
+    monkeypatch.delenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT", raising=False)
+
+    ocsp = SFOCSP(hostname="acct.privatelink.snowflakecomputing.com.unrelated.example")
+    url = ocsp.OCSP_CACHE_SERVER.CACHE_SERVER_URL
+
+    assert "unrelated.example" not in url
+    assert url.startswith("http://ocsp.snowflakecomputing.")
+
     assert (
         SnowflakeOCSP.OCSP_WHITELIST.match("www.snowflakecomputing.com")
         and SnowflakeOCSP.OCSP_WHITELIST.match("www.snowflakecomputing.cn")
@@ -833,7 +989,16 @@ def test_json_cache_serialization_and_deserialization(tmpdir):
             origin_cache.items(), loaded_cache.items()
         ):
             assert key1 == key2
-            for sub_field1, sub_field2 in zip(value1, value2):
+            for field in value1._fields:
+                sub_field1 = getattr(value1, field)
+                sub_field2 = getattr(value2, field)
+                if field == "validated":
+                    # SNOW-3675581: a verdict is never trusted across the disk
+                    # boundary. Deserialization always resets `validated` to
+                    # False (here the origin wrote True), so the entry is
+                    # re-verified before it is trusted again.
+                    assert sub_field2 is False
+                    continue
                 assert isinstance(sub_field1, type(sub_field2))
                 if isinstance(sub_field1, asn1crypto.x509.Certificate):
                     for attr in [
@@ -900,3 +1065,252 @@ def test_json_cache_serialization_and_deserialization(tmpdir):
         }
     )
     verify(verify_exception, origin_cache)
+
+
+def _build_ocsp_response_der(cert_id, status="good"):
+    """Builds a minimal DER-encoded OCSP response containing a single response
+    for *cert_id* with the given *status*. The signature is not real - tests
+    that use this patch ``verify_signature`` to a no-op."""
+    from asn1crypto import core as _core
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if status == "good":
+        cert_status = ocsp.CertStatus(name="good", value=_core.Null())
+    elif status == "revoked":
+        cert_status = ocsp.CertStatus(
+            name="revoked",
+            value=ocsp.RevokedInfo({"revocation_time": now}),
+        )
+    else:
+        raise ValueError(status)
+
+    single = ocsp.SingleResponse(
+        {
+            "cert_id": cert_id,
+            "cert_status": cert_status,
+            "this_update": now - datetime.timedelta(hours=1),
+            "next_update": now + datetime.timedelta(days=1),
+        }
+    )
+    tbs = ocsp.ResponseData(
+        {
+            "responder_id": ocsp.ResponderId(name="by_key", value=b"\x11" * 20),
+            "produced_at": now,
+            "responses": [single],
+        }
+    )
+    basic = ocsp.BasicOCSPResponse(
+        {
+            "tbs_response_data": tbs,
+            "signature_algorithm": {"algorithm": "sha256_rsa"},
+            "signature": b"\x00" * 32,
+        }
+    )
+    return ocsp.OCSPResponse(
+        {
+            "response_status": "successful",
+            "response_bytes": ocsp.ResponseBytes(
+                {
+                    "response_type": "basic_ocsp_response",
+                    "response": basic,
+                }
+            ),
+        }
+    ).dump()
+
+
+def _make_cert_id(serial):
+    return ocsp.CertId(
+        {
+            "hash_algorithm": {"algorithm": "sha1"},
+            "issuer_name_hash": b"\x01" * 20,
+            "issuer_key_hash": b"\x02" * 20,
+            "serial_number": serial,
+        }
+    )
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("status", ["good", "revoked"])
+def test_process_ocsp_response_rejects_certid_mismatch(status):
+    """SNOW-3675581: a validly-signed OCSP response whose CertID does not match
+    the certificate being validated must be rejected, regardless of the status
+    it carries."""
+    from snowflake.connector.errorcode import ER_OCSP_RESPONSE_CERT_ID_MISMATCH
+
+    sfocsp = SFOCSP()
+    requested = _make_cert_id(serial=111)
+    other = _make_cert_id(serial=999)  # same issuer, different serial
+    ocsp_response = _build_ocsp_response_der(other, status=status)
+    issuer = asn1crypto509.Certificate.load(
+        create_x509_cert(hashes.SHA256()).public_bytes(Encoding.DER)
+    )
+
+    with mock.patch.object(SFOCSP, "verify_signature", return_value=None):
+        with pytest.raises(RevocationCheckError) as exc_info:
+            sfocsp.process_ocsp_response(issuer, requested, ocsp_response)
+
+    assert exc_info.value.errno == ER_OCSP_RESPONSE_CERT_ID_MISMATCH
+
+
+@pytest.mark.skipolddriver
+def test_process_ocsp_response_accepts_matching_certid():
+    """A response whose CertID matches the validated certificate must pass the
+    CertID check (it may fail later for unrelated reasons, but never with the
+    mismatch errno)."""
+    from snowflake.connector.errorcode import ER_OCSP_RESPONSE_CERT_ID_MISMATCH
+
+    sfocsp = SFOCSP()
+    requested = _make_cert_id(serial=111)
+    ocsp_response = _build_ocsp_response_der(requested, status="good")
+    issuer = asn1crypto509.Certificate.load(
+        create_x509_cert(hashes.SHA256()).public_bytes(Encoding.DER)
+    )
+
+    with mock.patch.object(SFOCSP, "verify_signature", return_value=None):
+        try:
+            sfocsp.process_ocsp_response(issuer, requested, ocsp_response)
+        except RevocationCheckError as err:
+            assert err.errno != ER_OCSP_RESPONSE_CERT_ID_MISMATCH
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "errno_name",
+    [
+        "ER_OCSP_RESPONSE_CERT_STATUS_REVOKED",
+        "ER_OCSP_RESPONSE_CERT_ID_MISMATCH",
+        "ER_OCSP_RESPONSE_INVALID_SIGNATURE",
+    ],
+)
+def test_fail_open_treats_definitive_results_as_authoritative(errno_name, monkeypatch):
+    """SNOW-3675581: in fail-open mode, a definitive result -- a REVOKED verdict,
+    a CertID mismatch, or an invalid signature -- is authoritative and must still
+    fail the connection. Fail-open only tolerates an unavailable / unreachable
+    responder, not a definitive answer about the certificate.
+
+    verify_fail_open propagates each of these definitive errnos under fail-open
+    (the default mode), so the CertID binding
+    (ER_OCSP_RESPONSE_CERT_ID_MISMATCH) stays effective.
+    """
+    from snowflake.connector import errorcode as _errorcode
+    from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
+
+    # SF_OCSP_FAIL_OPEN takes precedence over use_fail_open, so a value left in
+    # the environment by an earlier test in this process would silently invert
+    # what this test asserts.
+    monkeypatch.delenv("SF_OCSP_FAIL_OPEN", raising=False)
+
+    errno = getattr(_errorcode, errno_name)
+    ocsp = SFOCSP(use_fail_open=True)
+    assert ocsp.is_enabled_fail_open()
+
+    ex = RevocationCheckError(msg="definitive result", errno=errno)
+    result = ocsp.verify_fail_open(ex, OCSPTelemetryData())
+
+    assert (
+        result is ex
+    ), "a definitive OCSP result must propagate even in fail-open mode"
+
+
+@pytest.mark.skipolddriver
+def test_fail_open_tolerates_unavailable_responder(monkeypatch):
+    """A soft/transient failure (responder unreachable) is still tolerated in
+    fail-open mode -- that is the purpose of fail-open, and this change must not
+    alter it."""
+    from snowflake.connector import errorcode as _errorcode
+    from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
+
+    # SF_OCSP_FAIL_OPEN takes precedence over use_fail_open, so a value left in
+    # the environment by an earlier test in this process would silently invert
+    # what this test asserts.
+    monkeypatch.delenv("SF_OCSP_FAIL_OPEN", raising=False)
+
+    ocsp = SFOCSP(use_fail_open=True)
+    assert ocsp.is_enabled_fail_open()
+
+    ex = RevocationCheckError(
+        msg="responder unreachable", errno=_errorcode.ER_OCSP_RESPONSE_UNAVAILABLE
+    )
+    result = ocsp.verify_fail_open(ex, OCSPTelemetryData())
+
+    assert (
+        result is None
+    ), "an unavailable responder must still be tolerated in fail-open mode"
+
+
+@pytest.mark.skipolddriver
+def test_cached_ocsp_result_is_revalidated_before_use(tmp_path):
+    """SNOW-3675581 (on-disk verdict cache): a memoized OCSPResponseValidationResult
+    loaded from the on-disk OCSP_RESPONSE_VALIDATION_CACHE is re-verified before
+    use.
+
+    The validation-result cache is persisted to a file under CACHE_DIR and
+    deserialized back into memory, `validated` flag included.
+    _validate_certificates_sequential short-circuits on any entry whose
+    `validated` is True, returning its memoized `exception` without re-running
+    process_ocsp_response -- so the CertID binding, the CA-signature check, and
+    the freshness check would otherwise be skipped.
+
+    This stores an entry (bound to the real chain's CertID so it survives
+    re-verification) whose response body says REVOKED but whose memoized verdict
+    reads exception=None / validated=True, routes it through the
+    serialize/deserialize disk boundary, and asserts the REVOKED status is still
+    enforced -- confirming disk-loaded verdicts are recomputed on load.
+    """
+    from snowflake.connector.errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
+    from snowflake.connector.ocsp_snowflake import (
+        OCSPResponseValidationResult,
+        OCSPTelemetryData,
+    )
+
+    ocsp = SFOCSP()
+
+    # A real (issuer, subject) chain -> the CertID/cache key the validator computes.
+    issuer = asn1crypto509.Certificate.load(
+        create_x509_cert(hashes.SHA256()).public_bytes(Encoding.DER)
+    )
+    subject = asn1crypto509.Certificate.load(
+        create_x509_cert(hashes.SHA256()).public_bytes(Encoding.DER)
+    )
+    cert_id, _ = ocsp.create_ocsp_request(issuer, subject)
+    cache_key = ocsp.decode_cert_id_key(cert_id)
+
+    # Cache entry whose response body says REVOKED (bound to the correct CertID,
+    # so it is caught on re-check) while the memoized verdict reads
+    # exception=None ("good") and validated=True.
+    revoked_der = _build_ocsp_response_der(cert_id, status="revoked")
+    cached_entry = OCSPResponseValidationResult(
+        exception=None,
+        issuer=issuer,
+        subject=subject,
+        cert_id=cert_id,
+        ocsp_response=revoked_der,
+        ts=int(time.time()),
+        validated=True,
+    )
+    # Round-trip through the on-disk (de)serialization boundary: this is how a
+    # cache file's contents re-enter OCSP_RESPONSE_VALIDATION_CACHE on load.
+    loaded = OCSPResponseValidationResult._deserialize(cached_entry._serialize())
+
+    test_cache = SFDictFileCache(
+        file_path=str(tmp_path / "ocsp_validation_cache.json"), entry_lifetime=3600
+    )
+    test_cache[cache_key] = loaded
+
+    # verify_signature is a no-op so the test needs no real CA key; the point is
+    # that the REVOKED status must be honored, not that the signature is real.
+    with mock.patch(
+        "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE", test_cache
+    ):
+        with mock.patch.object(SFOCSP, "verify_signature", return_value=None):
+            with pytest.raises(RevocationCheckError) as exc_info:
+                ocsp._validate(
+                    "example.snowflakecomputing.com",
+                    [(issuer, subject)],
+                    OCSPTelemetryData(),
+                    do_retry=False,
+                    no_exception=False,
+                )
+
+    assert exc_info.value.errno == ER_OCSP_RESPONSE_CERT_STATUS_REVOKED

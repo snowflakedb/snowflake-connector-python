@@ -677,7 +677,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
         logger.debug(f"Request id: {self._request_id}")
 
-        logger.debug("running query [%s]", self._format_query_for_log(query))
+        logger.debug("running query [%s]", self._format_query_for_log_lazy(query))
         if _is_put_get is not None:
             # if told the query is PUT or GET, use the information
             self._is_file_transfer = _is_put_get
@@ -976,7 +976,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                 logger.warning("execute: no query is given to execute")
                 return None
 
-        logger.debug("query: [%s]", self._format_query_for_log(command))
+        logger.debug("query: [%s]", self._format_query_for_log_lazy(command))
         _statement_params = _statement_params or dict()
         # If we need to add another parameter, please consider introducing a dict for all extra params
         # See discussion in https://github.com/snowflakedb/snowflake-connector-python/pull/1524#discussion_r1174061775
@@ -1184,6 +1184,9 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
     def _format_query_for_log(self, query: str) -> str:
         return self._connection._format_query_for_log(query)
+
+    def _format_query_for_log_lazy(self, query: str):
+        return self._connection._format_query_for_log_lazy(query)
 
     def _is_dml(self, data: dict[Any, Any]) -> bool:
         return (
@@ -1701,7 +1704,11 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
     def __cancel_query(self, query) -> None:
         if self._sequence_counter >= 0 and not self.is_closed():
-            logger.debug("canceled. %s, request_id: %s", query, self._request_id)
+            logger.debug(
+                "canceled. %s, request_id: %s",
+                self._format_query_for_log_lazy(query),
+                self._request_id,
+            )
             with self._lock_canceling:
                 self._connection._cancel_query(query, self._request_id)
 

@@ -283,6 +283,10 @@ def is_econnreset_exception(e: Exception) -> bool:
     return "ECONNRESET" in repr(e)
 
 
+def is_unexpected_eof_exception(e: Exception) -> bool:
+    return "Unexpected EOF" in repr(e)
+
+
 class RetryRequest(Exception):
     """Signal to retry request."""
 
@@ -1084,9 +1088,11 @@ class SnowflakeRestful:
             _, masked_data, err_str = SecretDetector.mask_secrets(data)
             if err_str is None:
                 data = masked_data
+        _, masked_headers, _ = SecretDetector.mask_secrets(str(headers))
+        _, masked_url, _ = SecretDetector.mask_secrets(full_url)
         logger.error(
             f"Failed to get the response. Hanging? "
-            f"method: {method}, url: {full_url}, headers:{headers}, "
+            f"method: {method}, url: {masked_url}, headers:{masked_headers}, "
             f"data: {data}"
         )
         Error.errorhandler_wrapper(
@@ -1094,7 +1100,7 @@ class SnowflakeRestful:
             None,
             OperationalError,
             {
-                "msg": f"Failed to get the response. Hanging? method: {method}, url: {full_url}",
+                "msg": f"Failed to get the response. Hanging? method: {method}, url: {masked_url}",
                 "errno": ER_FAILED_TO_REQUEST,
             },
         )
@@ -1220,7 +1226,7 @@ class SnowflakeRestful:
             finally:
                 raw_ret.close()  # ensure response is closed
         except SSLError as se:
-            if is_econnreset_exception(se):
+            if is_econnreset_exception(se) or is_unexpected_eof_exception(se):
                 raise RetryRequest(se)
             msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
             logger.debug(msg)

@@ -34,8 +34,25 @@ DBAPI_TYPE_TIMESTAMP = 3
 
 _DEFAULT_HOSTNAME_TLD = "com"
 _CHINA_HOSTNAME_TLD = "cn"
+_GOV_HOSTNAME_TLD = "mil"
 _TOP_LEVEL_DOMAIN_REGEX = r"\.[a-zA-Z]{1,63}$"
 _SNOWFLAKE_HOST_SUFFIX_REGEX = r"snowflakecomputing(\.[a-zA-Z]{1,63}){1,2}$"
+# Recognized Snowflake host suffixes, used whenever a host is about to be turned
+# into the authority of a URL the connector builds itself (WORKLOAD_IDENTITY
+# attestation, OCSP cache-URL derivation). Unlike _SNOWFLAKE_HOST_SUFFIX_REGEX
+# (used for request tracing), matching against these suffixes is done on a label
+# boundary (the candidate host must equal a suffix or end in f".{suffix}"), and
+# the suffixes pin the TLD to the connector's supported Snowflake TLDs. Matching
+# is anchored to a label boundary at the end of the host, so only the listed
+# suffixes and their subdomains are recognized.
+# Allowed: snowflakecomputing.com, snowflakecomputing.cn, snowflakecomputing.mil
+# (BCAP/DoD), <subdomain>.snowflakecomputing.com (incl. privatelink), etc.
+# Matching helpers live in _host_util so every subsystem shares one rule.
+_SNOWFLAKE_ALLOWED_HOST_SUFFIXES = (
+    f"snowflakecomputing.{_DEFAULT_HOSTNAME_TLD}",
+    f"snowflakecomputing.{_CHINA_HOSTNAME_TLD}",
+    f"snowflakecomputing.{_GOV_HOSTNAME_TLD}",
+)
 
 _PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS = "ENABLE_FIX_1375538"
 
