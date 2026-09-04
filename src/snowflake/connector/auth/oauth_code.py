@@ -19,6 +19,7 @@ from ..compat import parse_qs, urlparse, urlsplit
 from ..constants import OAUTH_TYPE_AUTHORIZATION_CODE
 from ..errorcode import (
     ER_INVALID_VALUE,
+    ER_NO_CLIENT_ID,
     ER_OAUTH_CALLBACK_ERROR,
     ER_OAUTH_SERVER_TIMEOUT,
     ER_OAUTH_STATE_CHANGED,
@@ -444,8 +445,8 @@ You can close this window now and go back where you started from.
         host: str,
     ) -> bool:
         return (
-            (client_id == "" or client_secret is None)
-            and (client_secret == "" or client_secret is None)
+            self._oauth_credential_missing(client_id)
+            and self._oauth_credential_missing(client_secret)
             and self.__class__._is_snowflake_as_idp(
                 authorization_url, token_request_url, host
             )
@@ -467,11 +468,18 @@ You can close this window now and go back where you started from.
                 self.__class__._LOCAL_APPLICATION_CLIENT_CREDENTIALS,
                 self.__class__._LOCAL_APPLICATION_CLIENT_CREDENTIALS,
             )
-        else:
-            self._validate_client_credentials_present(
-                client_id, client_secret, connection
+        if self._oauth_credential_missing(client_id):
+            Error.errorhandler_wrapper(
+                connection,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Oauth code flow requirement 'client_id' is empty",
+                    "errno": ER_NO_CLIENT_ID,
+                },
             )
-            return client_id, client_secret
+        # Public PKCE clients supply a client_id and omit client_secret.
+        return client_id, client_secret
 
     @staticmethod
     def _validate_oauth_code_uris(
