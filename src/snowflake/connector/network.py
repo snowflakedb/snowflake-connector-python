@@ -283,6 +283,10 @@ def is_econnreset_exception(e: Exception) -> bool:
     return "ECONNRESET" in repr(e)
 
 
+def is_unexpected_eof_exception(e: Exception) -> bool:
+    return "Unexpected EOF" in repr(e)
+
+
 class RetryRequest(Exception):
     """Signal to retry request."""
 
@@ -1222,7 +1226,7 @@ class SnowflakeRestful:
             finally:
                 raw_ret.close()  # ensure response is closed
         except SSLError as se:
-            if is_econnreset_exception(se) or "Unexpected EOF" in repr(se):
+            if is_econnreset_exception(se) or is_unexpected_eof_exception(se):
                 raise RetryRequest(se)
             msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
             logger.debug(msg)
