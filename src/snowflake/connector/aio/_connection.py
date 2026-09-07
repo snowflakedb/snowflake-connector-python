@@ -120,7 +120,6 @@ else:
 
 
 class SnowflakeConnection(SnowflakeConnectionSync):
-    OCSP_ENV_LOCK = asyncio.Lock()
 
     def __init__(
         self,
@@ -233,19 +232,16 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
 
+        # The PrivateLink OCSP cache URL is now derived per-connection inside
+        # OCSPServer from this connection's hostname (SNOW-3675581); the driver
+        # does not write SF_OCSP_RESPONSE_CACHE_SERVER_URL to the process
+        # environment. An operator-set value is still honored (and takes
+        # precedence) -- log it if present.
         if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
             logger.debug(
                 "Custom OCSP Cache Server URL found in environment - %s",
                 os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"],
             )
-
-        if ".privatelink.snowflakecomputing." in self.host.lower():
-            await SnowflakeConnection.setup_ocsp_privatelink(
-                self.application, self.host
-            )
-        else:
-            if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
-                del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
 
         if self._session_parameters is None:
             self._session_parameters = {}
@@ -715,7 +711,11 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         self, sql: str, request_id: uuid.UUID
     ) -> dict[str, bool | None]:
         """Cancels the query with the exact SQL query and requestId."""
-        logger.debug("_cancel_query sql=[%s], request_id=[%s]", sql, request_id)
+        logger.debug(
+            "_cancel_query sql=[%s], request_id=[%s]",
+            self._format_query_for_log(sql),
+            request_id,
+        )
         url_parameters = {REQUEST_ID: str(uuid.uuid4())}
 
         return await self.rest.request(
@@ -1232,14 +1232,6 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         if self.is_an_error(status):
             self._process_error_query_status(sf_qid, status_resp)
         return status
-
-    @staticmethod
-    async def setup_ocsp_privatelink(app, hostname) -> None:
-        hostname = hostname.lower()
-        async with SnowflakeConnection.OCSP_ENV_LOCK:
-            ocsp_cache_server = f"http://ocsp.{hostname}/ocsp_response_cache.json"
-            os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"] = ocsp_cache_server
-            logger.debug("OCSP Cache Server is updated: %s", ocsp_cache_server)
 
     async def rollback(self) -> None:
         """Rolls back the current transaction."""

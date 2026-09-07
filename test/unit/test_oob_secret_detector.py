@@ -4,6 +4,8 @@ from __future__ import annotations
 import random
 import string
 
+import pytest
+
 from snowflake.connector.secret_detector import SecretDetector
 
 
@@ -110,6 +112,29 @@ def test_mask_sas_token():
         azure_sas_token + "\n" + s3_sas_token
     )
     assert masked_text == masked_azure_sas_token + "\n" + masked_s3_sas_token
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ('accessToken":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"', 'accessToken":"XXXX"'),
+        ('tempToken":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"', 'tempToken":"XXXX"'),
+        ('keySecret":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"', 'keySecret":"XXXX"'),
+        # Whitespace around the colon is tolerated and collapsed
+        (
+            'accessToken"  :  "aB1aaaaaaaaaaZaaaaaaaaaaa9aaaaaaa="',
+            'accessToken":"XXXX"',
+        ),
+        (
+            'accessToken"  :  "aB1aaaaaaaaaaZaaaaaaaa56aaaaaaaaaa=="',
+            'accessToken":"XXXX"',
+        ),
+    ],
+)
+def test_mask_aws_tokens(text, expected):
+    # Ported from .NET's SecretDetectorTest.TestAWSTokens
+    _, masked_text, _ = SecretDetector.mask_secrets(text)
+    assert masked_text == expected
 
 
 def test_mask_secrets():

@@ -79,6 +79,7 @@ from ..network import (
     is_econnreset_exception,
     is_login_request,
     is_retryable_http_code,
+    is_unexpected_eof_exception,
 )
 from ..secret_detector import SecretDetector
 from ..sqlstate import (
@@ -730,6 +731,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             else:
                 input_data = data
 
+            # Work on a copy so the caller-supplied dict is never mutated.
+            headers = dict(headers)
             if HEADER_AUTHORIZATION_KEY in headers:
                 del headers[HEADER_AUTHORIZATION_KEY]
             if token != NO_TOKEN:
@@ -814,7 +817,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             finally:
                 raw_ret.close()  # ensure response is closed
         except (aiohttp.ClientSSLError, aiohttp.ClientConnectorSSLError) as se:
-            if is_econnreset_exception(se):
+            if is_econnreset_exception(se) or is_unexpected_eof_exception(se):
                 raise RetryRequest(se.os_error)
             msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
             logger.debug(msg)

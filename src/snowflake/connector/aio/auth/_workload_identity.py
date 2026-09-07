@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 from ...auth.workload_identity import (
     AuthByWorkloadIdentity as AuthByWorkloadIdentitySync,
 )
+from ...auth.workload_identity import _verify_host_allowed_for_workload_identity
 from .._wif_util import AttestationProvider, create_attestation
 from ._by_plugin import AuthByPlugin as AuthByPluginAsync
 
@@ -42,6 +43,7 @@ class AuthByWorkloadIdentity(AuthByPluginAsync, AuthByWorkloadIdentitySync):
         self, *, conn: SnowflakeConnection | None, **kwargs: typing.Any
     ) -> None:
         """Fetch the token using async wif_util."""
+        _verify_host_allowed_for_workload_identity(conn)
         self.attestation = await create_attestation(
             self.provider,
             self.entra_resource,
