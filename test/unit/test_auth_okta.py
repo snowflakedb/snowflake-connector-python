@@ -409,6 +409,112 @@ def test_auth_okta_step4_negative(caplog):
         assert not rest._connection.errorhandler.called
 
 
+@pytest.mark.skipolddriver
+def test_auth_okta_step4_login_timeout_exhausted_by_token_generation():
+    """An exhausted login budget must surface as a clean timeout, not a negative timeout.
+
+    _step4 checks the login deadline before generating the one time token, but the
+    token generation itself performs a network round trip. When that round trip
+    overshoots the deadline, the remaining budget goes negative. It used to be
+    passed straight to the HTTP layer, which rejected it with an opaque
+    "connect timeout <= 0" ValueError reported as error 250003.
+    """
+    from snowflake.connector.errorcode import ER_IDP_CONNECTION_ERROR
+    from snowflake.connector.errors import OperationalError
+
+    authenticator = "https://testsso.snowflake.net/"
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    service_name = ""
+
+    ref_sso_url = "https://testsso.snowflake.net/sso"
+    ref_token_url = "https://testsso.snowflake.net/token"
+    rest = _init_rest(ref_sso_url, ref_token_url)
+
+    auth = AuthByOkta(application)
+    headers, sso_url, token_url = auth._step1(
+        rest._connection, authenticator, service_name, account, user
+    )
+    auth._step2(rest._connection, authenticator, sso_url, token_url)
+    assert not rest._connection.errorhandler.called  # no error
+
+    login_timeout = rest._connection.login_timeout
+    clock = 1000.0
+
+    def get_one_time_token():
+        # the token round trip overshoots the login deadline by 0.8s, which is what
+        # made the remaining budget negative
+        nonlocal clock
+        clock += login_timeout + 0.8
+        return "1token1"
+
+    def fail_fetch(*args, **kwargs):
+        pytest.fail("no request should be issued once the login budget is exhausted")
+
+    rest.fetch = fail_fetch
+    with patch("snowflake.connector.auth.okta.time.time", side_effect=lambda: clock):
+        response_html = auth._step4(rest._connection, get_one_time_token, sso_url)
+
+    assert response_html is None
+    assert rest._connection.errorhandler.called
+    _, _, error_class, error_value = rest._connection.errorhandler.call_args[0]
+    assert error_class is OperationalError
+    assert error_value["errno"] == ER_IDP_CONNECTION_ERROR
+    assert "Timed out" in error_value["msg"]
+
+
+@pytest.mark.skipolddriver
+def test_auth_okta_step4_login_timeout_while_refreshing_token():
+    """Running out of budget while retrying on RefreshTokenError must report a clean timeout.
+
+    Previously the loop simply fell through and returned the initial empty dict, so
+    _step5 failed later with an AttributeError on that dict instead of reporting
+    the timeout.
+    """
+    from snowflake.connector.errorcode import ER_IDP_CONNECTION_ERROR
+    from snowflake.connector.errors import OperationalError, RefreshTokenError
+
+    authenticator = "https://testsso.snowflake.net/"
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    service_name = ""
+
+    ref_sso_url = "https://testsso.snowflake.net/sso"
+    ref_token_url = "https://testsso.snowflake.net/token"
+    rest = _init_rest(ref_sso_url, ref_token_url)
+
+    auth = AuthByOkta(application)
+    headers, sso_url, token_url = auth._step1(
+        rest._connection, authenticator, service_name, account, user
+    )
+    auth._step2(rest._connection, authenticator, sso_url, token_url)
+    assert not rest._connection.errorhandler.called  # no error
+
+    login_timeout = rest._connection.login_timeout
+    clock = 1000.0
+
+    def get_one_time_token():
+        return "1token1"
+
+    def refresh_token_fetch(*args, **kwargs):
+        # the IdP keeps asking for a fresh token until the budget runs out
+        nonlocal clock
+        clock += login_timeout / 2
+        raise RefreshTokenError(msg="refresh token")
+
+    rest.fetch = refresh_token_fetch
+    with patch("snowflake.connector.auth.okta.time.time", side_effect=lambda: clock):
+        response_html = auth._step4(rest._connection, get_one_time_token, sso_url)
+
+    assert response_html is None
+    assert rest._connection.errorhandler.called
+    _, _, error_class, error_value = rest._connection.errorhandler.call_args[0]
+    assert error_class is OperationalError
+    assert error_value["errno"] == ER_IDP_CONNECTION_ERROR
+
+
 @pytest.mark.parametrize("disable_saml_url_check", [True, False])
 def test_auth_okta_step5_negative(disable_saml_url_check):
     """Authentication by OKTA step5 negative test case."""

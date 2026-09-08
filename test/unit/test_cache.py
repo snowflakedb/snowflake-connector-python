@@ -368,6 +368,53 @@ class TestSFDictFileCache:
         for attr in cache.SFDictFileCache._ATTRIBUTES_TO_PICKLE:
             assert hasattr(c2, attr) and getattr(c2, attr) == getattr(c, attr)
 
+    @pytest.mark.skipif(IS_WINDOWS, reason="os.fork is not available on Windows")
+    def test_save_in_forked_child(self, tmpdir):
+        """A cache created before os.fork() must still be saveable in the child.
+
+        filelock refuses to be acquired by a process other than the one that
+        created it, since the OS-level lock stays owned by the creator. The
+        multiprocessing "spawn" start method goes through __setstate__, which
+        rebuilds the lock, but fork() copies the object without pickling it, so
+        the child has to notice the pid change on its own. Relevant because the
+        OCSP response validation cache is a module-level global, and fetching
+        results with client_fetch_use_mp=True validates certificates in forked
+        worker processes.
+        """
+        c = NeverSaveSFDictFileCache(file_path=os.path.join(tmpdir, "cache.txt"))
+        c["a"] = 1
+        parent_file_lock = c._file_lock
+        read_fd, write_fd = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            # Child: report the outcome back over the pipe. The os._exit in the
+            # finally block is what keeps anything raised here from reaching
+            # pytest and running fixture teardown a second time, so the except
+            # clause below only has to describe the failure to the parent.
+            try:
+                os.close(read_fd)
+                c["b"] = 2
+                assert c.save(), "child failed to save the cache"
+                assert (
+                    c._file_lock is not parent_file_lock
+                ), "child reused the parent's file lock"
+                os.write(write_fd, b"ok")
+            except Exception as e:
+                os.write(write_fd, f"{type(e).__name__}: {e}".encode())
+            finally:
+                os._exit(0)
+        os.close(write_fd)
+        with os.fdopen(read_fd, "rb") as read_file:
+            child_result = read_file.read().decode()
+        assert os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]) == 0
+        # An empty report means the child died without reaching either branch,
+        # e.g. on KeyboardInterrupt, which os._exit turns into a silent exit.
+        assert child_result == "ok", f"child reported: {child_result or '<nothing>'}"
+        # The parent keeps its own lock, and it is still usable.
+        assert c._file_lock is parent_file_lock
+        with c._file_lock:
+            pass
+
     def test_precise_save_load(self, tmpdir):
         c1 = NeverSaveSFDictFileCache(file_path=os.path.join(tmpdir, "cache.txt"))
         c2 = pickle.loads(pickle.dumps(c1))

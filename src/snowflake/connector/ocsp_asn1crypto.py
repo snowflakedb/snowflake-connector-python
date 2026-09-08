@@ -33,6 +33,7 @@ from OpenSSL.SSL import Connection
 from snowflake.connector.errorcode import (
     ER_OCSP_RESPONSE_ATTACHED_CERT_EXPIRED,
     ER_OCSP_RESPONSE_ATTACHED_CERT_INVALID,
+    ER_OCSP_RESPONSE_CERT_ID_MISMATCH,
     ER_OCSP_RESPONSE_CERT_STATUS_INVALID,
     ER_OCSP_RESPONSE_INVALID_SIGNATURE,
     ER_OCSP_RESPONSE_LOAD_FAILURE,
@@ -319,6 +320,16 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             )
 
         single_response = tbs_response_data["responses"][0]
+        # Ensure the response corresponds to the certificate being validated; a
+        # response issued for a different serial must not be accepted for this
+        # one (SNOW-3675581).
+        if generate_cache_key(single_response["cert_id"]) != generate_cache_key(
+            cert_id
+        ):
+            raise RevocationCheckError(
+                msg="OCSP response CertID does not match the certificate being validated.",
+                errno=ER_OCSP_RESPONSE_CERT_ID_MISMATCH,
+            )
         cert_status = single_response["cert_status"].name
         if self.test_mode is not None:
             test_cert_status = getenv("SF_TEST_OCSP_CERT_STATUS")

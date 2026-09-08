@@ -7,7 +7,7 @@
 set -ox pipefail
 
 U_WIDTH=16
-PYTHON_VERSIONS="${1:-3.10 3.11 3.12 3.13 3.14}"
+PYTHON_VERSIONS="${1:-3.10 3.11 3.12 3.13 3.14 3.14t}"
 THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONNECTOR_DIR="$(dirname "${THIS_DIR}")"
 DIST_DIR="${CONNECTOR_DIR}/dist"
@@ -59,7 +59,14 @@ source /home/user/multibuild/manylinux_utils.sh
 
 for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Constants and setup
-    PYTHON="$(cpython_path ${PYTHON_VERSION} ${U_WIDTH})/bin/python"
+    # Free-threaded interpreters are stored as cp{base}-cp{base}t in manylinux images
+    # (e.g. cp314-cp314t), not cp{ver}-cp{ver} as cpython_path would produce.
+    if [[ "${PYTHON_VERSION}" == *t ]]; then
+        _BASE="${PYTHON_VERSION%t}"
+        PYTHON="/opt/python/cp${_BASE//./}-cp${PYTHON_VERSION//./}/bin/python"
+    else
+        PYTHON="$(cpython_path ${PYTHON_VERSION} ${U_WIDTH})/bin/python"
+    fi
     BUILD_DIR="${DIST_DIR}/$PYTHON_VERSION"
 
     # Build
@@ -74,14 +81,20 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
 arch=$(uname -p)
 auditwheel show ${BUILD_DIR}/*.whl
 if [[ $arch == x86_64 ]]; then
-  auditwheel repair --plat manylinux2014_x86_64 ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
+  auditwheel repair --plat ${AUDITWHEEL_PLAT:-manylinux2014_x86_64} ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 else
-  auditwheel repair --plat manylinux2014_aarch64 ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
+  auditwheel repair --plat ${AUDITWHEEL_PLAT:-manylinux2014_aarch64} ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 fi
 
     # Generate reqs files
     FULL_PYTHON_VERSION="$(${PYTHON} --version | cut -d' ' -f2-)"
-    REQS_FILE="${BUILD_DIR}/requirements_$(${PYTHON} -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').txt"
+    # Free-threaded Python reports version_info (3, 14) same as regular 3.14, so use
+    # PYTHON_VERSION from the outer loop to distinguish requirements_314t.txt from 314.txt.
+    if [[ "${PYTHON_VERSION}" == *t ]]; then
+        REQS_FILE="${BUILD_DIR}/requirements_${PYTHON_VERSION//./}.txt"
+    else
+        REQS_FILE="${BUILD_DIR}/requirements_$(${PYTHON} -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').txt"
+    fi
     ${PYTHON} -m pip install ${BUILD_DIR}/*.whl
     echo "# Generated on: $(${PYTHON} --version)" >${REQS_FILE}
     echo "# With snowflake-connector-python version: $(${PYTHON} -m pip show snowflake-connector-python | grep ^Version | cut -d' ' -f2-)" >>${REQS_FILE}

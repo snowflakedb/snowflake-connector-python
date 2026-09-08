@@ -212,7 +212,7 @@ class AuthByOkta(AuthByPluginAsync, AuthByOktaSync):
     ) -> dict[Any, Any]:
         logger.debug("step 4: query IDP URL snowflake app to get SAML " "response")
         timeout_time = time.time() + conn.login_timeout if conn.login_timeout else None
-        response_html = {}
+        response_html = None
         origin_sso_url = sso_url
         while timeout_time is None or time.time() < timeout_time:
             try:
@@ -225,6 +225,12 @@ class AuthByOkta(AuthByPluginAsync, AuthByOktaSync):
                     HTTP_HEADER_ACCEPT: "*/*",
                 }
                 remaining_timeout = timeout_time - time.time() if timeout_time else None
+                if remaining_timeout is not None and remaining_timeout <= 0:
+                    # Obtaining the one time token consumed the whole login budget.
+                    # The HTTP layer rejects a non-positive timeout with an opaque
+                    # ValueError, so stop here and report the timeout that actually
+                    # happened.
+                    break
                 response_html = await conn.rest.fetch(
                     "get",
                     sso_url,
@@ -237,6 +243,10 @@ class AuthByOkta(AuthByPluginAsync, AuthByOktaSync):
                 break
             except RefreshTokenError:
                 logger.debug("step4: refresh token for re-authentication")
+        if response_html is None:
+            # Every way out of the loop above without a response means the
+            # login_timeout budget ran out.
+            AuthByOktaSync._handle_login_timeout(conn)
         return response_html
 
     async def _step5(

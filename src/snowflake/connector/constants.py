@@ -34,8 +34,25 @@ DBAPI_TYPE_TIMESTAMP = 3
 
 _DEFAULT_HOSTNAME_TLD = "com"
 _CHINA_HOSTNAME_TLD = "cn"
+_GOV_HOSTNAME_TLD = "mil"
 _TOP_LEVEL_DOMAIN_REGEX = r"\.[a-zA-Z]{1,63}$"
 _SNOWFLAKE_HOST_SUFFIX_REGEX = r"snowflakecomputing(\.[a-zA-Z]{1,63}){1,2}$"
+# Recognized Snowflake host suffixes, used whenever a host is about to be turned
+# into the authority of a URL the connector builds itself (WORKLOAD_IDENTITY
+# attestation, OCSP cache-URL derivation). Unlike _SNOWFLAKE_HOST_SUFFIX_REGEX
+# (used for request tracing), matching against these suffixes is done on a label
+# boundary (the candidate host must equal a suffix or end in f".{suffix}"), and
+# the suffixes pin the TLD to the connector's supported Snowflake TLDs. Matching
+# is anchored to a label boundary at the end of the host, so only the listed
+# suffixes and their subdomains are recognized.
+# Allowed: snowflakecomputing.com, snowflakecomputing.cn, snowflakecomputing.mil
+# (BCAP/DoD), <subdomain>.snowflakecomputing.com (incl. privatelink), etc.
+# Matching helpers live in _host_util so every subsystem shares one rule.
+_SNOWFLAKE_ALLOWED_HOST_SUFFIXES = (
+    f"snowflakecomputing.{_DEFAULT_HOSTNAME_TLD}",
+    f"snowflakecomputing.{_CHINA_HOSTNAME_TLD}",
+    f"snowflakecomputing.{_GOV_HOSTNAME_TLD}",
+)
 
 _PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS = "ENABLE_FIX_1375538"
 
@@ -430,7 +447,13 @@ S3_MIN_PART_SIZE = 5 * 1024**2
 S3_MAX_PARTS = 10000
 
 S3_CHUNK_SIZE = 8388608  # boto3 default
-AZURE_CHUNK_SIZE = 4 * megabyte
+
+# Azure Block Blob multipart upload limits
+# https://learn.microsoft.com/en-us/rest/api/storageservices/understanding-block-blobs--append-blobs--and-page-blobs
+AZURE_CHUNK_SIZE = 8 * megabyte  # kept consistent with S3_DEFAULT_CHUNK_SIZE
+AZURE_MAX_BLOCKS = 50000
+AZURE_MAX_BLOCK_SIZE = 4000 * megabyte
+AZURE_MAX_OBJECT_SIZE = AZURE_MAX_BLOCKS * AZURE_MAX_BLOCK_SIZE
 
 # https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
 REQUEST_CONNECTION_TIMEOUT = 10

@@ -7,3 +7,7 @@ conda build ci/anaconda/recipe/ --python 3.11
 conda build ci/anaconda/recipe/ --python 3.12
 conda build ci/anaconda/recipe/ --python 3.13
 conda build ci/anaconda/recipe/ --python 3.14
+
+export FREETHREADING=1
+conda build ci/anaconda/recipe/ --python 3.14
+unset FREETHREADING

@@ -140,6 +140,28 @@ MASTER_TOKEN_INVALD_GS_CODE = "390115"
 ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE = "390195"
 BAD_REQUEST_GS_CODE = "390400"
 OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE = "390318"
+# GS code returned when a presented OAuth access token is rejected as *invalid*
+# (as opposed to merely expired, 390318) - e.g. server-side revocation, account
+# or session rotation, or a token minted for a different context. Treated the
+# same way as the expired code: discard the cached token and reauthenticate
+# instead of hard-failing with 250001. GS message: "Invalid OAuth access token."
+OAUTH_ACCESS_TOKEN_INVALID_GS_CODE = "390303"
+
+# Server error codes indicating a credential/authorization rejection.
+# These warrant SQLState 28000 (invalid authorization) instead of 08001.
+CREDENTIAL_REJECTION_GS_CODES: frozenset[str] = frozenset(
+    {
+        "390100",  # AUTHORIZATION_FAILURE
+        "390144",  # JWT_TOKEN_INVALID
+        "394300",  # JWT_TOKEN_INVALID
+        "394301",  # JWT_TOKEN_EXPIRED
+        "394302",  # JWT_TOKEN_NOT_YET_VALID
+        "394303",  # JWT_TOKEN_INVALID_EXPIRATION_TIME
+        "394304",  # JWT_TOKEN_INVALID_PUBLIC_KEY_FINGERPRINT_MISMATCH
+        "394305",  # JWT_TOKEN_INVALID_ALGORITHM
+        "394306",  # JWT_TOKEN_INVALID_FORMAT
+    }
+)
 
 # other constants
 CONTENT_TYPE_APPLICATION_JSON = "application/json"
@@ -259,6 +281,10 @@ def is_login_request(url: str) -> bool:
 
 def is_econnreset_exception(e: Exception) -> bool:
     return "ECONNRESET" in repr(e)
+
+
+def is_unexpected_eof_exception(e: Exception) -> bool:
+    return "Unexpected EOF" in repr(e)
 
 
 class RetryRequest(Exception):
@@ -1062,9 +1088,11 @@ class SnowflakeRestful:
             _, masked_data, err_str = SecretDetector.mask_secrets(data)
             if err_str is None:
                 data = masked_data
+        _, masked_headers, _ = SecretDetector.mask_secrets(str(headers))
+        _, masked_url, _ = SecretDetector.mask_secrets(full_url)
         logger.error(
             f"Failed to get the response. Hanging? "
-            f"method: {method}, url: {full_url}, headers:{headers}, "
+            f"method: {method}, url: {masked_url}, headers:{masked_headers}, "
             f"data: {data}"
         )
         Error.errorhandler_wrapper(
@@ -1072,7 +1100,7 @@ class SnowflakeRestful:
             None,
             OperationalError,
             {
-                "msg": f"Failed to get the response. Hanging? method: {method}, url: {full_url}",
+                "msg": f"Failed to get the response. Hanging? method: {method}, url: {masked_url}",
                 "errno": ER_FAILED_TO_REQUEST,
             },
         )
@@ -1198,7 +1226,7 @@ class SnowflakeRestful:
             finally:
                 raw_ret.close()  # ensure response is closed
         except SSLError as se:
-            if is_econnreset_exception(se):
+            if is_econnreset_exception(se) or is_unexpected_eof_exception(se):
                 raise RetryRequest(se)
             msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
             logger.debug(msg)

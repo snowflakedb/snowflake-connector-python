@@ -451,7 +451,8 @@ class SFDictFileCache(SFDictCache):
                 os.unlink(tmp_file_path)
         self.file_timeout = file_timeout
         self._file_lock_path = f"{self.file_path}.lock"
-        self._file_lock = FileLock(self._file_lock_path, timeout=self.file_timeout)
+        self._file_lock_rebuild_lock = Lock()
+        self._new_file_lock()
         self.last_loaded: datetime.datetime | None = None
         if os.path.exists(self.file_path) and load_if_file_exists:
             with self._lock:
@@ -459,6 +460,33 @@ class SFDictFileCache(SFDictCache):
         # indicate whether the cache is modified or not, this variable is for
         # SFDictFileCache to determine whether to dump cache to file when _save is called
         self._cache_modified = False
+
+    def _new_file_lock(self) -> None:
+        """Creates the inter-process file lock owned by the current process."""
+        self._file_lock_instance = FileLock(
+            self._file_lock_path, timeout=self.file_timeout
+        )
+        self._file_lock_pid = os.getpid()
+
+    @property
+    def _file_lock(self) -> FileLock:
+        """The inter-process file lock, re-created when we crossed a fork().
+
+        A FileLock remembers the pid that created it and refuses to be acquired
+        by any other process: the underlying OS lock stays owned by the creator,
+        so it would grant the caller no mutual exclusion at all. Rebuilding it
+        for the multiprocessing "spawn" start method is handled by __setstate__,
+        but fork() copies the object without pickling it, so __setstate__ never
+        runs and the inherited lock is unusable. Notice the pid change here and
+        rebuild instead, which keeps the guarantee the lock is meant to provide.
+        """
+        if self._file_lock_pid != os.getpid():
+            # Held only for the object construction below, never across I/O.
+            with self._file_lock_rebuild_lock:
+                # Another thread may have rebuilt the lock in the meantime.
+                if self._file_lock_pid != os.getpid():
+                    self._new_file_lock()
+        return self._file_lock_instance
 
     def _getitem_non_locking(
         self,
@@ -684,7 +712,8 @@ class SFDictFileCache(SFDictCache):
         self.__dict__.update(state)
         self._cache_modified = False
         self._lock = Lock()
-        self._file_lock = FileLock(self._file_lock_path, timeout=self.file_timeout)
+        self._file_lock_rebuild_lock = Lock()
+        self._new_file_lock()
 
     def _add_or_remove(self) -> None:
         """This function gets called when an element is added, or removed.
