@@ -112,6 +112,20 @@ class TestRetrieve:
         legacy_string = _legacy_string_key(KEY)
         assert legacy_string == "IDP.EXAMPLE.COM:ALICE:OAUTH_ACCESS_TOKEN"
 
+    def test_mfa_legacy_string_key_is_user_host_swapped(self, cache, mock_keyring):
+        """MFA/ID legacy keys are USER:HOST:TYPE because the old call site passed args
+        in the wrong positional order (TokenKey(host, user, type) into (user, host, type))."""
+        mfa_key = TokenKey(
+            token_type=TokenType.MFA_TOKEN,
+            idp="myhost.snowflakecomputing.com",
+            snowflake="myhost.snowflakecomputing.com",
+            username="ALICE",
+            role="",
+        )
+        legacy_string = _legacy_string_key(mfa_key)
+        # Old storage: USER:HOST:TYPE (swapped), not HOST:USER:TYPE
+        assert legacy_string == "ALICE:MYHOST.SNOWFLAKECOMPUTING.COM:MFA_TOKEN"
+
     def test_returns_none_when_not_found_anywhere(self, cache, mock_keyring):
         mock_keyring.get_password.return_value = None
         assert cache.retrieve(KEY) is None

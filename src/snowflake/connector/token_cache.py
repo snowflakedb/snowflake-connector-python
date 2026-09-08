@@ -119,24 +119,36 @@ def build_cache_key(key: TokenKey) -> str:
 
 
 def _legacy_string_key(key: TokenKey) -> str:
-    """Reconstruct the pre-v2 ``{HOST}:{USER}:{TOKEN_TYPE}`` string key.
+    """Reconstruct the pre-v2 string key used by the old ``hash_key()`` / ``string_key()`` methods.
 
-    OAuth tokens historically keyed on the IdP hostname
-    (``urlparse(token_request_url).hostname``); all other flows keyed on the
-    Snowflake host. Used only to locate and migrate legacy cache entries.
+    The historical ``TokenKey(host, user, tokenType)`` call sites had the
+    **positional** arguments in that order, but the dataclass was declared as
+    ``(user, host, tokenType)``.  This swap means:
+    - OAuth (correctly called ``TokenKey(user, idp_host, ...)``):
+      ``string_key()`` produced ``{IDP_HOST}:{USER}:{TYPE}``
+    - ID / MFA (incorrectly called ``TokenKey(host, user, ...)``):
+      ``string_key()`` produced ``{USER}:{HOST}:{TYPE}``
+
+    Used only to locate and migrate pre-v2 cache entries.
     """
     if key.token_type in (
         TokenType.OAUTH_ACCESS_TOKEN,
         TokenType.OAUTH_REFRESH_TOKEN,
     ):
+        # OAuth was called correctly: key order is HOST:USER:TYPE.
         host = urllib.parse.urlparse(key.idp).hostname or key.idp
+        if not host:
+            raise _InvalidTokenKeyError("Invalid key, host is empty")
+        if not key.username:
+            raise _InvalidTokenKeyError("Invalid key, user is empty")
+        return f"{host.upper()}:{key.username.upper()}:{key.token_type.value}"
     else:
-        host = key.snowflake
-    if not host:
-        raise _InvalidTokenKeyError("Invalid key, host is empty")
-    if not key.username:
-        raise _InvalidTokenKeyError("Invalid key, user is empty")
-    return f"{host.upper()}:{key.username.upper()}:{key.token_type.value}"
+        # ID/MFA was called with swapped positional args: key order is USER:HOST:TYPE.
+        if not key.snowflake:
+            raise _InvalidTokenKeyError("Invalid key, host is empty")
+        if not key.username:
+            raise _InvalidTokenKeyError("Invalid key, user is empty")
+        return f"{key.username.upper()}:{key.snowflake.upper()}:{key.token_type.value}"
 
 
 def _legacy_hash_key(key: TokenKey) -> str:
