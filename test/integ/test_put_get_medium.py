@@ -397,7 +397,6 @@ max_file_size=10000000
         run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.flaky(reruns=3)
 def test_put_copy_many_files(tmpdir, conn_cnx, db_parameters):
     """Puts and Copies many_files."""
     # generates N files
@@ -488,7 +487,6 @@ ratio number(6,2))
 
 @pytest.mark.aws
 @pytest.mark.azure
-@pytest.mark.flaky(reruns=3)
 def test_put_copy_duplicated_files_s3(tmpdir, conn_cnx, db_parameters):
     """[s3] Puts and Copies duplicated files."""
     # generates N files
