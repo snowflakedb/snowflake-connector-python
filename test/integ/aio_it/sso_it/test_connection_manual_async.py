@@ -89,9 +89,9 @@ async def test_connect_externalbrowser(token_validity_test_values):
 
     TokenCache.make().remove(
         TokenKey(
-            CONNECTION_PARAMETERS_SSO["host"],
-            CONNECTION_PARAMETERS_SSO["user"],
-            TokenType.ID_TOKEN,
+            user=CONNECTION_PARAMETERS_SSO["user"],
+            host=CONNECTION_PARAMETERS_SSO["host"],
+            tokenType=TokenType.ID_TOKEN,
         )
     )
     # delete existing temporary credential
