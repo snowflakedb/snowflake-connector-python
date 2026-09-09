@@ -14,6 +14,7 @@ pipeline {
         TEAM_JIRA_DL = 'triage-snow-drivers-warsaw-dl'
         TEAM_JIRA_AREA = 'Developer Platform'
         TEAM_JIRA_COMPONENT = 'Python Driver'
+        GITHUB_SUFFIX = '-eng'
     }
 
     stages {
@@ -36,7 +37,7 @@ pipeline {
                 dir('k8sc-jenkins_scripts') {
                     git branch: 'master',
                     credentialsId: 'jenkins-snowflake-github-app-3',
-                    url: 'https://github.com/snowflake-eng/k8sc-jenkins_scripts.git'
+                    url: 'https://github.com/snowflake${GITHUB_SUFFIX}/k8sc-jenkins_scripts.git'
                 }
             }
         }

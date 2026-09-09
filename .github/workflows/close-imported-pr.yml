@@ -1,0 +1,195 @@
+# AUTO-GENERATED — do not edit manually.
+# Regenerate by running: python3 ci/mirroring/scripts/generate_mirror_config.py
+name: Close imported PRs
+
+# Operates on the MIRROR repo (snowflakedb/snowflake-connector-python). Triggers when the outbound mirror
+# pushes a replayed squash-merge to main, scans the new commit messages
+# for `Imported-From-Mirror-PR` / `Imported-From-Mirror-SHA` trailers
+# (written by copy.bara.sky's `import` workflow via metadata.expose_label),
+# and auto-closes the matching mirror PRs with a comment linking to the
+# merged commit.
+#
+# Why mirror-side, not internal-side: the comment must reference a SHA
+# visible to the external contributor. That's a commit on the mirror's
+# main. The internal merge SHA is different (Copybara replays, doesn't
+# cherry-pick), and at the moment of the internal merge the replay has
+# not happened yet. Running on the mirror's push event avoids that race.
+#
+# Deployment: this file is checked in to the internal repo and the
+# Copybara `mirror` workflow ships it to the mirror's .github/workflows/
+# automatically. A copy therefore exists on the internal repo too; the
+# actor guard on the job limits it to pushes from the mirror bot, so
+# routine human pushes on the internal repo are no-ops.
+
+on:
+  push:
+    branches: [main]
+  # Manual backfill for commits pushed before this workflow existed, or
+  # if a run got skipped.
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: "Commit SHA on main to re-scan for trailers."
+        required: true
+
+permissions:
+  # We only need to read commits and comment+close PRs on this repo.
+  contents: read
+  pull-requests: write
+
+jobs:
+  close:
+    # Gate 1 — repository guard. The workflow file is mirrored, so it
+    # also exists on the internal repo. The trailer scan / PR lookup
+    # only makes sense on the mirror side; treat everything else as a
+    # no-op. Update this list when the destination flips to
+    # snowflakedb/snowflake-connector-python.
+    #
+    # Gate 2 — actor guard. Only pushes from the outbound mirror carry
+    # the trailers. Skip direct human pushes. Replace `mirror-bot` with
+    # the actual login or app slug used to push from the outbound job.
+    if: >-
+      github.repository == 'snowflakedb/snowflake-connector-python'
+      && (github.event_name == 'workflow_dispatch' || github.actor == 'sfc-gh-drivers-sa')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (for git log on dispatch backfill)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Close mirror PRs referenced by incoming commits
+        uses: actions/github-script@v9
+        env:
+          DISPATCH_SHA: ${{ github.event.inputs.commit_sha }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+
+            // Collect commit messages to scan.
+            // On `push`: github.event.commits gives us {id, message, ...}
+            // On `workflow_dispatch`: look up the single SHA the user passed.
+            let commits = [];
+            if (context.eventName === 'workflow_dispatch') {
+              const sha = process.env.DISPATCH_SHA;
+              if (!sha) {
+                core.setFailed('workflow_dispatch requires `commit_sha` input.');
+                return;
+              }
+              const { data } = await github.rest.repos.getCommit({ owner, repo, ref: sha });
+              commits.push({ id: data.sha, message: data.commit.message });
+            } else {
+              commits = (context.payload.commits || []).map(c => ({
+                id: c.id,
+                message: c.message,
+              }));
+            }
+
+            if (commits.length === 0) {
+              core.info('No commits to scan.');
+              return;
+            }
+
+            // Extract the trailer pairs from each commit. Each mirror PR
+            // shows up at most once per commit because it only imported
+            // one snapshot, but a single merge commit can reference
+            // multiple PRs if the internal PR bundled several imports.
+            const trailerRegex = (name) =>
+              new RegExp(`^${name}:\\s*(.+)$`, 'gm');
+
+            const targets = []; // {commitSha, prNumber, importedSha}
+
+            for (const commit of commits) {
+              const prs = [...commit.message.matchAll(trailerRegex('Imported-From-Mirror-PR'))]
+                .map(m => m[1].trim());
+              const shas = [...commit.message.matchAll(trailerRegex('Imported-From-Mirror-SHA'))]
+                .map(m => m[1].trim());
+
+              if (prs.length === 0) continue;
+              if (prs.length !== shas.length) {
+                core.warning(
+                  `Commit ${commit.id}: ${prs.length} PR trailers but ${shas.length} ` +
+                  `SHA trailers — skipping (report mismatch).`
+                );
+                continue;
+              }
+
+              for (let i = 0; i < prs.length; i++) {
+                // PR trailer format: `<org>/<repo>#<n>`. Accept bare `#<n>`
+                // or `<n>` too for robustness across merge-style variants.
+                const m = prs[i].match(/(?:[\w.-]+\/[\w.-]+)?#?(\d+)$/);
+                if (!m) {
+                  core.warning(`Unparsable PR ref in trailer: ${prs[i]}`);
+                  continue;
+                }
+                targets.push({
+                  commitSha: commit.id,
+                  prNumber: parseInt(m[1], 10),
+                  importedSha: shas[i],
+                });
+              }
+            }
+
+            if (targets.length === 0) {
+              core.info('No imported-PR trailers found in this push.');
+              return;
+            }
+
+            for (const t of targets) {
+              try {
+                const { data: pr } = await github.rest.pulls.get({
+                  owner, repo, pull_number: t.prNumber,
+                });
+
+                if (pr.state === 'closed') {
+                  core.info(`PR #${t.prNumber} is already closed; skipping.`);
+                  continue;
+                }
+
+                const commitUrl =
+                  `https://github.com/${owner}/${repo}/commit/${t.commitSha}`;
+
+                // Divergence guard: if the PR head has advanced past the
+                // SHA we imported, don't auto-close — those newer commits
+                // were NOT merged. Comment and leave open so the
+                // contributor can flag for a second import round.
+                if (pr.head.sha !== t.importedSha) {
+                  const body =
+                    `This PR's changes up to \`${t.importedSha.slice(0, 12)}\` ` +
+                    `were imported internally and merged as [\`${t.commitSha.slice(0, 12)}\`](${commitUrl}).\n\n` +
+                    `However, **new commits have been pushed to this PR since the import** ` +
+                    `(current head: \`${pr.head.sha.slice(0, 12)}\`). Those newer commits ` +
+                    `have **not** been merged. A maintainer will need to re-label with ` +
+                    `\`ok-to-import\` to bring them in, or you can close this PR if the ` +
+                    `imported snapshot is sufficient.`;
+                  await github.rest.issues.createComment({
+                    owner, repo, issue_number: t.prNumber, body,
+                  });
+                  core.warning(
+                    `PR #${t.prNumber}: divergence detected ` +
+                    `(imported ${t.importedSha}, now ${pr.head.sha}). Commented, left open.`
+                  );
+                  continue;
+                }
+
+                // Clean close path.
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: t.prNumber,
+                  body:
+                    `This PR was merged internally and mirrored to \`main\` as ` +
+                    `[\`${t.commitSha.slice(0, 12)}\`](${commitUrl}). ` +
+                    `Closing automatically — thanks for the contribution!`,
+                });
+                await github.rest.pulls.update({
+                  owner, repo, pull_number: t.prNumber, state: 'closed',
+                });
+                core.info(`PR #${t.prNumber} closed.`);
+              } catch (err) {
+                // Don't fail the whole workflow on a single lookup error —
+                // log and continue so other trailers in the same push get
+                // processed.
+                core.warning(
+                  `PR #${t.prNumber}: ${err.status ?? ''} ${err.message}`
+                );
+              }
+            }
