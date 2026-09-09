@@ -155,13 +155,13 @@ async def test_auth_webbrowser_get(_, disable_console_login):
             socket_pkg=mock_socket_pkg,
         )
         with mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_accept",
             side_effect=_mock_event_loop_sock_accept(),
         ), mock.patch.object(
-            auth._event_loop, "sock_sendall", return_value=None
+            asyncio.get_running_loop(), "sock_sendall", return_value=None
         ), mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_recv",
             side_effect=_mock_event_loop_sock_recv(recv_func),
         ):
@@ -229,13 +229,13 @@ async def test_auth_webbrowser_post(_, disable_console_login):
             socket_pkg=mock_socket_pkg,
         )
         with mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_accept",
             side_effect=_mock_event_loop_sock_accept(),
         ), mock.patch.object(
-            auth._event_loop, "sock_sendall", return_value=None
+            asyncio.get_running_loop(), "sock_sendall", return_value=None
         ), mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_recv",
             side_effect=_mock_event_loop_sock_recv(recv_func),
         ):
@@ -295,13 +295,15 @@ async def test_auth_webbrowser_fail_webbrowser(
         socket_pkg=mock_socket_pkg,
     )
     with patch("builtins.input", return_value=input_text), patch.object(
-        auth._event_loop,
+        asyncio.get_running_loop(),
         "sock_accept",
         side_effect=_mock_event_loop_sock_accept(),
     ), mock.patch.object(
-        auth._event_loop, "sock_sendall", return_value=None
+        asyncio.get_running_loop(), "sock_sendall", return_value=None
     ), mock.patch.object(
-        auth._event_loop, "sock_recv", side_effect=_mock_event_loop_sock_recv(recv_func)
+        asyncio.get_running_loop(),
+        "sock_recv",
+        side_effect=_mock_event_loop_sock_recv(recv_func),
     ):
         await auth.prepare(
             conn=rest._connection,
@@ -360,13 +362,13 @@ async def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
             socket_pkg=mock_socket_pkg,
         )
         with mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_accept",
             side_effect=_mock_event_loop_sock_accept(),
         ), mock.patch.object(
-            auth._event_loop, "sock_sendall", return_value=None
+            asyncio.get_running_loop(), "sock_sendall", return_value=None
         ), mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_recv",
             side_effect=_mock_event_loop_sock_recv(recv_func),
         ):
@@ -527,13 +529,13 @@ async def test_auth_webbrowser_socket_recv_retries_up_to_15_times_on_empty_bytea
             socket_pkg=mock_socket_pkg,
         )
         with patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_accept",
             side_effect=_mock_event_loop_sock_accept(),
         ), mock.patch.object(
-            auth._event_loop, "sock_sendall", return_value=None
+            asyncio.get_running_loop(), "sock_sendall", return_value=None
         ), mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_recv",
             side_effect=_mock_event_loop_sock_recv(recv_func),
         ):
@@ -581,11 +583,11 @@ async def test_auth_webbrowser_socket_recv_loop_fails_after_15_attempts():
             socket_pkg=mock_socket_pkg,
         )
         with mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_accept",
             side_effect=_mock_event_loop_sock_accept(),
         ), mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_recv",
             side_effect=_mock_event_loop_sock_recv(recv_func),
         ):
@@ -636,13 +638,13 @@ async def test_auth_webbrowser_socket_recv_does_not_block_with_env_var(monkeypat
         )
 
         with mock.patch.object(
-            auth._event_loop, "sock_recv", new=sock_recv_timeout
+            asyncio.get_running_loop(), "sock_recv", new=sock_recv_timeout
         ), mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_accept",
             side_effect=_mock_event_loop_sock_accept(),
         ), mock.patch.object(
-            auth._event_loop, "sock_sendall", return_value=None
+            asyncio.get_running_loop(), "sock_sendall", return_value=None
         ):
             await auth.prepare(
                 conn=rest._connection,
@@ -692,11 +694,11 @@ async def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attem
             socket_pkg=mock_socket_pkg,
         )
         with mock.patch.object(
-            auth._event_loop, "sock_recv", new=sock_recv_timeout
+            asyncio.get_running_loop(), "sock_recv", new=sock_recv_timeout
         ), mock.patch.object(
-            auth._event_loop, "sock_sendall", return_value=None
+            asyncio.get_running_loop(), "sock_sendall", return_value=None
         ), mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_accept",
             side_effect=_mock_event_loop_sock_accept(),
         ):
@@ -743,13 +745,13 @@ async def test_auth_webbrowser_socket_reuseport_with_env_flag(monkeypatch):
             socket_pkg=mock_socket_pkg,
         )
         with mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_accept",
             side_effect=_mock_event_loop_sock_accept(),
         ), mock.patch.object(
-            auth._event_loop, "sock_sendall", return_value=None
+            asyncio.get_running_loop(), "sock_sendall", return_value=None
         ), mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_recv",
             side_effect=_mock_event_loop_sock_recv(recv_func),
         ):
@@ -799,13 +801,13 @@ async def test_auth_webbrowser_socket_reuseport_option_not_set_with_false_flag(
             socket_pkg=mock_socket_pkg,
         )
         with mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_accept",
             side_effect=_mock_event_loop_sock_accept(),
         ), mock.patch.object(
-            auth._event_loop, "sock_sendall", return_value=None
+            asyncio.get_running_loop(), "sock_sendall", return_value=None
         ), mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_recv",
             side_effect=_mock_event_loop_sock_recv(recv_func),
         ):
@@ -848,13 +850,13 @@ async def test_auth_webbrowser_socket_reuseport_option_not_set_with_no_flag(
             socket_pkg=mock_socket_pkg,
         )
         with mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_accept",
             side_effect=_mock_event_loop_sock_accept(),
         ), mock.patch.object(
-            auth._event_loop, "sock_sendall", return_value=None
+            asyncio.get_running_loop(), "sock_sendall", return_value=None
         ), mock.patch.object(
-            auth._event_loop,
+            asyncio.get_running_loop(),
             "sock_recv",
             side_effect=_mock_event_loop_sock_recv(recv_func),
         ):
@@ -906,13 +908,13 @@ async def test_auth_webbrowser_force_auth_server(_, monkeypatch, force_auth_serv
         if force_auth_server:
             # When SNOWFLAKE_AUTH_FORCE_SERVER is true, should continue with server flow even if browser fails
             with mock.patch.object(
-                auth._event_loop,
+                asyncio.get_running_loop(),
                 "sock_accept",
                 side_effect=_mock_event_loop_sock_accept(),
             ), mock.patch.object(
-                auth._event_loop, "sock_sendall", return_value=None
+                asyncio.get_running_loop(), "sock_sendall", return_value=None
             ), mock.patch.object(
-                auth._event_loop,
+                asyncio.get_running_loop(),
                 "sock_recv",
                 side_effect=_mock_event_loop_sock_recv(recv_func),
             ):
@@ -937,13 +939,13 @@ async def test_auth_webbrowser_force_auth_server(_, monkeypatch, force_auth_serv
                 "builtins.input",
                 return_value=f"http://example.com/sso?token={ref_token}",
             ), mock.patch.object(
-                auth._event_loop,
+                asyncio.get_running_loop(),
                 "sock_accept",
                 side_effect=_mock_event_loop_sock_accept(),
             ), mock.patch.object(
-                auth._event_loop, "sock_sendall", return_value=None
+                asyncio.get_running_loop(), "sock_sendall", return_value=None
             ), mock.patch.object(
-                auth._event_loop,
+                asyncio.get_running_loop(),
                 "sock_recv",
                 side_effect=_mock_event_loop_sock_recv(recv_func),
             ):
