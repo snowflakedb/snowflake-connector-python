@@ -4,12 +4,15 @@
 #
 
 
+import json
 from test.helpers import apply_auth_class_update_body, create_mock_auth_body
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from snowflake.connector.auth import AuthByOauthCredentials
 from snowflake.connector.errors import ProgrammingError
+from snowflake.connector.vendored.urllib3.exceptions import ProtocolError
 
 
 def test_auth_oauth_credentials_oauth_type():
@@ -182,6 +185,126 @@ def test_oauth_client_credentials_allows_empty_user(monkeypatch):
     assert isinstance(conn.auth_class, AuthByOauthCredentials)
 
     conn.close()
+
+
+def _oauth_credentials_auth_and_conn():
+    auth = AuthByOauthCredentials(
+        "app",
+        "clientId",
+        "clientSecret",
+        "https://example.com/oauth/token",
+        "scope",
+    )
+    conn = MagicMock()
+    conn.proxy_host = None
+    conn.proxy_port = None
+    conn.proxy_user = None
+    conn.proxy_password = None
+    return auth, conn
+
+
+def _token_http_response(body: dict, status: int = 200) -> MagicMock:
+    resp = MagicMock()
+    resp.status = status
+    resp.data = json.dumps(body).encode()
+    return resp
+
+
+@pytest.mark.skipolddriver
+def test_oauth_token_request_retries_transient_http_failure(monkeypatch):
+    """SNOW-3984430: a transient IdP token-request failure should be retried."""
+    monkeypatch.setattr(
+        "snowflake.connector.auth._oauth_base.time.sleep", lambda _: None
+    )
+    success_resp = _token_http_response({"access_token": "ACCESS"})
+    mock_http = MagicMock()
+    mock_http.request_encode_body.side_effect = [
+        ProtocolError("Connection aborted."),
+        success_resp,
+    ]
+    auth, conn = _oauth_credentials_auth_and_conn()
+
+    with patch(
+        "snowflake.connector.auth._oauth_base.urllib3.PoolManager",
+        return_value=mock_http,
+    ):
+        access_token, refresh_token = auth._get_request_token_response(
+            conn, {"grant_type": "client_credentials", "scope": "scope"}
+        )
+
+    assert access_token == "ACCESS"
+    assert refresh_token is None
+    assert mock_http.request_encode_body.call_count == 2
+
+
+@pytest.mark.skipolddriver
+def test_oauth_token_request_retries_http_503(monkeypatch):
+    """SNOW-3984430: HTTP 503 from the IdP token endpoint should be retried."""
+    monkeypatch.setattr(
+        "snowflake.connector.auth._oauth_base.time.sleep", lambda _: None
+    )
+    mock_http = MagicMock()
+    mock_http.request_encode_body.side_effect = [
+        _token_http_response({"error": "unavailable"}, status=503),
+        _token_http_response({"access_token": "ACCESS"}),
+    ]
+    auth, conn = _oauth_credentials_auth_and_conn()
+
+    with patch(
+        "snowflake.connector.auth._oauth_base.urllib3.PoolManager",
+        return_value=mock_http,
+    ):
+        access_token, _ = auth._get_request_token_response(
+            conn, {"grant_type": "client_credentials"}
+        )
+
+    assert access_token == "ACCESS"
+    assert mock_http.request_encode_body.call_count == 2
+
+
+@pytest.mark.skipolddriver
+def test_oauth_token_request_does_not_retry_http_400(monkeypatch):
+    """SNOW-3984430: IdP auth errors must not be retried."""
+    monkeypatch.setattr(
+        "snowflake.connector.auth._oauth_base.time.sleep", lambda _: None
+    )
+    mock_http = MagicMock()
+    mock_http.request_encode_body.return_value = _token_http_response(
+        {"error": "invalid_grant"}, status=400
+    )
+    auth, conn = _oauth_credentials_auth_and_conn()
+    conn.errorhandler = MagicMock()
+
+    with patch(
+        "snowflake.connector.auth._oauth_base.urllib3.PoolManager",
+        return_value=mock_http,
+    ):
+        try:
+            auth._get_request_token_response(conn, {"grant_type": "client_credentials"})
+        except Exception:
+            pass
+
+    assert mock_http.request_encode_body.call_count == 1
+
+
+@pytest.mark.skipolddriver
+def test_oauth_token_request_gives_up_after_retries(monkeypatch):
+    """SNOW-3984430: transport errors are re-raised after the attempt budget."""
+    monkeypatch.setattr(
+        "snowflake.connector.auth._oauth_base.time.sleep", lambda _: None
+    )
+    mock_http = MagicMock()
+    mock_http.request_encode_body.side_effect = ProtocolError("Connection aborted.")
+    auth, conn = _oauth_credentials_auth_and_conn()
+
+    with patch(
+        "snowflake.connector.auth._oauth_base.urllib3.PoolManager",
+        return_value=mock_http,
+    ):
+        with pytest.raises(ProtocolError):
+            auth._get_request_token_response(conn, {"grant_type": "client_credentials"})
+
+    assert mock_http.request_encode_body.call_count == 3
 
 
 def test_oauth_credentials_missing_client_id_raises_error():

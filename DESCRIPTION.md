@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - NEXT_RELEASE(TBD)
+  - Fixed missing retries on transient HTTP failures when fetching an OAuth access token from the IdP token endpoint (`OAUTH_CLIENT_CREDENTIALS` and `OAUTH_AUTHORIZATION_CODE`). Token requests now retry transport errors, HTTP 408/429, and 5xx responses (SNOW-3984430, #3003).
 
 - v4.7.3(Sep 3,2026)
   - Added experimental Python 3.14t (free-threaded CPython) wheel support. **Experimental — not intended for production use.**
