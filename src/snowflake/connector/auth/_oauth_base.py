@@ -7,11 +7,13 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import time
 import urllib.parse
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 from urllib.error import HTTPError, URLError
 
+from ..backoff_policies import exponential_backoff
 from ..errorcode import (
     ER_FAILED_TO_REQUEST,
     ER_IDP_CONNECTION_ERROR,
@@ -25,6 +27,7 @@ from ..secret_detector import SecretDetector
 from ..token_cache import TokenCache, TokenKey, TokenType
 from ..vendored import urllib3
 from ..vendored.requests.utils import get_environ_proxies, select_proxy
+from ..vendored.urllib3.exceptions import HTTPError as Urllib3HTTPError
 from ..vendored.urllib3.poolmanager import ProxyManager
 from .by_plugin import AuthByPlugin, AuthType
 
@@ -32,6 +35,12 @@ if TYPE_CHECKING:
     from .. import SnowflakeConnection
 
 logger = logging.getLogger(__name__)
+
+# Total POSTs to the IdP token endpoint, including the first attempt. This is
+# independent of AuthByPlugin._retry_ctx, which is reserved for the later
+# Snowflake login-request retries in SnowflakeConnection._authenticate().
+_OAUTH_TOKEN_REQUEST_MAX_ATTEMPTS = 3
+_RETRYABLE_OAUTH_TOKEN_HTTP_STATUSES = frozenset({408, 429})
 
 
 class _OAuthTokensMixin:
@@ -470,19 +479,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             fields["scope"] = self._scope
         try:
             # TODO(SNOW-2229411) Session manager should be used here. It may require additional security validation (since we would transition from PoolManager to requests.Session) and some parameters would be passed implicitly. OAuth token exchange must NOT reuse pooled HTTP sessions. We should create a fresh SessionManager with use_pooling=False for each call.
-            proxy_url = self._resolve_proxy_url(conn, self._token_request_url)
-            http_client = (
-                ProxyManager(proxy_url=proxy_url)
-                if proxy_url
-                else urllib3.PoolManager()
-            )
-            return http_client.request_encode_body(
-                "POST",
-                self._token_request_url,
-                encode_multipart=False,
-                headers=self._create_token_request_headers(),
-                fields=fields,
-            )
+            return self._post_token_request(conn, fields)
         except HTTPError as e:
             self._handle_failure(
                 conn=conn,
@@ -516,17 +513,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         fields: dict[str, str],
     ) -> (str | None, str | None):
         # TODO(SNOW-2229411) Session manager should be used here. It may require additional security validation (since we would transition from PoolManager to requests.Session) and some parameters would be passed implicitly. Token request must bypass HTTP connection pools.
-        proxy_url = self._resolve_proxy_url(connection, self._token_request_url)
-        http_client = (
-            ProxyManager(proxy_url=proxy_url) if proxy_url else urllib3.PoolManager()
-        )
-        resp = http_client.request_encode_body(
-            "POST",
-            self._token_request_url,
-            headers=self._create_token_request_headers(),
-            encode_multipart=False,
-            fields=fields,
-        )
+        resp = self._post_token_request(connection, fields)
         try:
             logger.debug("OAuth IdP response received, try to parse it")
             json_resp: dict = json.loads(resp.data)
@@ -551,6 +538,69 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
                 },
             )
         return None, None
+
+    def _post_token_request(
+        self,
+        connection: SnowflakeConnection,
+        fields: dict[str, str],
+    ) -> urllib3.BaseHTTPResponse:
+        """POST to the IdP token endpoint, retrying transient transport and HTTP errors.
+
+        SnowflakeConnection._authenticate() calls prepare() (and therefore this
+        POST) once, outside the GS login retry loop. Transient IdP failures
+        (connection reset, timeout, 5xx, 429) must be retried here
+        (SNOW-3984430). Auth errors such as HTTP 400 invalid_grant are not retried.
+        """
+        backoff = exponential_backoff()()
+        last_exc: BaseException | None = None
+        for attempt in range(1, _OAUTH_TOKEN_REQUEST_MAX_ATTEMPTS + 1):
+            proxy_url = self._resolve_proxy_url(connection, self._token_request_url)
+            http_client = (
+                ProxyManager(proxy_url=proxy_url)
+                if proxy_url
+                else urllib3.PoolManager()
+            )
+            try:
+                resp = http_client.request_encode_body(
+                    "POST",
+                    self._token_request_url,
+                    headers=self._create_token_request_headers(),
+                    encode_multipart=False,
+                    fields=fields,
+                )
+            except (Urllib3HTTPError, OSError) as exc:
+                last_exc = exc
+                logger.debug(
+                    "OAuth token request failed on attempt %s/%s: %s",
+                    attempt,
+                    _OAUTH_TOKEN_REQUEST_MAX_ATTEMPTS,
+                    exc,
+                )
+                if attempt >= _OAUTH_TOKEN_REQUEST_MAX_ATTEMPTS:
+                    raise
+                time.sleep(float(next(backoff)))
+                continue
+
+            if (
+                self._is_retryable_oauth_token_http_status(resp.status)
+                and attempt < _OAUTH_TOKEN_REQUEST_MAX_ATTEMPTS
+            ):
+                logger.debug(
+                    "OAuth token request returned HTTP %s on attempt %s/%s; retrying",
+                    resp.status,
+                    attempt,
+                    _OAUTH_TOKEN_REQUEST_MAX_ATTEMPTS,
+                )
+                time.sleep(float(next(backoff)))
+                continue
+            return resp
+
+        assert last_exc is not None
+        raise last_exc
+
+    @staticmethod
+    def _is_retryable_oauth_token_http_status(status: int) -> bool:
+        return status >= 500 or status in _RETRYABLE_OAUTH_TOKEN_HTTP_STATUSES
 
     def _create_token_request_headers(self) -> dict[str, str]:
         return {

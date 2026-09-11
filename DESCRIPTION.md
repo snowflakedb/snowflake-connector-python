@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - NEXT_RELEASE(TBD)
+  - Fixed missing retries on transient HTTP failures when fetching an OAuth access token from the IdP token endpoint (`OAUTH_CLIENT_CREDENTIALS` and `OAUTH_AUTHORIZATION_CODE`). Token requests now retry transport errors, HTTP 408/429, and 5xx responses (SNOW-3984430, #3003).
   - Fixed a bug where a TLS handshake terminated by the peer (`SSLError` containing `SysCallError(-1, 'Unexpected EOF')`) was classified as non-retryable and surfaced as an `OperationalError`, unlike `ECONNRESET`. Such handshake `Unexpected EOF` errors are now retried, on both the sync and async request paths (SNOW-4058589).
 
 - v4.7.3(Sep 3,2026)
