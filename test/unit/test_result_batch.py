@@ -44,7 +44,8 @@ from snowflake.connector.errors import (
 
 try:
     from snowflake.connector.compat import TOO_MANY_REQUESTS
-    from snowflake.connector.errors import TooManyRequests
+    from snowflake.connector.errorcode import ER_INCOMPLETE_RESULT_CHUNK
+    from snowflake.connector.errors import OperationalError, TooManyRequests
     from snowflake.connector.result_batch import (
         MAX_DOWNLOAD_RETRY,
         JSONResultBatch,
@@ -64,6 +65,8 @@ except ImportError:
     SESSION_FROM_REQUEST_MODULE_PATH = "requests.sessions.Session"
     TooManyRequests = None
     TOO_MANY_REQUESTS = None
+    OperationalError = None
+    ER_INCOMPLETE_RESULT_CHUNK = None
 from snowflake.connector.sqlstate import (
     SQLSTATE_CONNECTION_REJECTED,
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
@@ -344,6 +347,55 @@ class TestGzipDecompressionFallback:
 
         loaded = batch._load(response)
         assert loaded == rows
+
+
+def _make_remote_json_batch(rowcount: int, rows: list[list]) -> tuple:
+    """A remote JSON batch plus the decompressed response its download returns."""
+    batch = JSONResultBatch(
+        rowcount=rowcount,
+        chunk_headers=None,
+        remote_chunk_info=RemoteChunkInfo(
+            url="http://fake-s3.example.com/results/chunk_0",
+            uncompressedSize=0,
+            compressedSize=0,
+        ),
+        schema=[],
+        column_converters=[],
+        use_dict_result=False,
+    )
+    response = _make_gzip_response(_make_gzip_json_rows(*rows))
+    _ensure_decompressed(response)
+    return batch, response
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(JSONResultBatch is None, reason="vendored requests unavailable")
+def test_short_remote_chunk_raises_instead_of_ending_iteration():
+    """SNOW-4109042: a chunk holding fewer rows than promised must not look like EOF.
+
+    Such a chunk used to simply stop producing rows, and the fetch methods treat
+    a stopped iterator as a normal end of results, so callers silently received
+    an incomplete result set.
+    """
+    rows = [["val1", 1], ["val2", 2]]
+    batch, response = _make_remote_json_batch(len(rows) + 1, rows)
+
+    with mock.patch.object(batch, "_download", return_value=response):
+        with pytest.raises(OperationalError) as ex:
+            list(batch.create_iter())
+
+    assert ex.value.errno == ER_INCOMPLETE_RESULT_CHUNK
+    assert "holds 2 row(s) but the server reported 3" in ex.value.msg
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(JSONResultBatch is None, reason="vendored requests unavailable")
+def test_complete_remote_chunk_iterates_without_error():
+    rows = [["val1", 1], ["val2", 2]]
+    batch, response = _make_remote_json_batch(len(rows), rows)
+
+    with mock.patch.object(batch, "_download", return_value=response):
+        assert len(list(batch.create_iter())) == len(rows)
 
 
 @pytest.mark.skipolddriver

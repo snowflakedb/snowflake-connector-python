@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import base64
+import gzip
+import json
 import time
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+import snowflake.connector
 from snowflake.connector.connection import SnowflakeConnection
-from snowflake.connector.cursor import SnowflakeCursor
-from snowflake.connector.errors import ServiceUnavailableError
+from snowflake.connector.cursor import ResultState, SnowflakeCursor
+from snowflake.connector.errors import OperationalError, ServiceUnavailableError
+
+try:
+    from snowflake.connector.errorcode import ER_INCOMPLETE_RESULT_CHUNK
+except ImportError:
+    ER_INCOMPLETE_RESULT_CHUNK = None
 
 try:
     from snowflake.connector.constants import FileTransferType
@@ -261,3 +270,154 @@ class TestUploadDownloadMethods(TestCase):
             cursor._download("@st", "/tmp", {})
 
         self._run_dop_cap_test(task, dop_cap=1)
+
+
+def _rows_via_fetchmany(cursor, size=100):
+    """Customer pattern from SNOW-4109042: drain with fetchmany until empty."""
+    rows = []
+    while True:
+        batch = cursor.fetchmany(size)
+        if not batch:
+            break
+        rows.extend(batch)
+    return rows
+
+
+def test_fetchmany_typeerror_during_iteration_is_not_eof():
+    """SNOW-4109042: TypeError from the result iterator must not become silent EOF.
+
+    ``_fetchone`` catches TypeError while ``_result_state`` is VALID and returns
+    None. ``fetchmany`` treats None as end-of-results, so a conversion/parse
+    TypeError mid-stream looks like a successful short read.
+    """
+
+    def exploding_rows():
+        yield (1,)
+        yield (2,)
+        raise TypeError("simulated arrow/json conversion failure")
+        yield (3,)
+
+    cursor = SnowflakeCursor(FakeConnection())
+    cursor._result = exploding_rows()
+    cursor._result_state = ResultState.VALID
+    cursor._rownumber = -1
+    cursor._total_rowcount = 3
+
+    with pytest.raises(TypeError, match="simulated arrow/json conversion failure"):
+        _rows_via_fetchmany(cursor, size=100)
+
+
+def test_fetchmany_on_reset_cursor_still_reports_end_of_results():
+    """A cursor that was reset has no rows left, which is not an error."""
+    cursor = SnowflakeCursor(FakeConnection())
+    cursor._result_state = ResultState.RESET
+
+    assert cursor.fetchmany(100) == []
+
+
+# Ticket Query 1: server produced 954 rows, fetchmany(100) returned 875.
+_SNOW_4109042_SERVER_ROWS = 954
+_SNOW_4109042_FIRST_CHUNK_ROWS = 75
+_SNOW_4109042_REMOTE_CHUNK_DECLARED = 879
+_SNOW_4109042_REMOTE_CHUNK_ACTUAL = 800  # 75 + 800 = 875
+
+
+def _gzip_json_result_chunk(rows: list[list[str]]) -> str:
+    """Snowflake JSON chunks are concatenated row arrays; the client wraps them in ``[]``."""
+    payload = ",".join(json.dumps(row) for row in rows).encode()
+    return base64.b64encode(gzip.compress(payload)).decode("ascii")
+
+
+@pytest.mark.skipolddriver
+def test_fetchmany_short_remote_chunk_is_not_silent_eof(
+    wiremock_generic_mappings_dir,
+    wiremock_target_proxy_pair,
+    wiremock_mapping_dir,
+):
+    """SNOW-4109042: Wiremock stand-in for a remote result chunk that is shorter than advertised.
+
+    Live Snowflake cannot force a truncated blob. Here the query response says
+    ``total=954`` and the remote chunk claims ``rowCount=879``, but the gzip
+    body only contains 800 JSON rows. Draining with ``fetchmany(100)`` used to
+    stop at 875 rows and report that as a clean EOF; the missing rows must be
+    reported instead.
+    """
+    target_wm, _proxy_wm = wiremock_target_proxy_pair
+    chunk_url_path = (
+        "/amazonaws/test/s3testaccount/stage/results/snow-4109042/"
+        "data_0_0_0_1?response-content-encoding=gzip"
+    )
+
+    query_mapping = json.loads(
+        (wiremock_mapping_dir / "queries/select_1_successful.json").read_text()
+    )
+    data = query_mapping["response"]["jsonBody"]["data"]
+    data["rowset"] = [[str(i)] for i in range(_SNOW_4109042_FIRST_CHUNK_ROWS)]
+    data["total"] = _SNOW_4109042_SERVER_ROWS
+    data["returned"] = _SNOW_4109042_SERVER_ROWS
+    data["queryResultFormat"] = "json"
+    data["chunks"] = [
+        {
+            "url": "{{STORAGE_WIREMOCK_HTTP_HOST_WITH_PORT}}" + chunk_url_path,
+            "rowCount": _SNOW_4109042_REMOTE_CHUNK_DECLARED,
+            "uncompressedSize": 1,
+            "compressedSize": 1,
+        }
+    ]
+
+    remote_rows = [
+        [str(i)]
+        for i in range(
+            _SNOW_4109042_FIRST_CHUNK_ROWS,
+            _SNOW_4109042_FIRST_CHUNK_ROWS + _SNOW_4109042_REMOTE_CHUNK_ACTUAL,
+        )
+    ]
+    chunk_mapping = {
+        "request": {"method": "GET", "url": chunk_url_path},
+        "response": {
+            "status": 200,
+            "headers": {"Content-Encoding": "gzip"},
+            "base64Body": _gzip_json_result_chunk(remote_rows),
+        },
+    }
+
+    target_wm.import_mapping_with_default_placeholders(
+        wiremock_mapping_dir / "auth/password/successful_flow.json"
+    )
+    target_wm.add_mapping(
+        query_mapping,
+        placeholders={
+            "{{STORAGE_WIREMOCK_HTTP_HOST_WITH_PORT}}": target_wm.http_host_with_port,
+        },
+    )
+    target_wm.add_mapping(chunk_mapping)
+    target_wm.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+    target_wm.add_mapping(wiremock_generic_mappings_dir / "telemetry.json")
+
+    with snowflake.connector.connect(
+        user="testUser",
+        password="testPassword",
+        account="testAccount",
+        host=target_wm.wiremock_host,
+        port=target_wm.wiremock_http_port,
+        protocol="http",
+        warehouse="TEST_WH",
+        platform_detection_timeout_seconds=0,
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM large_table")
+            assert cur.rowcount == _SNOW_4109042_SERVER_ROWS
+            assert len(cur._result_set.batches) == 2
+            with pytest.raises(OperationalError) as ex:
+                _rows_via_fetchmany(cur, size=100)
+
+    assert target_wm.saw_urls_matching(
+        ["snow-4109042"]
+    ), "remote chunk was never downloaded; this would not mimic the ticket"
+    assert ex.value.errno == ER_INCOMPLETE_RESULT_CHUNK
+    assert (
+        f"holds {_SNOW_4109042_REMOTE_CHUNK_ACTUAL} row(s) but the server reported "
+        f"{_SNOW_4109042_REMOTE_CHUNK_DECLARED}" in ex.value.msg
+    )
