@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - NEXT_RELEASE(TBD)
+  - Fixed a bug where a TLS handshake terminated by the peer (`SSLError` containing `SysCallError(-1, 'Unexpected EOF')`) was classified as non-retryable and surfaced as an `OperationalError`, unlike `ECONNRESET`. Such handshake `Unexpected EOF` errors are now retried, on both the sync and async request paths (SNOW-4058589).
   - Fixed `fetchone()`, `fetchmany()`, `fetchall()` and cursor iteration silently returning an incomplete result set. A downloaded result chunk holding fewer rows than the back-end reported just ended the iteration, which the fetch methods report as a normal end of results, so callers received fewer rows than the query produced with no exception raised. Such a chunk now raises an `OperationalError` (errno `252013`). The same check now covers the first chunk embedded in the query response, which can arrive empty or short while the response still declares the full row count, and a result set that runs out after producing fewer rows than the back-end's `total` raises `252013` as well. Errors raised while iterating a result set are no longer reported as end-of-results either: `_fetchone()` caught every `TypeError` and returned `None`, so a failure anywhere in the download/parse chain was indistinguishable from an exhausted result set. Both the sync and async paths are fixed (SNOW-4109042).
 
 - v4.7.3(Sep 3,2026)
@@ -30,13 +31,14 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Request headers are copied before mutation on the async path, and masking is applied to the `Authorization` header in error logs (SNOW-3675593).
   - Applied secret masking to the `snowflake.connector` loggers by default, independent of how application logging is configured. The same filter also covers the third-party loggers the connector uses (`botocore`, `boto3`, `aiohttp`, `aiobotocore`, `aioboto3`, vendored `urllib3`). Set `SNOWFLAKE_DISABLE_LOG_SECRET_MASKING=true` to opt out; it is honored at emit time, including after import (SNOW-3675583).
 
-- v4.7.2(Aug 6,2026)
+- v4.7.2(Aug 7,2026)
   - Fixed a thread leak in the file transfer agent by properly shutting down ThreadPoolExecutors after PUT/GET transfers (SNOW-3556240, #2878).
   - Fixed `split_statements` treating `//` as SQL instead of a line comment, which could merge multiple statements when a `//` comment contained an apostrophe (SNOW-3772985).
   - Fixed large-file PUT uploads to internal Azure stages failing against the Azure 50,000-block-per-blob limit. The Azure multipart chunk size is now scaled up dynamically for very large files (mirroring the existing S3 behavior), and the default Azure chunk size was raised from 4 MB to 8 MB (consistent with S3) for better throughput (SNOW-3839943).
   - Fixed OAuth cached-credential connections failing with `250001 Invalid OAuth access token` when the cached token was invalid (GS code `390303`); the connector now reauthenticates silently (via refresh token if available, otherwise browser) instead of hard-failing. Also fixed fresh processes holding only a cached refresh token going straight to an interactive browser prompt instead of attempting a silent refresh first.
   - Fixed Okta/SAML authentication reporting an exhausted `login_timeout` as `250003: Failed to execute request: Attempted to set connect timeout to <negative value>`. Obtaining the one-time token in step 4 can overshoot the login deadline, which made the remaining budget negative; it was then passed to the HTTP layer, which rejected it with an opaque `ValueError`. A timed-out SAML login now raises `250006` with a message naming `login_timeout`. Running out of budget while retrying on `RefreshTokenError` reports the same error instead of failing later with an `AttributeError` on an empty response (SNOW-3891419).
   - Fixed OAuth authorization code flow failing for accounts with uppercase letters in the account name. `urlparse().hostname` always returns lowercase, but the host was compared case-sensitively in `_is_snowflake_as_idp`, causing Snowflake-as-IdP detection to return `False` and raising error 251013 (`client_id is empty`) even for connections that don't require a client ID.
+  - Fixed JWT key-pair authentication errors to surface the server's specific error code (e.g. `394304` for fingerprint mismatch, `394303` for clock skew) instead of always reporting the generic `250001`. Auth-rejection failures now also use SQLState `28000` (invalid authorization) instead of `08001` (SNOW-3775156).
 
 - v4.7.1(Jul 15,2026)
   - Added support for Python 3.14t (free-threaded).
@@ -52,7 +54,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added native AKS (Azure Kubernetes Service) workload identity support. When running on AKS with workload identity configured, the connector automatically uses `WorkloadIdentityCredential` to authenticate via the injected service account credentials. OIDC backward compatibility is also supported.
   - Added the `workload_identity_aws_use_outbound_token` connection option (default `false`) to opt into AWS WIF JWT attestation via STS `GetWebIdentityToken` instead of the default SigV4 `GetCallerIdentity` method.
   - Fixed a bug where a fully-qualified DDL statement (e.g. `CREATE VIEW db.schema.obj`) on a session with no current schema would populate the connector's cached `_schema`/`_database` from the referenced object's namespace. This made `get_current_schema()` diverge from the server's `CURRENT_SCHEMA()` and mis-qualified Snowpark temp objects (SNOW-3665226).
-  - Fixed JWT key-pair authentication errors to surface the server's specific error code (e.g. `394304` for fingerprint mismatch, `394303` for clock skew) instead of always reporting the generic `250001`. Auth-rejection failures now also use SQLState `28000` (invalid authorization) instead of `08001` (SNOW-3775156).
 
 - v4.6.0(May 28,2026)
   - Dropped support for Python 3.9. The minimum supported version is now Python 3.10.
