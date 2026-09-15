@@ -377,14 +377,19 @@ class ResultBatch(abc.ABC):
         return self.create_iter()
 
     def _check_rowcount(self, rows_read: int) -> None:
-        """Rejects a downloaded chunk that holds fewer rows than the back-end promised.
+        """Rejects a chunk that holds fewer rows than the back-end promised.
 
         SNOW-4109042: a short chunk otherwise just ends the iteration, which the
         fetch methods report as a normal end of results, so callers silently get
-        an incomplete result set. Only remote chunks carry a back-end row count;
-        a local chunk's ``rowcount`` is derived from the data itself.
+        an incomplete result set. This applies to the inline first chunk too: on
+        the Arrow path its ``rowcount`` is ``create_batches_from_response``
+        subtracting the back-end's per-chunk counts from the back-end's ``total``,
+        so it is server metadata, and an empty ``rowsetBase64`` reads as a clean
+        end of stream. A non-positive ``rowcount`` is no promise at all -- a
+        response without ``total`` makes that subtraction zero or negative -- so
+        it is left alone.
         """
-        if self._remote_chunk_info is None or rows_read == self.rowcount:
+        if self.rowcount <= 0 or rows_read == self.rowcount:
             return
         raise Error.errorhandler_make_exception(
             OperationalError,
@@ -400,9 +405,13 @@ class ResultBatch(abc.ABC):
     def _iter_checked_rows(
         self, rows: Iterator[dict | Exception] | Iterator[tuple | Exception]
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
-        """Wraps ``rows`` so the chunk's row count is checked once it is exhausted."""
-        if self._remote_chunk_info is None:
-            return rows
+        """Wraps ``rows`` so the chunk's row count is checked once it is exhausted.
+
+        SNOW-4109042: the check lives past the last ``yield`` on purpose. A caller
+        that stops early -- ``fetchmany`` with a small size, ``break`` out of the
+        cursor, closing the cursor -- abandons the generator at a ``yield`` and
+        never reaches it, so only a chunk that really ran out is verified.
+        """
 
         def counting_iter():
             rows_read = 0

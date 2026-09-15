@@ -20,6 +20,20 @@ except ImportError:
     ER_INCOMPLETE_RESULT_CHUNK = None
 
 try:
+    from snowflake.connector.arrow_context import ArrowConverterContext
+    from snowflake.connector.result_batch import (
+        ArrowResultBatch,
+        JSONResultBatch,
+        RemoteChunkInfo,
+    )
+    from snowflake.connector.result_set import ResultSet
+    from snowflake.connector.vendored import requests
+
+    _have_result_set = True
+except ImportError:
+    _have_result_set = False
+
+try:
     from snowflake.connector.constants import FileTransferType
 except ImportError:
     from enum import Enum
@@ -37,6 +51,7 @@ class FakeConnection(SnowflakeConnection):
         self._enable_stage_s3_privatelink_for_us_east_1 = False
         self._iobound_tpe_limit = None
         self._unsafe_file_write = False
+        self._check_arrow_conversion_error_on_every_column = True
 
 
 @pytest.mark.parametrize(
@@ -421,3 +436,207 @@ def test_fetchmany_short_remote_chunk_is_not_silent_eof(
         f"holds {_SNOW_4109042_REMOTE_CHUNK_ACTUAL} row(s) but the server reported "
         f"{_SNOW_4109042_REMOTE_CHUNK_DECLARED}" in ex.value.msg
     )
+
+
+# ---------------------------------------------------------------------------
+# SNOW-4109042: the result set as a whole is checked against the back-end's
+# "total". The inline first chunk of the query-request response can arrive empty
+# while the response still declares the full total, and on the JSON path that
+# batch is internally consistent (its rowcount is len(rowset)), so the declared
+# total is the only thing left to compare the delivered rows against.
+# ---------------------------------------------------------------------------
+
+pytestmark_result_set = pytest.mark.skipif(
+    not _have_result_set, reason="connector build unavailable"
+)
+
+# "total rows = 954, first chunk rows = 79" and the client received 875 rows.
+_TICKET_TOTAL = 954
+_TICKET_INLINE_ROWS = 79
+_TICKET_REMOTE_ROWS = _TICKET_TOTAL - _TICKET_INLINE_ROWS  # 875
+
+
+def _json_rows(count: int, start: int = 0) -> list[list[str]]:
+    return [[str(i)] for i in range(start, start + count)]
+
+
+def _local_json_batch(rows: list[list[str]]) -> JSONResultBatch:
+    """The inline first chunk: ``from_data`` always takes its rowcount from the rows."""
+    return JSONResultBatch.from_data(rows, len(rows), [], [], False)
+
+
+def _remote_json_batch(declared: int, rows: list[list[str]]):
+    """A remote chunk plus the response its (mocked) download returns."""
+    batch = JSONResultBatch(
+        rowcount=declared,
+        chunk_headers=None,
+        remote_chunk_info=RemoteChunkInfo(
+            url="http://fake-s3.example.com/results/chunk_0",
+            uncompressedSize=0,
+            compressedSize=0,
+        ),
+        schema=[],
+        column_converters=[],
+        use_dict_result=False,
+    )
+    response = requests.Response()
+    response.status_code = 200
+    response._content = ",".join(json.dumps(row) for row in rows).encode()
+    return batch, response
+
+
+def _empty_inline_arrow_batch(first_chunk_len: int) -> ArrowResultBatch:
+    return ArrowResultBatch.from_data(
+        base64.b64encode(b"").decode("ascii"),
+        first_chunk_len,
+        ArrowConverterContext(session_parameters={}),
+        False,
+        False,
+        [],
+        False,
+    )
+
+
+def _cursor_over_batches(batches, total_row_count) -> SnowflakeCursor:
+    """A cursor wired to a result set the way ``_init_result_and_meta`` wires one."""
+    cursor = SnowflakeCursor(FakeConnection())
+    cursor._result_set = ResultSet(
+        cursor,
+        batches,
+        prefetch_thread_num=1,
+        use_mp=False,
+        total_row_count=total_row_count,
+    )
+    cursor._result_state = ResultState.VALID
+    cursor._rownumber = -1
+    return cursor
+
+
+@pytest.mark.skipolddriver
+@pytestmark_result_set
+def test_empty_inline_json_chunk_is_caught_by_the_total_check():
+    """Every batch is self-consistent, yet 79 of the 954 rows never arrive.
+
+    This is the JSON shape of the ticket: the inline rowset came back empty, the
+    remote chunk delivered exactly what it promised, and the client used to
+    report the 875 rows it had as a complete result set.
+    """
+    remote, response = _remote_json_batch(
+        _TICKET_REMOTE_ROWS, _json_rows(_TICKET_REMOTE_ROWS, _TICKET_INLINE_ROWS)
+    )
+    cursor = _cursor_over_batches([_local_json_batch([]), remote], _TICKET_TOTAL)
+
+    with patch.object(remote, "_download", return_value=response):
+        with pytest.raises(OperationalError) as ex:
+            _rows_via_fetchmany(cursor, size=100)
+
+    assert ex.value.errno == ER_INCOMPLETE_RESULT_CHUNK
+    assert (
+        f"the result set produced {_TICKET_REMOTE_ROWS} row(s) but the server "
+        f"reported {_TICKET_TOTAL}" in ex.value.msg
+    )
+
+
+@pytest.mark.skipolddriver
+@pytestmark_result_set
+def test_empty_inline_arrow_chunk_with_healthy_remote_chunk_is_loud():
+    """End to end on the Arrow path: 954 declared, 875 delivered, no silence.
+
+    The inline chunk's own rowcount is server metadata here, so the batch-level
+    check fires first -- either way the caller must not walk away with 875 rows.
+    """
+    remote, response = _remote_json_batch(
+        _TICKET_REMOTE_ROWS, _json_rows(_TICKET_REMOTE_ROWS, _TICKET_INLINE_ROWS)
+    )
+    cursor = _cursor_over_batches(
+        [_empty_inline_arrow_batch(_TICKET_INLINE_ROWS), remote], _TICKET_TOTAL
+    )
+
+    with patch.object(remote, "_download", return_value=response):
+        with pytest.raises(OperationalError) as ex:
+            _rows_via_fetchmany(cursor, size=100)
+
+    assert ex.value.errno == ER_INCOMPLETE_RESULT_CHUNK
+
+
+@pytest.mark.skipolddriver
+@pytestmark_result_set
+def test_complete_result_set_does_not_raise():
+    remote, response = _remote_json_batch(
+        _TICKET_REMOTE_ROWS, _json_rows(_TICKET_REMOTE_ROWS, _TICKET_INLINE_ROWS)
+    )
+    cursor = _cursor_over_batches(
+        [_local_json_batch(_json_rows(_TICKET_INLINE_ROWS)), remote], _TICKET_TOTAL
+    )
+
+    with patch.object(remote, "_download", return_value=response):
+        assert len(_rows_via_fetchmany(cursor, size=100)) == _TICKET_TOTAL
+
+
+@pytest.mark.skipolddriver
+@pytestmark_result_set
+def test_empty_result_set_does_not_raise():
+    """A query that legitimately returned nothing declares total = 0."""
+    cursor = _cursor_over_batches([_local_json_batch([])], 0)
+
+    assert cursor.fetchall() == []
+
+
+@pytest.mark.skipolddriver
+@pytestmark_result_set
+def test_result_set_without_declared_total_does_not_raise():
+    """Responses that carry no ``total`` promise nothing to compare against."""
+    cursor = _cursor_over_batches([_local_json_batch(_json_rows(3))], None)
+
+    assert len(cursor.fetchall()) == 3
+
+
+@pytest.mark.skipolddriver
+@pytestmark_result_set
+def test_fetchmany_stopping_early_does_not_raise():
+    """Reading part of a healthy result set is normal usage, not a short read."""
+    remote, response = _remote_json_batch(
+        _TICKET_REMOTE_ROWS, _json_rows(_TICKET_REMOTE_ROWS, _TICKET_INLINE_ROWS)
+    )
+    cursor = _cursor_over_batches(
+        [_local_json_batch(_json_rows(_TICKET_INLINE_ROWS)), remote], _TICKET_TOTAL
+    )
+
+    with patch.object(remote, "_download", return_value=response):
+        assert len(cursor.fetchmany(10)) == 10
+        # Dropping the half-consumed iterator is what closing a cursor does.
+        cursor.reset()
+
+
+@pytest.mark.skipolddriver
+@pytestmark_result_set
+def test_breaking_out_of_cursor_iteration_does_not_raise():
+    remote, response = _remote_json_batch(
+        _TICKET_REMOTE_ROWS, _json_rows(_TICKET_REMOTE_ROWS, _TICKET_INLINE_ROWS)
+    )
+    cursor = _cursor_over_batches(
+        [_local_json_batch(_json_rows(_TICKET_INLINE_ROWS)), remote], _TICKET_TOTAL
+    )
+
+    rows = []
+    with patch.object(remote, "_download", return_value=response):
+        for row in cursor:
+            rows.append(row)
+            if len(rows) == 5:
+                break
+        cursor.reset()
+
+    assert len(rows) == 5
+
+
+@pytest.mark.skipolddriver
+@pytestmark_result_set
+def test_result_batches_are_not_row_counted_against_the_total():
+    """``get_result_batches()`` hands out batches the user drives themselves."""
+    cursor = _cursor_over_batches(
+        [_local_json_batch(_json_rows(_TICKET_INLINE_ROWS))], _TICKET_TOTAL
+    )
+
+    (batch,) = cursor.get_result_batches()
+
+    assert len(list(batch)) == _TICKET_INLINE_ROWS

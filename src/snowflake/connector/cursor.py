@@ -1221,6 +1221,10 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             self._connection.client_fetch_threads
             or self._connection.client_prefetch_threads,
             self._connection.client_fetch_use_mp,
+            # SNOW-4109042: a DML reuses "total" for the rows the statement
+            # affected, which says nothing about the rows in its result set, so
+            # only a query's total is a promise worth holding the back-end to.
+            total_row_count=None if is_dml else data.get("total"),
         )
         self._rownumber = -1
         self._result_state = ResultState.VALID

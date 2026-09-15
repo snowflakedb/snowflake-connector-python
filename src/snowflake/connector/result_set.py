@@ -17,7 +17,8 @@ from typing import (
 )
 
 from .constants import IterUnit
-from .errors import NotSupportedError
+from .errorcode import ER_INCOMPLETE_RESULT_CHUNK
+from .errors import Error, NotSupportedError, OperationalError
 from .options import pandas
 from .options import pyarrow as pa
 from .result_batch import (
@@ -36,6 +37,33 @@ if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector.cursor import SnowflakeCursor
 
 logger = getLogger(__name__)
+
+
+def check_total_rowcount(rows_yielded: int, total_row_count: int | None) -> None:
+    """Rejects an exhausted result set that produced fewer rows than ``total``.
+
+    SNOW-4109042: the inline first chunk of a ``query-request`` response can
+    arrive empty while the response still declares the full ``total``. A JSON
+    batch cannot notice on its own -- ``JSONResultBatch.from_data`` takes its
+    ``rowcount`` from ``len(rowset)``, so an empty rowset is a self-consistent
+    zero-row batch -- which leaves the declared total as the only thing the
+    delivered rows can be compared against.
+
+    Callers must only invoke this once the result set ran to genuine exhaustion;
+    a consumer that stops early legitimately sees fewer rows.
+    """
+    if total_row_count is None or rows_yielded >= total_row_count:
+        return
+    raise Error.errorhandler_make_exception(
+        OperationalError,
+        {
+            "msg": (
+                f"Incomplete result: the result set produced {rows_yielded} "
+                f"row(s) but the server reported {total_row_count}."
+            ),
+            "errno": ER_INCOMPLETE_RESULT_CHUNK,
+        },
+    )
 
 
 def result_set_iterator(
@@ -166,11 +194,16 @@ class ResultSet(Iterable[list]):
         result_chunks: list[JSONResultBatch] | list[ArrowResultBatch],
         prefetch_thread_num: int,
         use_mp: bool,
+        total_row_count: int | None = None,
     ) -> None:
         self.batches = result_chunks
         self._cursor = cursor
         self.prefetch_thread_num = prefetch_thread_num
         self._use_mp = use_mp
+        # SNOW-4109042: the row count the back-end declared for the whole result
+        # set, or None when the response carried none (or carried one that says
+        # nothing about the rows, as a DML's "total" does).
+        self._total_row_count = total_row_count
 
     def _report_metrics(self) -> None:
         """Report all metrics totalled up.
@@ -321,7 +354,7 @@ class ResultSet(Iterable[list]):
         for num, batch in enumerate(unfetched_batches):
             logger.debug(f"result batch {num + 1} has id: {batch.id}")
 
-        return result_set_iterator(
+        iterator = result_set_iterator(
             first_batch_iter,
             unconsumed_batches,
             unfetched_batches,
@@ -331,6 +364,31 @@ class ResultSet(Iterable[list]):
             use_mp=self._use_mp,
             **kwargs,
         )
+
+        # SNOW-4109042: only row iteration yields one item per row; a table or
+        # pandas unit yields whole tables, so there is nothing to count there.
+        if (
+            self._total_row_count is None
+            or kwargs.get("iter_unit", IterUnit.ROW_UNIT) != IterUnit.ROW_UNIT
+        ):
+            return iterator
+        return self._iter_checked_total(iterator)
+
+    def _iter_checked_total(
+        self, rows: Iterator[dict | Exception] | Iterator[tuple | Exception]
+    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
+        """Wraps ``rows`` so the declared total is checked once it is exhausted.
+
+        SNOW-4109042: the comparison sits past the last ``yield`` on purpose.
+        Partial consumption -- ``fetchmany`` with a small size, ``break`` out of
+        the cursor, closing the cursor -- abandons this generator at a ``yield``
+        and never reaches it, so only a result set the caller drained is checked.
+        """
+        rows_yielded = 0
+        for row in rows:
+            rows_yielded += 1
+            yield row
+        check_total_rowcount(rows_yielded, self._total_row_count)
 
     def total_row_index(self) -> int:
         """Returns the total rowcount of the ``ResultSet`` ."""
