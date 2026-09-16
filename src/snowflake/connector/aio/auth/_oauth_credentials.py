@@ -51,7 +51,12 @@ class AuthByOauthCredentials(AuthByPluginAsync, AuthByOauthCredentialsSync):
         AuthByOauthCredentialsSync.reset_secrets(self)
 
     async def prepare(self, **kwargs: Any) -> None:
-        AuthByOauthCredentialsSync.prepare(self, **kwargs)
+        # Sync prepare POSTs to the IdP via urllib3 and may sleep on token-request
+        # retries, which would stall the asyncio event loop.
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None, lambda: AuthByOauthCredentialsSync.prepare(self, **kwargs)
+        )
 
     async def reauthenticate(
         self, conn: SnowflakeConnection, **kwargs: Any

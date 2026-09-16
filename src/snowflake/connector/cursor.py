@@ -1221,6 +1221,10 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             self._connection.client_fetch_threads
             or self._connection.client_prefetch_threads,
             self._connection.client_fetch_use_mp,
+            # SNOW-4109042: a DML reuses "total" for the rows the statement
+            # affected, which says nothing about the rows in its result set, so
+            # only a query's total is a promise worth holding the back-end to.
+            total_row_count=None if is_dml else data.get("total"),
         )
         self._rownumber = -1
         self._result_state = ResultState.VALID
@@ -1584,22 +1588,25 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             self._result = iter(self._result_set)
             self._result_state = ResultState.VALID
 
-        try:
-            _next = next(self._result, None)
-            if isinstance(_next, Exception):
-                Error.errorhandler_wrapper_from_ready_exception(
-                    self._connection,
-                    self,
-                    _next,
-                )
-            if _next is not None:
-                self._rownumber += 1
-            return _next
-        except TypeError as err:
+        if self._result is None:
+            # SNOW-4109042: a missing result iterator is the only reason to report
+            # end-of-results here -- a cursor that was reset has no rows left to
+            # hand out. Errors raised while iterating a real result set must reach
+            # the caller instead of looking like a result set that ran out.
             if self._result_state == ResultState.DEFAULT:
-                raise err
-            else:
-                return None
+                raise TypeError("'NoneType' object is not an iterator")
+            return None
+
+        _next = next(self._result, None)
+        if isinstance(_next, Exception):
+            Error.errorhandler_wrapper_from_ready_exception(
+                self._connection,
+                self,
+                _next,
+            )
+        if _next is not None:
+            self._rownumber += 1
+        return _next
 
     def fetchmany(self, size: int | None = None) -> list[FetchRow]:
         """Fetches the number of specified rows."""

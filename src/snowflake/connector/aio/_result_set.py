@@ -29,6 +29,7 @@ from snowflake.connector.aio._result_batch import (
 from snowflake.connector.constants import IterUnit
 from snowflake.connector.options import pandas
 from snowflake.connector.result_set import ResultSet as ResultSetSync
+from snowflake.connector.result_set import check_total_rowcount
 
 from .. import NotSupportedError
 from ..errors import Error
@@ -57,6 +58,7 @@ class ResultSetIterator:
     ) -> None:
         self._is_fetch_all = kw.pop("is_fetch_all", False)
         self._cursor = kw.pop("cursor", None)
+        self._total_row_count = kw.pop("total_row_count", None)
         self._first_batch_iter = first_batch_iter
         self._unfetched_batches = unfetched_batches
         self._final = final
@@ -104,9 +106,22 @@ class ResultSetIterator:
                     )
             rets.extend(batch)
         await self._final()
+        check_total_rowcount(len(rets), self._total_row_count)
         return rets
 
     async def generator(self):
+        """Yields every row, then verifies the count the back-end declared.
+
+        SNOW-4109042: the check sits past the last ``yield`` on purpose, so a
+        consumer that stops early abandons this generator before reaching it.
+        """
+        rows_yielded = 0
+        async for value in self._generate():
+            rows_yielded += 1
+            yield value
+        check_total_rowcount(rows_yielded, self._total_row_count)
+
+    async def _generate(self):
         if self._is_fetch_all:
 
             tasks = await self._download_all_batches()
@@ -172,12 +187,14 @@ class ResultSet(ResultSetSync):
         cursor: SnowflakeCursor,
         result_chunks: list[JSONResultBatch] | list[ArrowResultBatch],
         prefetch_thread_num: int,
+        total_row_count: int | None = None,
     ) -> None:
         super().__init__(
             cursor,
             result_chunks,
             prefetch_thread_num,
             use_mp=False,  # async code depends on aio rather than multiprocessing
+            total_row_count=total_row_count,
         )
         self.batches = cast(
             Union[list[JSONResultBatch], list[ArrowResultBatch]], self.batches
@@ -215,6 +232,14 @@ class ResultSet(ResultSetSync):
         for num, batch in enumerate(unfetched_batches):
             logger.debug(f"result batch {num + 1} has id: {batch.id}")
 
+        # SNOW-4109042: only row iteration yields one item per row; a table or
+        # pandas unit yields whole tables, so there is nothing to count there.
+        total_row_count = (
+            self._total_row_count
+            if kwargs.get("iter_unit", IterUnit.ROW_UNIT) == IterUnit.ROW_UNIT
+            else None
+        )
+
         return ResultSetIterator(
             first_batch_iter,
             unfetched_batches,
@@ -222,6 +247,7 @@ class ResultSet(ResultSetSync):
             self.prefetch_thread_num,
             cursor=self._cursor,
             is_fetch_all=is_fetch_all,
+            total_row_count=total_row_count,
             **kwargs,
         )
 

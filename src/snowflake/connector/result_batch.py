@@ -15,8 +15,18 @@ from .arrow_context import ArrowConverterContext
 from .backoff_policies import exponential_backoff
 from .compat import OK, UNAUTHORIZED, urlparse
 from .constants import FIELD_TYPES, IterUnit
-from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
-from .errors import Error, InterfaceError, NotSupportedError, ProgrammingError
+from .errorcode import (
+    ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
+    ER_INCOMPLETE_RESULT_CHUNK,
+    ER_NO_PYARROW,
+)
+from .errors import (
+    Error,
+    InterfaceError,
+    NotSupportedError,
+    OperationalError,
+    ProgrammingError,
+)
 from .network import (
     RetryRequest,
     get_http_retryable_error,
@@ -366,6 +376,52 @@ class ResultBatch(abc.ABC):
         """
         return self.create_iter()
 
+    def _check_rowcount(self, rows_read: int) -> None:
+        """Rejects a chunk that holds fewer rows than the back-end promised.
+
+        SNOW-4109042: a short chunk otherwise just ends the iteration, which the
+        fetch methods report as a normal end of results, so callers silently get
+        an incomplete result set. This applies to the inline first chunk too: on
+        the Arrow path its ``rowcount`` is ``create_batches_from_response``
+        subtracting the back-end's per-chunk counts from the back-end's ``total``,
+        so it is server metadata, and an empty ``rowsetBase64`` reads as a clean
+        end of stream. A non-positive ``rowcount`` is no promise at all -- a
+        response without ``total`` makes that subtraction zero or negative -- so
+        it is left alone.
+        """
+        if self.rowcount <= 0 or rows_read == self.rowcount:
+            return
+        raise Error.errorhandler_make_exception(
+            OperationalError,
+            {
+                "msg": (
+                    f"Incomplete result: result batch {self.id} holds {rows_read} "
+                    f"row(s) but the server reported {self.rowcount}."
+                ),
+                "errno": ER_INCOMPLETE_RESULT_CHUNK,
+            },
+        )
+
+    def _iter_checked_rows(
+        self, rows: Iterator[dict | Exception] | Iterator[tuple | Exception]
+    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
+        """Wraps ``rows`` so the chunk's row count is checked once it is exhausted.
+
+        SNOW-4109042: the check lives past the last ``yield`` on purpose. A caller
+        that stops early -- ``fetchmany`` with a small size, ``break`` out of the
+        cursor, closing the cursor -- abandons the generator at a ``yield`` and
+        never reaches it, so only a chunk that really ran out is verified.
+        """
+
+        def counting_iter():
+            rows_read = 0
+            for row in rows:
+                rows_read += 1
+                yield row
+            self._check_rowcount(rows_read)
+
+        return counting_iter()
+
     def _download(
         self, connection: SnowflakeConnection | None = None, **kwargs
     ) -> Response:
@@ -648,6 +704,7 @@ class JSONResultBatch(ResultBatch):
         with TimerContextManager() as parse_metric:
             parsed_data = self._parse(downloaded_data)
         self._metrics[DownloadMetrics.parse.value] = parse_metric.get_timing_millis()
+        self._check_rowcount(len(parsed_data))
         return parsed_data
 
     def populate_data(
@@ -920,7 +977,9 @@ class ArrowResultBatch(ResultBatch):
                     force_microsecond_precision=force_microsecond_precision,
                 )
         else:
-            return self._create_iter(iter_unit=iter_unit, connection=connection)
+            return self._iter_checked_rows(
+                self._create_iter(iter_unit=iter_unit, connection=connection)
+            )
 
     def populate_data(
         self, connection: SnowflakeConnection | None = None, **kwargs

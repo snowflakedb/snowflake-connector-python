@@ -333,6 +333,7 @@ class JSONResultBatch(ResultBatch, JSONResultBatchSync):
         async with TimerContextManager() as parse_metric:
             parsed_data = self._parse(downloaded_data)
         self._metrics[DownloadMetrics.parse.value] = parse_metric.get_timing_millis()
+        self._check_rowcount(len(parsed_data))
         return iter(parsed_data)
 
     async def _load(self, content: bytes, encoding: str) -> list:
@@ -451,4 +452,6 @@ class ArrowResultBatch(ResultBatch, ArrowResultBatchSync):
             else:
                 return await self._get_arrow_iter(connection=connection)
         else:
-            return await self._create_iter(iter_unit=iter_unit, connection=connection)
+            return self._iter_checked_rows(
+                await self._create_iter(iter_unit=iter_unit, connection=connection)
+            )
