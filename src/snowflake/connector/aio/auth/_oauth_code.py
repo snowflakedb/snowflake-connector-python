@@ -68,7 +68,12 @@ class AuthByOauthCode(AuthByPluginAsync, AuthByOauthCodeSync):
         AuthByOauthCodeSync.reset_secrets(self)
 
     async def prepare(self, **kwargs: Any) -> None:
-        AuthByOauthCodeSync.prepare(self, **kwargs)
+        # Sync prepare may open a browser, block on the callback socket, POST to
+        # the IdP via urllib3, and sleep on token-request retries.
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None, lambda: AuthByOauthCodeSync.prepare(self, **kwargs)
+        )
 
     async def reauthenticate(
         self, conn: SnowflakeConnection, **kwargs: Any
