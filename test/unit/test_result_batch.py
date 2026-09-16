@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import base64
 import gzip
 import json
 import logging
 from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http import HTTPStatus
+from io import BytesIO
 from test.helpers import create_mock_response
 from unittest import mock
 
@@ -43,10 +45,13 @@ from snowflake.connector.errors import (
 )
 
 try:
+    from snowflake.connector.arrow_context import ArrowConverterContext
     from snowflake.connector.compat import TOO_MANY_REQUESTS
-    from snowflake.connector.errors import TooManyRequests
+    from snowflake.connector.errorcode import ER_INCOMPLETE_RESULT_CHUNK
+    from snowflake.connector.errors import OperationalError, TooManyRequests
     from snowflake.connector.result_batch import (
         MAX_DOWNLOAD_RETRY,
+        ArrowResultBatch,
         JSONResultBatch,
         RemoteChunkInfo,
         _ensure_decompressed,
@@ -58,12 +63,25 @@ try:
     )
 except ImportError:
     MAX_DOWNLOAD_RETRY = None
+    ArrowConverterContext = None
+    ArrowResultBatch = None
     JSONResultBatch = None
     RemoteChunkInfo = None
     _ensure_decompressed = None
     SESSION_FROM_REQUEST_MODULE_PATH = "requests.sessions.Session"
     TooManyRequests = None
     TOO_MANY_REQUESTS = None
+    OperationalError = None
+    ER_INCOMPLETE_RESULT_CHUNK = None
+
+try:
+    import pyarrow
+
+    from snowflake.connector import nanoarrow_arrow_iterator  # noqa: F401
+
+    _have_arrow = True
+except ImportError:
+    _have_arrow = False
 from snowflake.connector.sqlstate import (
     SQLSTATE_CONNECTION_REJECTED,
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
@@ -344,6 +362,221 @@ class TestGzipDecompressionFallback:
 
         loaded = batch._load(response)
         assert loaded == rows
+
+
+def _make_remote_json_batch(rowcount: int, rows: list[list]) -> tuple:
+    """A remote JSON batch plus the decompressed response its download returns."""
+    batch = JSONResultBatch(
+        rowcount=rowcount,
+        chunk_headers=None,
+        remote_chunk_info=RemoteChunkInfo(
+            url="http://fake-s3.example.com/results/chunk_0",
+            uncompressedSize=0,
+            compressedSize=0,
+        ),
+        schema=[],
+        column_converters=[],
+        use_dict_result=False,
+    )
+    response = _make_gzip_response(_make_gzip_json_rows(*rows))
+    _ensure_decompressed(response)
+    return batch, response
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(JSONResultBatch is None, reason="vendored requests unavailable")
+def test_short_remote_chunk_raises_instead_of_ending_iteration():
+    """SNOW-4109042: a chunk holding fewer rows than promised must not look like EOF.
+
+    Such a chunk used to simply stop producing rows, and the fetch methods treat
+    a stopped iterator as a normal end of results, so callers silently received
+    an incomplete result set.
+    """
+    rows = [["val1", 1], ["val2", 2]]
+    batch, response = _make_remote_json_batch(len(rows) + 1, rows)
+
+    with mock.patch.object(batch, "_download", return_value=response):
+        with pytest.raises(OperationalError) as ex:
+            list(batch.create_iter())
+
+    assert ex.value.errno == ER_INCOMPLETE_RESULT_CHUNK
+    assert "holds 2 row(s) but the server reported 3" in ex.value.msg
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(JSONResultBatch is None, reason="vendored requests unavailable")
+def test_complete_remote_chunk_iterates_without_error():
+    rows = [["val1", 1], ["val2", 2]]
+    batch, response = _make_remote_json_batch(len(rows), rows)
+
+    with mock.patch.object(batch, "_download", return_value=response):
+        assert len(list(batch.create_iter())) == len(rows)
+
+
+CHUNKS = [
+    (954, 79),
+    (520, 64),
+    (1716, 60),
+    (288, 97),
+    (98, 31),
+    (36, 36),
+]
+
+
+def _arrow_text_column_ipc(values: list[str]) -> bytes:
+    """A single-column Arrow IPC stream shaped like a Snowflake TEXT result chunk."""
+    stream = BytesIO()
+    field = pyarrow.field(
+        "C1", pyarrow.string(), True, {"logicalType": "TEXT", "charLength": "16777216"}
+    )
+    writer = pyarrow.RecordBatchStreamWriter(stream, pyarrow.schema([field]))
+    writer.write_batch(
+        pyarrow.RecordBatch.from_arrays(
+            [pyarrow.array(values, type=pyarrow.string())], ["C1"]
+        )
+    )
+    writer.close()
+    return stream.getvalue()
+
+
+def _inline_arrow_batch(rowset_b64: str, first_chunk_len: int) -> ArrowResultBatch:
+    """The inline first chunk, built the way ``create_batches_from_response`` builds it."""
+    return ArrowResultBatch.from_data(
+        rowset_b64,
+        first_chunk_len,
+        ArrowConverterContext(session_parameters={}),
+        False,
+        False,
+        [],
+        False,
+    )
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(ArrowResultBatch is None, reason="connector build unavailable")
+@pytest.mark.parametrize("total,first_chunk_len", CHUNKS, ids=str)
+def test_empty_inline_arrow_chunk_raises(total, first_chunk_len):
+    """SNOW-4109042: an empty ``rowsetBase64`` promising rows must not read as EOF.
+
+    ``create_batches_from_response`` derives the inline chunk's rowcount as
+    ``total`` minus the back-end's per-chunk counts, so it is server metadata --
+    and nanoarrow treats zero bytes as a clean end of stream, which is how the
+    customer lost exactly ``total - first chunk rows`` rows without an error.
+    """
+    batch = _inline_arrow_batch(base64.b64encode(b"").decode("ascii"), first_chunk_len)
+
+    with pytest.raises(OperationalError) as ex:
+        list(batch.create_iter())
+
+    assert ex.value.errno == ER_INCOMPLETE_RESULT_CHUNK
+    assert f"holds 0 row(s) but the server reported {first_chunk_len}" in ex.value.msg
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(not _have_arrow, reason="pyarrow or nanoarrow extension missing")
+def test_short_inline_arrow_chunk_raises():
+    """A partially delivered inline chunk is as silent as an empty one was."""
+    rowset = base64.b64encode(_arrow_text_column_ipc(["0", "1", "2"])).decode("ascii")
+    batch = _inline_arrow_batch(rowset, 5)
+
+    with pytest.raises(OperationalError) as ex:
+        list(batch.create_iter())
+
+    assert ex.value.errno == ER_INCOMPLETE_RESULT_CHUNK
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(not _have_arrow, reason="pyarrow or nanoarrow extension missing")
+def test_complete_inline_arrow_chunk_iterates_without_error():
+    rows = ["0", "1", "2", "3", "4"]
+    rowset = base64.b64encode(_arrow_text_column_ipc(rows)).decode("ascii")
+    batch = _inline_arrow_batch(rowset, len(rows))
+
+    assert list(batch.create_iter()) == [(v,) for v in rows]
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(not _have_arrow, reason="pyarrow or nanoarrow extension missing")
+def test_partially_consumed_inline_arrow_chunk_does_not_raise():
+    """Stopping early is normal usage; only an exhausted chunk is verified."""
+    rowset = base64.b64encode(_arrow_text_column_ipc(["0", "1", "2"])).decode("ascii")
+    batch = _inline_arrow_batch(rowset, 3)
+
+    rows = []
+    for row in batch.create_iter():
+        rows.append(row)
+        break
+
+    assert rows == [("0",)]
+
+
+def _mock_cursor_for_batches():
+    cursor = mock.MagicMock()
+    cursor._use_dict_result = False
+    cursor._connection._numpy = False
+    cursor._connection._arrow_number_to_decimal = False
+    cursor._connection._json_result_force_utf8_decoding = False
+    cursor._connection._session_parameters = {}
+    cursor._connection.converter.to_python_method.return_value = None
+    return cursor
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(not _have_arrow, reason="pyarrow or nanoarrow extension missing")
+def test_inline_arrow_chunk_without_declared_total_does_not_raise():
+    """``data.get("total", 0)`` defaults to 0, which is not a promise of any rows.
+
+    Without ``total`` the subtraction that yields the inline chunk's rowcount is
+    zero (or negative once remote chunks are declared), so there is nothing to
+    hold the back-end to and the rows present must be handed over as they are.
+    """
+    from snowflake.connector.result_batch import create_batches_from_response
+
+    rows = ["0", "1", "2"]
+    data = {
+        "rowtype": [],
+        "rowsetBase64": base64.b64encode(_arrow_text_column_ipc(rows)).decode("ascii"),
+    }
+
+    batches = create_batches_from_response(
+        _mock_cursor_for_batches(), "arrow", data, schema=[]
+    )
+
+    assert batches[0].rowcount == 0
+    assert len(list(batches[0].create_iter())) == len(rows)
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(JSONResultBatch is None, reason="vendored requests unavailable")
+def test_empty_inline_json_chunk_is_self_consistent():
+    """SNOW-4109042: the JSON path has no batch-level mismatch to detect.
+
+    ``JSONResultBatch.from_data`` takes its rowcount from ``len(rowset)``, so an
+    empty inline rowset is a perfectly consistent zero-row batch no matter what
+    ``total`` said. Only the result-set-level check can catch that one.
+    """
+    from snowflake.connector.result_batch import create_batches_from_response
+
+    data = {
+        "rowtype": [],
+        "total": 954,
+        "rowset": [],
+        "chunks": [
+            {
+                "url": "https://example.invalid/chunk0",
+                "rowCount": 875,
+                "uncompressedSize": 10,
+                "compressedSize": 5,
+            }
+        ],
+    }
+
+    batches = create_batches_from_response(
+        _mock_cursor_for_batches(), "json", data, schema=[]
+    )
+
+    assert batches[0].rowcount == 0
+    assert list(batches[0].create_iter()) == []
 
 
 @pytest.mark.skipolddriver

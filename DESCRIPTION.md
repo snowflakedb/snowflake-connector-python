@@ -9,6 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - NEXT_RELEASE(TBD)
   - Fixed a bug where a TLS handshake terminated by the peer (`SSLError` containing `SysCallError(-1, 'Unexpected EOF')`) was classified as non-retryable and surfaced as an `OperationalError`, unlike `ECONNRESET`. Such handshake `Unexpected EOF` errors are now retried, on both the sync and async request paths (SNOW-4058589).
+  - Fixed `fetchone()`, `fetchmany()`, `fetchall()` and cursor iteration silently returning an incomplete result set. A downloaded result chunk holding fewer rows than the back-end reported just ended the iteration, which the fetch methods report as a normal end of results, so callers received fewer rows than the query produced with no exception raised. Such a chunk now raises an `OperationalError` (errno `252013`). Errors raised while iterating a result set are no longer reported as end-of-results either: `_fetchone()` caught every `TypeError` and returned `None`, so a failure anywhere in the download/parse chain was indistinguishable from an exhausted result set. Both the sync and async paths are fixed (SNOW-4109042).
 
 - v4.7.3(Sep 3,2026)
   - Added experimental Python 3.14t (free-threaded CPython) wheel support. **Experimental — not intended for production use.**
