@@ -7,6 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v4.7.5 (Unreleased)
+  - Follow-up to the v4.7.4 incomplete-result fix (SNOW-4109042): when a successful query-request has an incomplete inline first chunk, the connector re-fetches the finished query once via `GET /queries/{qid}/result` before building the result set. JSON treats empty or shorter-than-declared inline rowsets as incomplete; Arrow only treats a missing/empty `rowsetBase64` as incomplete so the execute hot path does not decode IPC. If the result GET fails (transport error or `success: false`), the original payload is kept; if the GET succeeds but is still incomplete, that response is used. In either incomplete case the existing rowcount/total checks still raise `OperationalError` errno `252013` when the result is drained (no silent EOF). Short remote chunks and non-empty short Arrow payloads are not recovered by this path.
+
 - v4.7.4(Sep 16,2026)
   - Fixed missing retries on transient HTTP failures when fetching an OAuth access token from the IdP token endpoint (`OAUTH_CLIENT_CREDENTIALS` and `OAUTH_AUTHORIZATION_CODE`). Token requests now retry transport errors, HTTP 408/429, and 5xx responses (SNOW-3984430, #3003).
   - Fixed a bug where a TLS handshake terminated by the peer (`SSLError` containing `SysCallError(-1, 'Unexpected EOF')`) was classified as non-retryable and surfaced as an `OperationalError`, unlike `ECONNRESET`. Such handshake `Unexpected EOF` errors are now retried, on both the sync and async request paths (SNOW-4058589).

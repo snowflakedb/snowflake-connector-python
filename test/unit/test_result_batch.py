@@ -454,6 +454,90 @@ def _inline_arrow_batch(rowset_b64: str, first_chunk_len: int) -> ArrowResultBat
 
 @pytest.mark.skipolddriver
 @pytest.mark.skipif(ArrowResultBatch is None, reason="connector build unavailable")
+def test_is_inline_result_incomplete_detects_empty_json_inline():
+    """Detection used before GET /queries/{qid}/result recovery."""
+    from snowflake.connector.result_batch import is_inline_result_incomplete
+
+    incomplete = {
+        "total": 36,
+        "rowset": [],
+        "queryResultFormat": "json",
+    }
+    complete = {
+        "total": 36,
+        "rowset": [[str(i)] for i in range(36)],
+        "queryResultFormat": "json",
+    }
+    no_promise = {"rowset": [], "queryResultFormat": "json"}
+    remote_covers_all = {
+        "total": 100,
+        "rowset": [],
+        "chunks": [{"rowCount": 100}],
+        "queryResultFormat": "json",
+    }
+
+    short = {
+        "total": 36,
+        "rowset": [[str(i)] for i in range(10)],
+        "queryResultFormat": "json",
+    }
+
+    assert is_inline_result_incomplete(incomplete) is True
+    assert is_inline_result_incomplete(complete) is False
+    assert is_inline_result_incomplete(short) is True
+    assert is_inline_result_incomplete(no_promise) is False
+    assert is_inline_result_incomplete(remote_covers_all) is False
+    # Non-sequence rowset must not raise on the execute hot path
+    assert (
+        is_inline_result_incomplete(
+            {"total": 36, "rowset": 123, "queryResultFormat": "json"}
+        )
+        is False
+    )
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(ArrowResultBatch is None, reason="connector build unavailable")
+def test_is_inline_result_incomplete_detects_empty_arrow_inline():
+    from snowflake.connector.result_batch import is_inline_result_incomplete
+
+    assert (
+        is_inline_result_incomplete(
+            {
+                "total": 954,
+                "rowsetBase64": "",
+                "chunks": [{"rowCount": 875}],
+                "queryResultFormat": "arrow",
+            }
+        )
+        is True
+    )
+    assert (
+        is_inline_result_incomplete(
+            {
+                "total": 36,
+                "rowsetBase64": "",
+                "queryResultFormat": "arrow",
+            }
+        )
+        is True
+    )
+    # Non-empty payload is not decoded on the hot path; a short Arrow chunk
+    # is left to the batch rowcount check.
+    assert (
+        is_inline_result_incomplete(
+            {
+                "total": 36,
+                "rowsetBase64": "not-empty",
+                "queryResultFormat": "arrow",
+            }
+        )
+        is False
+    )
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(ArrowResultBatch is None, reason="connector build unavailable")
 @pytest.mark.parametrize("total,first_chunk_len", CHUNKS, ids=str)
 def test_empty_inline_arrow_chunk_raises(total, first_chunk_len):
     """SNOW-4109042: an empty ``rowsetBase64`` promising rows must not read as EOF.

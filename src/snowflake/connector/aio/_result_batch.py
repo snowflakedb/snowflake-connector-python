@@ -32,7 +32,10 @@ from snowflake.connector.result_batch import DownloadMetrics
 from snowflake.connector.result_batch import JSONResultBatch as JSONResultBatchSync
 from snowflake.connector.result_batch import RemoteChunkInfo
 from snowflake.connector.result_batch import ResultBatch as ResultBatchSync
-from snowflake.connector.result_batch import _create_nanoarrow_iterator
+from snowflake.connector.result_batch import (
+    _create_nanoarrow_iterator,
+    inline_first_chunk_rowcount,
+)
 from snowflake.connector.secret_detector import SecretDetector
 
 if TYPE_CHECKING:
@@ -60,8 +63,7 @@ def create_batches_from_response(
     column_converters: list[tuple[str, SnowflakeConverterType]] = []
     arrow_context: ArrowConverterContext | None = None
     rowtypes = data["rowtype"]
-    total_len: int = data.get("total", 0)
-    first_chunk_len = total_len
+    first_chunk_len = inline_first_chunk_rowcount(data)
     rest_of_chunks: list[ResultBatch] = []
     if _format == "json":
 
@@ -138,8 +140,6 @@ def create_batches_from_response(
                 )
                 for c in chunks
             ]
-    for c in rest_of_chunks:
-        first_chunk_len -= c.rowcount
     if _format == "json":
         first_chunk = JSONResultBatch.from_data(
             data.get("rowset"),
