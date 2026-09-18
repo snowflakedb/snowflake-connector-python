@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import os
+import ssl
 from collections import defaultdict
 from enum import Enum, auto, unique
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Callable, DefaultDict, NamedTuple
 
 from .options import pyarrow as pa
@@ -466,9 +469,61 @@ ENV_VAR_PARTNER = "SF_PARTNER"
 ENV_VAR_TEST_MODE = "SNOWFLAKE_TEST_MODE"
 ENV_VAR_DISABLE_PLATFORM_DETECTION = "SNOWFLAKE_DISABLE_PLATFORM_DETECTION"
 ENV_VAR_ENABLE_CUSTOM_REVOCATION_ERRORS = "SNOWFLAKE_ENABLE_CUSTOM_REVOCATION_ERRORS"
+ENV_VAR_MIN_TLS_VERSION = "SNOWFLAKE_MIN_TLS_VERSION"
 
 # Boolean positive values (lowercased) for environment variable checks
 ENV_VAR_BOOL_POSITIVE_VALUES_LOWERCASED = ["true"]
+
+# Floor applied when ENV_VAR_MIN_TLS_VERSION is unset. Matches urllib3's own
+# default (create_urllib3_context), so leaving the variable unset preserves the
+# connector's historical behavior exactly.
+DEFAULT_MIN_TLS_VERSION: ssl.TLSVersion = ssl.TLSVersion.TLSv1_2
+
+# Accepted spellings, matched case-insensitively after trimming. Deliberately the
+# same set the Go and JDBC drivers accept, so one value can be documented and
+# deployed across drivers unchanged.
+_MIN_TLS_VERSION_VALUES: dict[str, ssl.TLSVersion] = {
+    "1.2": ssl.TLSVersion.TLSv1_2,
+    "tlsv1.2": ssl.TLSVersion.TLSv1_2,
+    "1.3": ssl.TLSVersion.TLSv1_3,
+    "tlsv1.3": ssl.TLSVersion.TLSv1_3,
+}
+
+
+@lru_cache(maxsize=None)
+def _parse_min_tls_version(raw: str) -> ssl.TLSVersion:
+    """Parse a minimum-TLS-version string into an ``ssl.TLSVersion``.
+
+    Accepts ``1.2``, ``1.3``, ``TLSv1.2`` and ``TLSv1.3``, case-insensitively and
+    ignoring surrounding whitespace.
+
+    Raises:
+        ValueError: if the value is not a recognized TLS version. A minimum TLS
+            version is a security control, so an unrecognized value fails loudly
+            rather than silently falling back to a weaker floor.
+
+    Cached per distinct input string so that repeated handshakes don't re-parse.
+    """
+    parsed = _MIN_TLS_VERSION_VALUES.get(raw.strip().lower())
+    if parsed is None:
+        raise ValueError(
+            f"Invalid {ENV_VAR_MIN_TLS_VERSION} value {raw!r}. "
+            f"Supported values: {', '.join(sorted(_MIN_TLS_VERSION_VALUES))}."
+        )
+    return parsed
+
+
+def get_min_tls_version() -> ssl.TLSVersion:
+    """Return the process-wide minimum TLS version.
+
+    Read from ENV_VAR_MIN_TLS_VERSION on every call (so the value is not frozen
+    at import time), falling back to DEFAULT_MIN_TLS_VERSION when unset or empty.
+    """
+    raw = os.environ.get(ENV_VAR_MIN_TLS_VERSION, "").strip()
+    if not raw:
+        return DEFAULT_MIN_TLS_VERSION
+    return _parse_min_tls_version(raw)
+
 
 _DOMAIN_NAME_MAP = {_DEFAULT_HOSTNAME_TLD: "GLOBAL", _CHINA_HOSTNAME_TLD: "CHINA"}
 

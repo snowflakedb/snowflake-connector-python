@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, field, fields, replace
 from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Mapping, TypeVar
 
 from .compat import urlparse
+from .options import installed_azure_identity
 from .proxy import get_proxy_url
 from .url_util import should_bypass_proxies
 from .vendored import requests
@@ -648,3 +649,63 @@ class SessionManagerFactory:
             return ProxySessionManager(config, **http_config_kwargs)
         else:
             return SessionManager(config, **http_config_kwargs)
+
+
+def build_azure_transport():
+    """Build an azure-core transport that honors the configured TLS floor.
+
+    azure-core based SDKs (azure-identity) send their requests through the *real*
+    ``requests``/``urllib3``, so neither the connector's vendored-urllib3 patch
+    nor the botocore hook in ``ssl_wrap_socket`` reaches them. Unlike botocore
+    they need no patching: ``transport=`` is the azure-core convention for
+    supplying your own transport, so this uses public API only. Any azure SDK the
+    driver picks up later can be covered the same way.
+
+    This lives here rather than next to the other TLS hooks because it builds an
+    HTTP client, which is this module's remit -- and it is the module allowed to
+    touch HTTP libraries directly. It cannot use ``SessionManager`` itself:
+    azure-core requires a real ``requests.Session``, not the vendored one.
+
+    The caller must close the returned transport -- azure-core owns the session
+    (``session_owner`` defaults to ``True``) and closes it with the transport.
+
+    Returns ``None`` when azure-identity is not installed; callers treat that as
+    "use the SDK default".
+    """
+    if not installed_azure_identity:
+        return None
+
+    # Imported lazily: these are the *real* requests/urllib3, azure-core's
+    # dependencies rather than the connector's own (which are vendored), so they
+    # must not be imported at module scope.
+    from azure.core.pipeline.transport import RequestsTransport
+    from requests import Session as RealSession
+    from requests.adapters import HTTPAdapter as RealHTTPAdapter
+    from urllib3.util.ssl_ import create_urllib3_context
+
+    # Local import avoids a circular dependency at module load time.
+    from snowflake.connector.ssl_wrap_socket import _raise_version_floor
+
+    def _floored_context():
+        # create_urllib3_context() applies the hardening requests would have
+        # applied anyway; only the version floor is raised on top of it.
+        ctx = create_urllib3_context()
+        _raise_version_floor(ctx)
+        return ctx
+
+    class _MinTLSAdapter(RealHTTPAdapter):
+        def init_poolmanager(self, *args, **kwargs):
+            kwargs["ssl_context"] = _floored_context()
+            return super().init_poolmanager(*args, **kwargs)
+
+        def proxy_manager_for(self, *args, **kwargs):
+            # requests builds a *separate* manager for HTTPS-through-an-HTTP-proxy
+            # and does not carry init_poolmanager's pool_kwargs over to it (it
+            # retains only connections/maxsize/block, for pickling). Without this
+            # the floor would silently not apply to proxied token fetches.
+            kwargs["ssl_context"] = _floored_context()
+            return super().proxy_manager_for(*args, **kwargs)
+
+    session = RealSession()
+    session.mount("https://", _MinTLSAdapter())
+    return RequestsTransport(session=session)

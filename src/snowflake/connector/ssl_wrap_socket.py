@@ -21,10 +21,16 @@ from typing import TYPE_CHECKING, Any
 import certifi
 import OpenSSL.SSL
 
-from .constants import OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT, OCSPMode
+from .constants import (
+    ENV_VAR_MIN_TLS_VERSION,
+    OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,
+    OCSPMode,
+    get_min_tls_version,
+)
 from .crl import CertRevocationCheckMode, CRLConfig, CRLValidator
-from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
+from .errorcode import ER_FAILED_TO_CONNECT_TO_DB, ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
+from .options import botocore, installed_boto
 from .session_manager import SessionManager, SessionManagerFactory
 from .vendored.urllib3 import connection as connection_
 from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext, WrappedSocket
@@ -46,6 +52,11 @@ FEATURE_CRL_CONFIG: CRLConfig = DEFAULT_CRL_CONFIG
 OCSP Response cache file name
 """
 FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME: str | None = None
+
+# Set when inject_min_tls_version_into_botocore() could not install its hook,
+# so AWS SDK requests are not honoring the configured floor. Reported at connect
+# time, and only to callers who configured one -- see _validate_min_tls_version.
+BOTOCORE_MIN_TLS_HOOK_ERROR: str | None = None
 
 log = logging.getLogger(__name__)
 
@@ -102,6 +113,35 @@ def _nonnegative_options(value: int) -> int:
     return value & 0xFFFFFFFF if value < 0 else value
 
 
+def _raise_version_floor(ctx: PyOpenSSLContext | ssl.SSLContext) -> None:
+    """Raise ``ctx``'s TLS floor to the configured process-wide minimum.
+
+    Accepts either context type: the connector's own handshakes use a
+    ``PyOpenSSLContext``, while the botocore hook below clamps stdlib contexts.
+
+    Raise-only: a floor already at or above the configured minimum is left alone,
+    so a caller that asked for something stricter is never weakened by this.
+
+    A misconfigured ``SNOWFLAKE_MIN_TLS_VERSION`` propagates as ``ValueError``
+    rather than being swallowed -- silently continuing with a weaker floor than
+    the operator asked for is the one outcome this must not produce.
+    """
+    floor = get_min_tls_version()
+    try:
+        if ctx.minimum_version < floor:
+            ctx.minimum_version = floor
+    except (OSError, OpenSSL.SSL.Error, OverflowError, TypeError) as exc:
+        # A context that cannot report or accept a floor must not be left
+        # silently below the requested minimum.
+        raise OperationalError(
+            msg=(
+                f"Could not enforce the minimum TLS version requested via "
+                f"{ENV_VAR_MIN_TLS_VERSION}: {exc}"
+            ),
+            errno=ER_FAILED_TO_CONNECT_TO_DB,
+        ) from exc
+
+
 def _apply_stdlib_hardening(dst: PyOpenSSLContext, src: ssl.SSLContext | None) -> None:
     """Carry TLS hardening from a stdlib ``SSLContext`` onto ``dst``.
 
@@ -112,6 +152,13 @@ def _apply_stdlib_hardening(dst: PyOpenSSLContext, src: ssl.SSLContext | None) -
     any hardening a caller set on a supplied context. Copy the
     settings we can read back; fall back to urllib3's default floor when there
     is no source context to mirror.
+
+    Finally, the process-wide floor from ``SNOWFLAKE_MIN_TLS_VERSION`` is applied
+    on top of whichever branch ran. This must happen *after* the mirroring: in a
+    real connection urllib3 always builds a context itself (requests never passes
+    ``ssl_context``), so the mirroring branch is the one that runs and it would
+    otherwise pin the floor back down to urllib3's TLS 1.2 default and discard
+    the configured minimum entirely.
 
     Limitation: cipher restrictions and pinned CA material (``cadata`` /
     ``load_verify_locations``) cannot be read back out of an ``ssl.SSLContext``,
@@ -142,6 +189,8 @@ def _apply_stdlib_hardening(dst: PyOpenSSLContext, src: ssl.SSLContext | None) -
             dst.options |= ssl.OP_NO_COMPRESSION
         except (ValueError, OSError, OpenSSL.SSL.Error, OverflowError, TypeError):
             pass
+
+    _raise_version_floor(dst)
 
 
 def _build_context_with_partial_chain(
@@ -222,6 +271,69 @@ def inject_into_urllib3() -> None:
     """Monkey-patch urllib3 with PyOpenSSL-backed SSL-support and OCSP."""
     log.debug("Injecting ssl_wrap_socket_with_ocsp")
     connection_.ssl_wrap_socket = ssl_wrap_socket_with_cert_revocation_checks
+
+
+def inject_min_tls_version_into_botocore() -> None:
+    """Apply the configured TLS floor to the SSL contexts botocore builds.
+
+    botocore drives its requests through the *real* ``urllib3`` and builds their
+    contexts with its own private copy of ``create_urllib3_context``, so
+    ``inject_into_urllib3`` -- which patches the connector's vendored copy --
+    never sees them. Without this hook every AWS SDK request negotiates at
+    botocore's own floor regardless of ``SNOWFLAKE_MIN_TLS_VERSION``: the STS
+    calls behind workload identity authentication, and the
+    ``GetCallerIdentity`` probe that platform detection issues on ordinary
+    connections.
+
+    Only the version floor is applied here. botocore builds stdlib contexts
+    deliberately (its own comment says it vendors the factory "to ensure that
+    the SSL contexts we construct always use the std lib SSLContext instead of
+    pyopenssl"), and AWS endpoints are not ours to revocation-check, so neither
+    the PyOpenSSL substitution nor OCSP/CRL validation is injected.
+
+    Scoped to botocore's module namespace: the caller's own ``urllib3`` is left
+    untouched, so unrelated application traffic keeps its own TLS policy.
+
+    No-op when boto is not installed. Idempotent.
+
+    ``create_urllib3_context`` is private to botocore, so a rename there would
+    leave AWS SDK requests at botocore's own floor. Rather than let that surface
+    as an ``AttributeError`` while importing the connector -- which would break
+    every user, including those not using the floor at all -- the failure is
+    recorded in ``BOTOCORE_MIN_TLS_HOOK_ERROR`` and reported at connect time,
+    but only to callers who actually configured a minimum TLS version.
+    """
+    global BOTOCORE_MIN_TLS_HOOK_ERROR
+
+    if not installed_boto:
+        return
+
+    try:
+        original = botocore.httpsession.create_urllib3_context
+    except AttributeError as exc:
+        BOTOCORE_MIN_TLS_HOOK_ERROR = str(exc)
+        log.warning(
+            "Could not hook botocore's TLS context factory (%s); AWS SDK requests "
+            "will not honor %s. This is reported as an error when a minimum TLS "
+            "version is configured.",
+            exc,
+            ENV_VAR_MIN_TLS_VERSION,
+        )
+        return
+
+    if getattr(original, "_snowflake_min_tls_wrapped", False):
+        return
+
+    @wraps(original)
+    def create_urllib3_context_with_min_tls(*args: Any, **kwargs: Any):
+        ctx = original(*args, **kwargs)
+        _raise_version_floor(ctx)
+        return ctx
+
+    create_urllib3_context_with_min_tls._snowflake_min_tls_wrapped = True
+    botocore.httpsession.create_urllib3_context = create_urllib3_context_with_min_tls
+    BOTOCORE_MIN_TLS_HOOK_ERROR = None
+    log.debug("Applied minimum TLS version hook to botocore")
 
 
 def _load_trusted_certificates(cafile: str | None) -> list[x509.Certificate]:

@@ -461,6 +461,25 @@ class RevocationCheckError(OperationalError):
         )
 
 
+class NonRetryableTlsError(OperationalError):
+    """A TLS failure that cannot succeed on a retry.
+
+    Raised for handshake failures whose cause is a property of the endpoint or of
+    the local configuration rather than a transient network fault -- a protocol
+    version floor the peer cannot meet, an untrusted certificate, a hostname
+    mismatch. Retrying cannot change the outcome.
+
+    It exists as its own type so the authentication layer can re-raise it
+    directly instead of feeding it into its retry-until-timeout loop, which would
+    otherwise replace this error's diagnosis with a generic "could not connect"
+    message. Transient handshake faults (ECONNRESET, unexpected EOF) are *not*
+    raised as this type and remain retryable.
+
+    Still an ``OperationalError`` carrying the same errno, so existing handlers
+    keep working.
+    """
+
+
 # internal errors
 class InternalServerError(Error):
     """Exception for 500 HTTP code for retry."""

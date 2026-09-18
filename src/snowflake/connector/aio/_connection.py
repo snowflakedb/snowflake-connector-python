@@ -23,6 +23,7 @@ from snowflake.connector import (
     OperationalError,
     ProgrammingError,
 )
+from snowflake.connector.errors import NonRetryableTlsError
 
 from .._connection_identifier_shape import (
     ConnectionIdentifierShape,
@@ -38,6 +39,7 @@ from ..connection import _get_private_bytes_from_file
 from ..constants import (
     _CONNECTIVITY_ERR_MSG,
     _OAUTH_DEFAULT_SCOPE,
+    ENV_VAR_MIN_TLS_VERSION,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
@@ -570,6 +572,11 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 password_callback=self._password_callback,
                 session_parameters=self._session_parameters,
             )
+        except NonRetryableTlsError:
+            # See the sync counterpart: a TLS failure that a retry cannot fix must
+            # surface with its diagnosis rather than be replaced by the generic
+            # "could not connect" message the retry loop below ends with.
+            raise
         except OperationalError as e:
             logger.debug(
                 "Operational Error raised at authentication"
@@ -1110,6 +1117,20 @@ class SnowflakeConnection(SnowflakeConnectionSync):
     async def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")
+        self._validate_min_tls_version()
+        # Validating the value here must not be read as enforcing it: the async
+        # stack builds its TLS contexts through aiohttp, which the connector's
+        # urllib3 interception never sees, so the floor is not applied to async
+        # handshakes. Say so rather than let a successful connect imply otherwise.
+        # Not raised, because the variable is process-wide -- failing here would
+        # break async connections in any process that set it for the sync path.
+        if os.environ.get(ENV_VAR_MIN_TLS_VERSION, "").strip():
+            logger.warning(
+                "%s is set but is not enforced on asynchronous connections; their "
+                "TLS handshakes may negotiate a lower version. Use a synchronous "
+                "connection where the minimum must be guaranteed.",
+                ENV_VAR_MIN_TLS_VERSION,
+            )
         if len(kwargs) > 0:
             self.__config(**kwargs)
         else:

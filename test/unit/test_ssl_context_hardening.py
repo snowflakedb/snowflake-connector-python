@@ -14,7 +14,14 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 import snowflake.connector.ssl_wrap_socket as ssw  # pylint: disable=import-error
-from snowflake.connector.constants import OCSPMode  # pylint: disable=import-error
+from snowflake.connector.constants import (  # pylint: disable=import-error
+    ENV_VAR_MIN_TLS_VERSION,
+    OCSPMode,
+    get_min_tls_version,
+)
+from snowflake.connector.vendored.urllib3.util.ssl_ import (  # pylint: disable=import-error
+    create_urllib3_context,
+)
 
 _HAS_TLS13 = hasattr(ssl.TLSVersion, "TLSv1_3")
 
@@ -197,6 +204,132 @@ def _wrap(certfile, client_min_version, addr):
     except BaseException:
         s.close()
         raise
+
+
+def _urllib3_style_context():
+    """Build the context urllib3 hands to ``ssl_wrap_socket`` in a real connection.
+
+    requests never populates ``ssl_context``, so urllib3 always constructs one
+    itself via ``create_urllib3_context()`` (floor: TLS 1.2) and passes it down.
+    Tests that pass ``None`` instead exercise a branch real traffic never takes.
+    """
+    return create_urllib3_context(ssl_minimum_version=None)
+
+
+@pytest.mark.skipif(not _HAS_TLS13, reason="TLS 1.3 not available")
+def test_env_floor_applied_over_urllib3_supplied_context(monkeypatch):
+    """The configured floor must survive the context urllib3 actually supplies.
+
+    Regression guard: the floor used to be applied only when *no* source context
+    was supplied. Because urllib3 always supplies one, the mirroring branch put
+    the floor back down to urllib3's TLS 1.2 default and the configured minimum
+    was silently discarded on every real connection.
+    """
+    monkeypatch.setenv(ENV_VAR_MIN_TLS_VERSION, "1.3")
+
+    src = _urllib3_style_context()
+    assert src.minimum_version == ssl.TLSVersion.TLSv1_2  # what urllib3 gives us
+
+    ctx = ssw._build_context_with_partial_chain(None, src_context=src)
+
+    assert ctx.minimum_version == ssl.TLSVersion.TLSv1_3
+
+
+@pytest.mark.skipif(not _HAS_TLS13, reason="TLS 1.3 not available")
+def test_env_floor_never_lowers_a_stricter_caller_floor(monkeypatch):
+    """The floor is raise-only: a stricter caller setting must not be weakened."""
+    monkeypatch.setenv(ENV_VAR_MIN_TLS_VERSION, "1.2")
+
+    src = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    src.minimum_version = ssl.TLSVersion.TLSv1_3
+
+    ctx = ssw._build_context_with_partial_chain(None, src_context=src)
+
+    assert ctx.minimum_version == ssl.TLSVersion.TLSv1_3
+
+
+def test_env_floor_unset_preserves_historical_default(monkeypatch):
+    """Leaving the variable unset must not change the connector's TLS 1.2 floor."""
+    monkeypatch.delenv(ENV_VAR_MIN_TLS_VERSION, raising=False)
+
+    ctx = ssw._build_context_with_partial_chain(
+        None, src_context=_urllib3_style_context()
+    )
+
+    assert ctx.minimum_version == ssl.TLSVersion.TLSv1_2
+
+
+@pytest.mark.parametrize("raw", ["1.3", "TLSv1.3", "tlsv1.3", " TLSV1.3 "])
+@pytest.mark.skipif(not _HAS_TLS13, reason="TLS 1.3 not available")
+def test_env_floor_accepted_spellings(monkeypatch, raw):
+    """Every spelling the Go and JDBC drivers accept resolves to the same floor."""
+    monkeypatch.setenv(ENV_VAR_MIN_TLS_VERSION, raw)
+    assert get_min_tls_version() == ssl.TLSVersion.TLSv1_3
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "1.4",
+        "TLSv1_1",
+        "yes",
+        "1,3",
+        # Underscore is Python's own enum spelling but not accepted by the other
+        # drivers, so it is rejected here too rather than widening the contract
+        # past what a cross-driver value can rely on.
+        "TLSv1_3",
+    ],
+)
+def test_env_floor_rejects_invalid_values(monkeypatch, raw):
+    """An unrecognized value fails loudly instead of falling back to a weaker floor."""
+    monkeypatch.setenv(ENV_VAR_MIN_TLS_VERSION, raw)
+    with pytest.raises(ValueError, match=ENV_VAR_MIN_TLS_VERSION):
+        get_min_tls_version()
+
+
+@pytest.mark.skipif(not _HAS_TLS13, reason="TLS 1.3 not available")
+def test_env_floor_is_enforced_end_to_end(tmp_path, monkeypatch):
+    """The env floor must fail a real handshake against a TLS-1.2-only server.
+
+    Same shape as the caller-floor test below, but driven purely by the
+    environment variable and through the context urllib3 really supplies -- so it
+    covers the path every Snowflake API call, stage transfer, OCSP/CRL fetch and
+    platform-detection probe takes.
+    """
+    cert, key = _self_signed()
+    certfile, keyfile = _write_pem(tmp_path, cert, key)
+
+    def wrap(addr):
+        s = socket.socket()
+        s.settimeout(5)
+        s.connect(addr)
+        try:
+            return ssw.ssl_wrap_socket_with_cert_revocation_checks(
+                sock=s,
+                server_hostname="localhost",
+                ssl_context=_urllib3_style_context(),
+                ca_certs=certfile,
+            )
+        except BaseException:
+            s.close()
+            raise
+
+    # Positive control: floor at 1.2 handshakes against the 1.2-only server, so
+    # the trust/hostname setup is sound and the failure below is attributable
+    # solely to the version floor.
+    monkeypatch.setenv(ENV_VAR_MIN_TLS_VERSION, "1.2")
+    addr, stop_evt = _start_server(certfile, keyfile, ssl.TLSVersion.TLSv1_2)
+    wrapped = wrap(addr)
+    assert wrapped is not None
+    wrapped.close()
+    stop_evt.wait(5)
+
+    # Negative case: floor at 1.3 must fail the handshake.
+    monkeypatch.setenv(ENV_VAR_MIN_TLS_VERSION, "1.3")
+    addr, stop_evt = _start_server(certfile, keyfile, ssl.TLSVersion.TLSv1_2)
+    with pytest.raises(ssl.SSLError):
+        wrap(addr)
+    stop_evt.wait(5)
 
 
 @pytest.mark.skipif(not _HAS_TLS13, reason="TLS 1.3 not available")
