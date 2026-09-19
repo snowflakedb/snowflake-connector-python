@@ -45,6 +45,72 @@ logger = getLogger(__name__)
 MAX_DOWNLOAD_RETRY = 10
 DOWNLOAD_TIMEOUT = 7  # seconds
 
+# SNOW-4109042: how many times to re-GET ``/queries/{qid}/result`` when the
+# inline first chunk of a successful query-request is empty/short.
+MAX_INLINE_RESULT_RETRY = 1
+
+
+def inline_first_chunk_rowcount(data: dict[str, Any]) -> int:
+    """Rows attributed to the inline first chunk: ``total`` minus remote chunk rowCounts.
+
+    Shared by ``create_batches_from_response`` and incompleteness detection.
+    A missing ``total`` is treated as 0, matching historical batch construction.
+    """
+    total = data.get("total", 0)
+    if total is None:
+        total = 0
+    first_chunk_len = int(total)
+    for chunk in data.get("chunks") or ():
+        first_chunk_len -= int(chunk.get("rowCount", 0))
+    return first_chunk_len
+
+
+def expected_inline_rowcount(data: dict[str, Any]) -> int | None:
+    """Rows the inline first chunk should hold, or ``None`` if ``total`` is unusable.
+
+    Unlike ``inline_first_chunk_rowcount``, a missing ``total`` is not treated as
+    zero: incompleteness detection must not invent a row promise.
+    """
+    if data.get("total") is None:
+        return None
+    try:
+        return inline_first_chunk_rowcount(data)
+    except (TypeError, ValueError):
+        return None
+
+
+def is_inline_result_incomplete(
+    data: dict[str, Any], query_result_format: str | None = None
+) -> bool:
+    """True when the inline first chunk is missing rows the server declared.
+
+    SNOW-4109042: GS can return HTTP 200 with a parseable body whose inline
+    ``rowset`` / ``rowsetBase64`` is empty while ``total`` still promises rows.
+    Callers re-fetch the finished query result before handing a ResultSet to
+    the application.
+
+    JSON uses ``len(rowset)`` (O(1)). Arrow only treats a missing/empty
+    ``rowsetBase64`` as incomplete so the execute hot path does not decode IPC.
+    A non-empty but short Arrow chunk is left to the batch rowcount check
+    (acceptable for the SNOW-4109042 GS cases, which were empty inline).
+    """
+    expected = expected_inline_rowcount(data)
+    if expected is None or expected <= 0:
+        return False
+    fmt = (query_result_format or data.get("queryResultFormat") or "json").lower()
+    if fmt == "json":
+        rowset = data.get("rowset")
+        if rowset is None:
+            return True
+        try:
+            actual = len(rowset)
+        except TypeError:
+            # Non-sequence rowset: skip recovery rather than fail the hot path.
+            return False
+        return actual < expected
+    return not data.get("rowsetBase64")
+
+
 if TYPE_CHECKING:  # pragma: no cover
     from pandas import DataFrame
     from pyarrow import DataType, Table
@@ -146,8 +212,9 @@ def create_batches_from_response(
     column_converters: list[tuple[str, SnowflakeConverterType]] = []
     arrow_context: ArrowConverterContext | None = None
     rowtypes = data["rowtype"]
-    total_len: int = data.get("total", 0)
-    first_chunk_len = total_len
+    # Declared inline size. ArrowResultBatch.from_data uses it as rowcount;
+    # JSONResultBatch.from_data still takes len(rowset) and ignores this arg.
+    first_chunk_len = inline_first_chunk_rowcount(data)
     rest_of_chunks: list[ResultBatch] = []
     if _format == "json":
 
@@ -224,8 +291,6 @@ def create_batches_from_response(
                 )
                 for c in chunks
             ]
-    for c in rest_of_chunks:
-        first_chunk_len -= c.rowcount
     if _format == "json":
         first_chunk = JSONResultBatch.from_data(
             data.get("rowset"),

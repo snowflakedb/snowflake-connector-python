@@ -24,7 +24,11 @@ if installed_boto:
 
 from .errorcode import ER_INVALID_WIF_SETTINGS, ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import MissingDependencyError, ProgrammingError
-from .session_manager import SessionManager, SessionManagerFactory
+from .session_manager import (
+    SessionManager,
+    SessionManagerFactory,
+    build_azure_transport,
+)
 
 logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
@@ -366,8 +370,18 @@ def get_azure_mi_token_via_aks(resource: str) -> str:
         "Detected AKS workload identity environment, using WorkloadIdentityCredential"
     )
     try:
-        credential = azure_identity.WorkloadIdentityCredential()
-        return credential.get_token(f"{resource}/.default").token
+        # Hand the credential a transport carrying the configured TLS floor;
+        # azure-core builds its own contexts otherwise, which the connector's
+        # urllib3 patch never sees.
+        transport = build_azure_transport()
+        kwargs = {"transport": transport} if transport is not None else {}
+        credential = azure_identity.WorkloadIdentityCredential(**kwargs)
+        try:
+            return credential.get_token(f"{resource}/.default").token
+        finally:
+            # azure-core owns the session we handed it and closes it with the
+            # credential; without this the session would leak per attestation.
+            credential.close()
     except Exception as e:
         raise ProgrammingError(
             msg=f"Error fetching Azure MI token via WorkloadIdentityCredential: {e}. Ensure the application is running on AKS with workload identity configured.",

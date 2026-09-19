@@ -23,11 +23,13 @@ from .constants import (
     ResultStatus,
 )
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
-from .errors import RequestExceedMaxRetryError
+from .errorcode import ER_FAILED_TO_REQUEST
+from .errors import NonRetryableTlsError, RequestExceedMaxRetryError
 from .file_util import SnowflakeFileUtil
 from .session_manager import SessionManager, SessionManagerFactory
 from .vendored import requests
 from .vendored.requests import ConnectionError, Timeout
+from .vendored.requests.exceptions import SSLError
 from .vendored.urllib3 import HTTPResponse
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -328,6 +330,25 @@ class SnowflakeStorageClient(ABC):
                     else:
                         return response
             except self.TRANSIENT_ERRORS as e:
+                # requests' SSLError subclasses ConnectionError, so a handshake
+                # failure lands here. Only genuinely transient ones may be retried:
+                # a protocol-version floor the peer cannot meet, an untrusted
+                # certificate or a hostname mismatch will fail identically on every
+                # attempt, and retrying to exhaustion replaces the diagnosis with
+                # "exceeding maximum retries". Mirrors the network layer's split.
+                # Local import avoids a circular dependency at module load time.
+                from .network import (
+                    is_econnreset_exception,
+                    is_unexpected_eof_exception,
+                )
+
+                if isinstance(e, SSLError) and not (
+                    is_econnreset_exception(e) or is_unexpected_eof_exception(e)
+                ):
+                    raise NonRetryableTlsError(
+                        msg=f"{verb} with url {url} failed with a non-retryable TLS error: {e}",
+                        errno=ER_FAILED_TO_REQUEST,
+                    ) from e
                 self.last_err_is_presigned_url = False
                 time.sleep(
                     min(

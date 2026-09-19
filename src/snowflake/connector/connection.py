@@ -76,6 +76,7 @@ from .constants import (
     _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
     _OAUTH_DEFAULT_SCOPE,
+    ENV_VAR_MIN_TLS_VERSION,
     ENV_VAR_PARTNER,
     OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,
     PARAMETER_AUTOCOMMIT,
@@ -92,6 +93,7 @@ from .constants import (
     PARAMETER_TIMEZONE,
     OCSPMode,
     QueryStatus,
+    get_min_tls_version,
 )
 from .converter import SnowflakeConverter
 from .crl import CRLConfig
@@ -119,7 +121,13 @@ from .errorcode import (
     ER_NO_USER,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from .errors import DatabaseError, Error, OperationalError, ProgrammingError
+from .errors import (
+    DatabaseError,
+    Error,
+    NonRetryableTlsError,
+    OperationalError,
+    ProgrammingError,
+)
 from .log_configuration import EasyLoggingConfigPython
 from .network import (
     DEFAULT_AUTHENTICATOR,
@@ -741,6 +749,44 @@ class SnowflakeConnection:
         self._file_operation_parser = FileOperationParser(self)
         self._stream_downloader = StreamDownloader(self)
 
+    def _validate_min_tls_version(self) -> None:
+        """Reject a malformed ``SNOWFLAKE_MIN_TLS_VERSION`` before any I/O.
+
+        The floor is otherwise resolved lazily, during the first TLS handshake,
+        where a bad value surfaces as a bare ``ValueError`` raised from deep
+        inside the HTTP stack. Checking it here turns that into an ordinary
+        connection-time ``ProgrammingError`` naming the variable.
+
+        ``ssl_wrap_socket`` keeps its own strict parse rather than trusting this
+        check: the variable is read per handshake and can change after
+        ``connect()``, and not every TLS connection originates from a
+        ``SnowflakeConnection``.
+        """
+        try:
+            get_min_tls_version()
+        except ValueError as exc:
+            raise ProgrammingError(msg=str(exc), errno=ER_INVALID_VALUE) from exc
+
+        # A botocore hook that could not be installed means AWS SDK requests are
+        # not honoring the floor. Report it to callers who actually configured one
+        # rather than at import time, which would break users who did not.
+        from . import ssl_wrap_socket
+
+        hook_error = ssl_wrap_socket.BOTOCORE_MIN_TLS_HOOK_ERROR
+        if (
+            hook_error is not None
+            and os.environ.get(ENV_VAR_MIN_TLS_VERSION, "").strip()
+        ):
+            raise ProgrammingError(
+                msg=(
+                    f"{ENV_VAR_MIN_TLS_VERSION} is set, but the minimum TLS version "
+                    f"cannot be enforced for AWS SDK requests: {hook_error}. Pin a "
+                    f"compatible botocore version, or unset the variable to accept "
+                    f"botocore's own TLS floor."
+                ),
+                errno=ER_INVALID_VALUE,
+            )
+
     def _validate_account(self, account_str):
         if not is_valid_account_identifier(account_str):
             Error.errorhandler_wrapper(
@@ -1171,6 +1217,7 @@ class SnowflakeConnection:
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")
+        self._validate_min_tls_version()
         if len(kwargs) > 0:
             self.__config(**kwargs)
 
@@ -2083,6 +2130,13 @@ class SnowflakeConnection:
                 password_callback=self._password_callback,
                 session_parameters=self._session_parameters,
             )
+        except NonRetryableTlsError:
+            # A TLS failure that cannot succeed on a retry (version floor the peer
+            # can't meet, untrusted certificate, hostname mismatch). Re-raise it
+            # so the caller sees the diagnosis; the retry loop below would burn
+            # the login timeout and then replace it with a generic
+            # "could not connect" message that points at the firewall instead.
+            raise
         except OperationalError as e:
             logger.debug(
                 "Operational Error raised at authentication"
