@@ -75,6 +75,7 @@ from .errors import (
     HttpError,
     InternalServerError,
     MethodNotAllowed,
+    NonRetryableTlsError,
     OperationalError,
     OtherHTTPRetryableError,
     ProgrammingError,
@@ -121,6 +122,10 @@ logger = logging.getLogger(__name__)
 Monkey patch for PyOpenSSL Socket wrapper
 """
 ssl_wrap_socket.inject_into_urllib3()
+
+# botocore builds its own SSL contexts on the real urllib3, so the patch above
+# does not reach AWS SDK requests. Hook their TLS floor separately.
+ssl_wrap_socket.inject_min_tls_version_into_botocore()
 
 # known applications
 APPLICATION_SNOWSQL = "SnowSQL"
@@ -1235,7 +1240,7 @@ class SnowflakeRestful:
             Error.errorhandler_wrapper(
                 self._connection,
                 None,
-                OperationalError,
+                NonRetryableTlsError,
                 {
                     "msg": msg,
                     "errno": ER_FAILED_TO_REQUEST,

@@ -18,6 +18,7 @@ import certifi
 import OpenSSL
 
 from .compat import IS_WINDOWS, urlparse
+from .constants import get_min_tls_version
 from .cursor import SnowflakeCursor
 from .session_manager import SessionManager, SessionManagerFactory
 from .url_util import extract_top_level_domain_from_hostname
@@ -239,6 +240,10 @@ class ConnectionDiagnostic:
                     conn.recv(4096).decode("utf-8")
 
                 context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                # This context is hand-built rather than obtained from the HTTP
+                # stack, so it does not inherit the connector's TLS floor; apply
+                # it here so the diagnostic probes what real connections would do.
+                context.minimum_version = get_min_tls_version()
                 context.load_verify_locations(certifi.where())
                 # Best-effort: enable partial-chain when supported
                 _partial_flag = getattr(ssl, "VERIFY_X509_PARTIAL_CHAIN", 0)

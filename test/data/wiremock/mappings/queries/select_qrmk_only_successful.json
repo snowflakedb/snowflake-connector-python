@@ -367,13 +367,13 @@
         "chunks": [
           {
             "url": "{{STORAGE_WIREMOCK_HTTP_HOST_WITH_PORT}}/amazonaws/test/s3testaccount/stage/results/01bd1448-0100-0001-0000-0000001006f5_0/main/data_0_0_0_1?x-amz-server-side-encryption-customer-algorithm=AES256&response-content-encoding=gzip",
-            "rowCount": 4096,
+            "rowCount": 1,
             "uncompressedSize": 331328,
             "compressedSize": 326422
           }
         ],
-        "total": 50000,
-        "returned": 50000,
+        "total": 2,
+        "returned": 2,
         "queryId": "01bd137c-0100-0001-0000-0000001005b1",
         "databaseProvider": null,
         "finalDatabaseName": "TESTDB",

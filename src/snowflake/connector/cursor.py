@@ -35,7 +35,11 @@ from typing import (
 
 from typing_extensions import Self
 
-from snowflake.connector.result_batch import create_batches_from_response
+from snowflake.connector.result_batch import (
+    MAX_INLINE_RESULT_RETRY,
+    create_batches_from_response,
+    is_inline_result_incomplete,
+)
 from snowflake.connector.result_set import ResultSet
 
 from . import compat
@@ -57,8 +61,11 @@ from .constants import (
     QueryStatus,
 )
 from .errorcode import (
+    ER_CONNECTION_IS_CLOSED,
     ER_CURSOR_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
+    ER_FAILED_TO_CONNECT_TO_DB,
+    ER_FAILED_TO_RENEW_SESSION,
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_INVALID_VALUE,
     ER_NO_ARROW_RESULT,
@@ -1099,12 +1106,18 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             if _exec_async:
                 self.connection._async_sfqids[self._sfqid] = None
             if _no_results:
+                # SNOW-4109042: skip recovery here. execute_async / _no_results
+                # returns before building a ResultSet; callers fetch rows later
+                # via query_result / get_results_from_sfqid, which re-GET and
+                # run the same incomplete-inline recovery.
                 self._total_rowcount = (
                     ret["data"]["total"]
                     if "data" in ret and "total" in ret["data"]
                     else -1
                 )
                 return data
+            if self._is_inline_chunk_incomplete(data):
+                data = self._refetch(data)
             self._init_result_and_meta(data)
         else:
             self._total_rowcount = (
@@ -1194,6 +1207,77 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             and int(data["statementTypeId"]) in STATEMENT_TYPE_ID_DML_SET
         )
 
+    def _is_inline_chunk_incomplete(self, data: dict[Any, Any]) -> bool:
+        """Whether the inline first chunk is short of the server-declared size.
+
+        DML and file-transfer responses are ignored: their ``total`` is not a
+        promise about returned rows. Truncated HTTP JSON bodies are handled
+        separately in ``network.py``.
+        """
+        if (
+            not isinstance(data, dict)
+            or not self._sfqid
+            or self._is_dml(data)
+            or self.is_file_transfer
+        ):
+            return False
+        return is_inline_result_incomplete(data, data.get("queryResultFormat", "json"))
+
+    def _should_reraise_refetch_error(self, err: Error) -> bool:
+        """True when a recovery GET failure must surface, not become keep-original.
+
+        Transport / HTTP-retryable failures keep the truncated payload so the
+        existing ``252013`` drain checks still fire. Closed-connection, session
+        renew, and programming errors are the real failure and must not be
+        masked as an incomplete-result OperationalError later.
+        """
+        if isinstance(err, (ProgrammingError, InterfaceError)):
+            return True
+        return err.errno in (
+            ER_CONNECTION_IS_CLOSED,
+            ER_CURSOR_IS_CLOSED,
+            ER_FAILED_TO_CONNECT_TO_DB,
+            ER_FAILED_TO_RENEW_SESSION,
+        )
+
+    def _refetch(self, data: dict[Any, Any]) -> dict[Any, Any]:
+        """Re-GET ``/queries/{sfqid}/result`` while the inline first chunk is short.
+
+        Callers enter after detecting incompleteness, so the incomplete check
+        runs after each GET (exit when recovered, continue while short).
+        """
+        for attempt in range(MAX_INLINE_RESULT_RETRY):
+            logger.warning(
+                "Incomplete inline result chunk for sfqid=%s; "
+                "re-fetching query result (%s retry(s) left)",
+                self._sfqid,
+                MAX_INLINE_RESULT_RETRY - attempt,
+            )
+            url = f"/queries/{self._sfqid}/result"
+            try:
+                ret = self._connection.rest.request(url=url, method="get")
+            except Error as err:
+                if self._should_reraise_refetch_error(err):
+                    raise
+                logger.warning(
+                    "Re-fetch of query result for sfqid=%s failed; "
+                    "keeping the original response",
+                    self._sfqid,
+                    exc_info=True,
+                )
+                return data
+            if not ret.get("success") or not isinstance(ret.get("data"), dict):
+                logger.warning(
+                    "Re-fetch of query result for sfqid=%s did not succeed; "
+                    "keeping the original response",
+                    self._sfqid,
+                )
+                return data
+            data = ret["data"]
+            if not self._is_inline_chunk_incomplete(data):
+                return data
+        return data
+
     def _init_result_and_meta(self, data: dict[Any, Any]) -> None:
         is_dml = self._is_dml(data)
         self._query_result_format = data.get("queryResultFormat", "json")
@@ -1221,6 +1305,10 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             self._connection.client_fetch_threads
             or self._connection.client_prefetch_threads,
             self._connection.client_fetch_use_mp,
+            # SNOW-4109042: a DML reuses "total" for the rows the statement
+            # affected, which says nothing about the rows in its result set, so
+            # only a query's total is a promise worth holding the back-end to.
+            total_row_count=None if is_dml else data.get("total"),
         )
         self._rownumber = -1
         self._result_state = ResultState.VALID
@@ -1319,6 +1407,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
         if ret.get("success"):
             data = ret.get("data")
+            if self._is_inline_chunk_incomplete(data):
+                data = self._refetch(data)
             self._init_result_and_meta(data)
         else:
             logger.debug("failed")
@@ -1584,22 +1674,25 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             self._result = iter(self._result_set)
             self._result_state = ResultState.VALID
 
-        try:
-            _next = next(self._result, None)
-            if isinstance(_next, Exception):
-                Error.errorhandler_wrapper_from_ready_exception(
-                    self._connection,
-                    self,
-                    _next,
-                )
-            if _next is not None:
-                self._rownumber += 1
-            return _next
-        except TypeError as err:
+        if self._result is None:
+            # SNOW-4109042: a missing result iterator is the only reason to report
+            # end-of-results here -- a cursor that was reset has no rows left to
+            # hand out. Errors raised while iterating a real result set must reach
+            # the caller instead of looking like a result set that ran out.
             if self._result_state == ResultState.DEFAULT:
-                raise err
-            else:
-                return None
+                raise TypeError("'NoneType' object is not an iterator")
+            return None
+
+        _next = next(self._result, None)
+        if isinstance(_next, Exception):
+            Error.errorhandler_wrapper_from_ready_exception(
+                self._connection,
+                self,
+                _next,
+            )
+        if _next is not None:
+            self._rownumber += 1
+        return _next
 
     def fetchmany(self, size: int | None = None) -> list[FetchRow]:
         """Fetches the number of specified rows."""

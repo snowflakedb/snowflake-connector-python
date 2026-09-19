@@ -42,6 +42,7 @@ from ..errors import (
     Error,
     ForbiddenError,
     HttpError,
+    NonRetryableTlsError,
     OperationalError,
     ProgrammingError,
     RefreshTokenError,
@@ -826,7 +827,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             Error.errorhandler_wrapper(
                 self._connection,
                 None,
-                OperationalError,
+                NonRetryableTlsError,
                 {
                     "msg": msg,
                     "errno": ER_FAILED_TO_REQUEST,
