@@ -166,7 +166,7 @@ from .util_text import (
     parse_account,
     split_statements,
 )
-from .wif_util import AttestationProvider
+from .wif_util import AttestationProvider, parse_workload_identity_host
 
 if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
     CursorCls = TypeVar("CursorCls", bound=SnowflakeCursorBase, default=SnowflakeCursor)
@@ -282,6 +282,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # Opt into AWS WIF JWT attestation via STS GetWebIdentityToken instead of the default SigV4 GetCallerIdentity method
+    "workload_identity_host": (
+        None,
+        (type(None), str),
+    ),  # Optional STS host or URL override for AWS WIF
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
@@ -1727,12 +1731,25 @@ class SnowflakeConnection:
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
+                if self._workload_identity_host:
+                    if self._workload_identity_provider != AttestationProvider.AWS:
+                        Error.errorhandler_wrapper(
+                            self,
+                            None,
+                            ProgrammingError,
+                            {
+                                "msg": "workload_identity_host is supported only for AWS",
+                                "errno": ER_INVALID_WIF_SETTINGS,
+                            },
+                        )
+                    parse_workload_identity_host(self._workload_identity_host)
                 self.auth_class = AuthByWorkloadIdentity(
                     provider=self._workload_identity_provider,
                     token=self._token,
                     entra_resource=self._workload_identity_entra_resource,
                     impersonation_path=self._workload_identity_impersonation_path,
                     aws_use_outbound_token=self._workload_identity_aws_use_outbound_token,
+                    workload_identity_host=self._workload_identity_host,
                 )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
@@ -1921,6 +1938,7 @@ class SnowflakeConnection:
                 "workload_identity_entra_resource",
                 "workload_identity_impersonation_path",
                 "workload_identity_aws_use_outbound_token",
+                "workload_identity_host",
             ]
             for dependent_option in workload_identity_dependent_options:
                 if (
