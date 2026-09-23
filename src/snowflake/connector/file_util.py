@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import gzip
+import hashlib
 import os
 import shutil
 import struct
@@ -47,6 +48,34 @@ class SnowflakeFileUtil:
         size = src.tell()
         src.seek(0)
         return digest, size
+
+    @staticmethod
+    def get_md5(src: IO[bytes]) -> bytes:
+        """Gets an MD5 of src via a single streaming pass.
+
+        Used for Azure's Content-MD5, which must be computed over the bytes
+        actually uploaded -- ciphertext when client-side encryption is used,
+        so callers pass the post-encryption source, not the original one.
+
+        Args:
+            src: The input stream.
+
+        Returns:
+            The raw MD5 digest bytes.
+        """
+        CHUNK_SIZE = 64 * kilobyte
+        # usedforsecurity=False matches util_text.get_md5_for_integrity
+        # (SNOW-2743401, FIPS support) -- this MD5 is for Azure content
+        # integrity, not security.
+        md5_hasher = hashlib.md5(usedforsecurity=False)
+        while True:
+            chunk = src.read(CHUNK_SIZE)
+            if chunk == b"":
+                break
+            md5_hasher.update(chunk)
+
+        src.seek(0)
+        return md5_hasher.digest()
 
     @staticmethod
     def compress_with_gzip_from_stream(src_stream: IO[bytes]) -> tuple[IO[bytes], int]:

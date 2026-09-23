@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 from .compat import quote
 from .constants import FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
+from .file_util import SnowflakeFileUtil
 from .storage_client import SnowflakeStorageClient
-from .util_text import get_md5_for_integrity
 from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -180,6 +180,18 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             )
         return azure_metadata
 
+    def _compute_content_md5(self) -> None:
+        meta = self.meta
+        new_stream = not bool(meta.src_stream or meta.intermediate_stream)
+        fd = meta.src_stream or meta.intermediate_stream or open(self.data_file, "rb")
+        try:
+            if not new_stream:
+                fd.seek(0)
+            meta.md5_digest = SnowflakeFileUtil.get_md5(fd)
+        finally:
+            if new_stream:
+                fd.close()
+
     def _initiate_multipart_upload(self) -> None:
         self.block_ids = [
             "".join(choice(hexdigits) for _ in range(20))
@@ -226,26 +238,12 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             part = ET.Element("Latest")
             part.text = block_id
             root.append(part)
-        # SNOW-1778088: We need to calculate the MD5 sum of this file for Azure Blob storage
-        new_stream = not bool(self.meta.src_stream or self.meta.intermediate_stream)
-        fd = (
-            self.meta.src_stream
-            or self.meta.intermediate_stream
-            or open(self.meta.real_src_file_name, "rb")
-        )
-        try:
-            if not new_stream:
-                # Reset position in file
-                fd.seek(0)
-            file_content = fd.read()
-        finally:
-            if new_stream:
-                fd.close()
+        # SNOW-1778088: We need to provide the MD5 sum of this file for Azure Blob storage.
         headers = {
             "x-ms-blob-content-encoding": "utf-8",
-            "x-ms-blob-content-md5": base64.b64encode(
-                get_md5_for_integrity(file_content)
-            ).decode("utf-8"),
+            "x-ms-blob-content-md5": base64.b64encode(self.meta.md5_digest).decode(
+                "utf-8"
+            ),
         }
         azure_metadata = self._prepare_file_metadata()
         headers.update(azure_metadata)

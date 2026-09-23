@@ -122,6 +122,7 @@ class SnowflakeFileMeta:
     presigned_url: str | None = None
     overwrite: bool = False
     sha256_digest: str | None = None
+    md5_digest: bytes | None = None
     upload_size: int | None = None
     real_src_file_name: str | None = None
     error_details: Exception | None = None
