@@ -104,6 +104,7 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
         else:
             self.data_file = meta.real_src_file_name
         logger.debug("finished preprocessing")
+        self._compute_content_md5()
         if meta.upload_size < meta.multipart_threshold or not self.chunked_transfer:
             self.num_of_chunks = 1
         else:
