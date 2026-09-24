@@ -163,6 +163,23 @@ class TestDetectPlatforms:
         assert "has_gcp_identity_timeout" in result
         assert "has_azure_managed_identity_timeout" in result
 
+    def test_detection_is_cached_across_session_managers(self):
+        # The caller passes a fresh SessionManager clone per connection; the
+        # cached result must still be reused (SNOW-3880829).
+        with patch(
+            "snowflake.connector.platform_detection._detect_platforms",
+            return_value=["is_ec2_instance"],
+        ) as detect:
+            first = detect_platforms(
+                platform_detection_timeout_seconds=1, session_manager=Mock()
+            )
+            second = detect_platforms(
+                platform_detection_timeout_seconds=1, session_manager=Mock()
+            )
+
+        assert first == second == ["is_ec2_instance"]
+        assert detect.call_count == 1
+
     def test_detect_platforms_executes_in_parallel(self):
         sleep_time = 2
 
