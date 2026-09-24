@@ -5,6 +5,7 @@ import time
 from importlib import reload
 from time import sleep
 from unittest import mock
+from uuid import UUID
 
 import pytest
 
@@ -16,9 +17,47 @@ from snowflake.connector._utils import (
     build_minicore_usage_for_telemetry,
     build_nanoarrow_usage_for_telemetry,
     get_application_path,
+    is_uuid4,
 )
 
 pytestmark = pytest.mark.skipolddriver
+
+
+class TestIsUuid4:
+    """Tests for the is_uuid4 helper."""
+
+    VALID_UUID4_LOWER = "550e8400-e29b-41d4-a716-446655440000"
+    VALID_UUID4_UPPER = "550E8400-E29B-41D4-A716-446655440000"
+    VALID_UUID4_MIXED = "550e8400-E29B-41d4-A716-446655440000"
+
+    def test_valid_uuid4_lowercase(self):
+        assert is_uuid4(self.VALID_UUID4_LOWER) is True
+
+    def test_valid_uuid4_uppercase(self):
+        """Uppercase hex digits must be accepted — previously returned False."""
+        assert is_uuid4(self.VALID_UUID4_UPPER) is True
+
+    def test_valid_uuid4_mixed_case(self):
+        assert is_uuid4(self.VALID_UUID4_MIXED) is True
+
+    def test_valid_uuid4_object(self):
+        assert is_uuid4(UUID(self.VALID_UUID4_LOWER)) is True
+
+    def test_uuid_version1_rejected(self):
+        uuid_v1 = "550e8400-e29b-11d4-a716-446655440000"
+        assert is_uuid4(uuid_v1) is False
+
+    def test_uuid_version1_object_rejected(self):
+        assert is_uuid4(UUID("550e8400-e29b-11d4-a716-446655440000")) is False
+
+    def test_invalid_string_rejected(self):
+        assert is_uuid4("not-a-uuid") is False
+
+    def test_non_string_rejected(self):
+        assert is_uuid4(12345) is False  # type: ignore[arg-type]
+
+    def test_none_rejected(self):
+        assert is_uuid4(None) is False  # type: ignore[arg-type]
 
 
 def test_get_application_path_is_fast_on_deep_call_stacks():
