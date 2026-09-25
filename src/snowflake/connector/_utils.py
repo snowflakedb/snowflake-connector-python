@@ -75,10 +75,9 @@ def is_uuid4(str_or_uuid: str | UUID) -> bool:
         return False
 
     try:
-        uuid_str = str(UUID(str_or_uuid, version=4))
+        return UUID(str_or_uuid).version == 4
     except ValueError:
         return False
-    return uuid_str == str_or_uuid
 
 
 def _snowflake_max_parallelism_for_file_transfer(connection):
