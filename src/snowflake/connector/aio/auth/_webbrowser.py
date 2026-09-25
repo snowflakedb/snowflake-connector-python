@@ -65,7 +65,6 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
             port,
             **kwargs,
         )
-        self._event_loop = asyncio.get_event_loop()
 
     async def reset_secrets(self) -> None:
         AuthByWebBrowserSync.reset_secrets(self)
@@ -212,7 +211,7 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
 
                     if read_sockets[0] is not None:
                         # Receive the data in small chunks and retransmit it
-                        socket_client, _ = await self._event_loop.sock_accept(
+                        socket_client, _ = await asyncio.get_running_loop().sock_accept(
                             socket_connection
                         )
 
@@ -226,7 +225,9 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
                             #  https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.sock_recv
                             socket_client.setblocking(False)
                             raw_data = await asyncio.wait_for(
-                                self._event_loop.sock_recv(socket_client, BUF_SIZE),
+                                asyncio.get_running_loop().sock_recv(
+                                    socket_client, BUF_SIZE
+                                ),
                                 timeout=(
                                     DEFAULT_SOCKET_CONNECT_TIMEOUT
                                     if conn.socket_timeout is None
@@ -288,7 +289,7 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
             "",
             "",
         ]
-        await self._event_loop.sock_sendall(
+        await asyncio.get_running_loop().sock_sendall(
             socket_client, "\r\n".join(content).encode("utf-8")
         )
         return True
@@ -321,7 +322,7 @@ You can close this window now and go back where you started from.
         content.append("")
         content.append(msg)
 
-        await self._event_loop.sock_sendall(
+        await asyncio.get_running_loop().sock_sendall(
             socket_client, "\r\n".join(content).encode("utf-8")
         )
 
