@@ -7,6 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- NEXT_RELEASE(TBD)
+  - Fixed OAuth authorization code flow replacing a custom public PKCE `client_id` with `LOCAL_APPLICATION` when `client_secret` was omitted (SNOW-4036712, #3011).
+
 - v4.7.6 (Unreleased)
   - Added the `SNOWFLAKE_TLS_CIPHERS` environment variable to restrict which TLS ciphers the connector offers. It takes a colon-separated list; names beginning with `TLS_` are applied as TLS 1.3 cipher suites and the remainder as the cipher list for TLS 1.2 and below, so a single variable covers both. Leaving it unset keeps OpenSSL's defaults unchanged, and an unrecognized cipher name is rejected rather than silently ignored. The restriction covers Snowflake API traffic, cloud-storage (stage) transfers, OCSP/CRL fetches and IdP requests. Requests issued by the AWS and Azure SDKs, and asynchronous connections, are not covered — for TLS 1.3 suites specifically they cannot be, because the Python standard library exposes no API for restricting them.
   - Raised the minimum `pyOpenSSL` requirement to 25.3.0, the first version providing `set_tls13_ciphersuites`. This does not narrow the set of installable versions in practice: earlier releases cap `cryptography` below 46 and so were already uninstallable alongside the connector's own `cryptography>=46.0.5` requirement.
