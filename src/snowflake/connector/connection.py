@@ -6,6 +6,7 @@ import logging
 import os
 import pathlib
 import re
+import ssl
 import sys
 import traceback
 import typing
@@ -78,6 +79,7 @@ from .constants import (
     _OAUTH_DEFAULT_SCOPE,
     ENV_VAR_MIN_TLS_VERSION,
     ENV_VAR_PARTNER,
+    ENV_VAR_TLS_CIPHERS,
     OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -94,6 +96,7 @@ from .constants import (
     OCSPMode,
     QueryStatus,
     get_min_tls_version,
+    get_tls_ciphers,
 )
 from .converter import SnowflakeConverter
 from .crl import CRLConfig
@@ -163,7 +166,7 @@ from .util_text import (
     parse_account,
     split_statements,
 )
-from .wif_util import AttestationProvider
+from .wif_util import AttestationProvider, parse_workload_identity_host
 
 if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
     CursorCls = TypeVar("CursorCls", bound=SnowflakeCursorBase, default=SnowflakeCursor)
@@ -279,6 +282,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # Opt into AWS WIF JWT attestation via STS GetWebIdentityToken instead of the default SigV4 GetCallerIdentity method
+    "workload_identity_host": (
+        None,
+        (type(None), str),
+    ),  # Optional STS host or URL override for AWS WIF
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
@@ -763,13 +770,16 @@ class SnowflakeConnection:
         ``SnowflakeConnection``.
         """
         try:
-            get_min_tls_version()
+            floor = get_min_tls_version()
+            policy = get_tls_ciphers()
         except ValueError as exc:
             raise ProgrammingError(msg=str(exc), errno=ER_INVALID_VALUE) from exc
 
         # A botocore hook that could not be installed means AWS SDK requests are
         # not honoring the floor. Report it to callers who actually configured one
-        # rather than at import time, which would break users who did not.
+        # rather than at import time, which would break users who did not. Checked
+        # before the cipher warnings below: there is no point advising on a cipher
+        # combination for a connection that is about to be refused.
         from . import ssl_wrap_socket
 
         hook_error = ssl_wrap_socket.BOTOCORE_MIN_TLS_HOOK_ERROR
@@ -785,6 +795,30 @@ class SnowflakeConnection:
                     f"botocore's own TLS floor."
                 ),
                 errno=ER_INVALID_VALUE,
+            )
+
+        if policy is None:
+            return
+        # Two combinations parse cleanly but cannot do what the operator intended,
+        # so they are worth saying out loud rather than leaving to be discovered
+        # from a handshake that quietly used a cipher they meant to exclude.
+        if policy.tls12 and not policy.tls13 and floor >= ssl.TLSVersion.TLSv1_3:
+            logger.warning(
+                "%s configures only TLS 1.2 ciphers (%s) while %s requires TLS 1.3, "
+                "so none of them can be negotiated.",
+                ENV_VAR_TLS_CIPHERS,
+                policy.tls12,
+                ENV_VAR_MIN_TLS_VERSION,
+            )
+        if policy.tls13 and not policy.tls12 and floor < ssl.TLSVersion.TLSv1_3:
+            logger.warning(
+                "%s restricts TLS 1.3 suites (%s) but names no TLS 1.2 ciphers, and "
+                "TLS 1.2 is still permitted, so a TLS 1.2 handshake would use "
+                "OpenSSL's default ciphers. Set %s to 1.3, or list TLS 1.2 ciphers "
+                "as well.",
+                ENV_VAR_TLS_CIPHERS,
+                policy.tls13,
+                ENV_VAR_MIN_TLS_VERSION,
             )
 
     def _validate_account(self, account_str):
@@ -1697,12 +1731,25 @@ class SnowflakeConnection:
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
+                if self._workload_identity_host:
+                    if self._workload_identity_provider != AttestationProvider.AWS:
+                        Error.errorhandler_wrapper(
+                            self,
+                            None,
+                            ProgrammingError,
+                            {
+                                "msg": "workload_identity_host is supported only for AWS",
+                                "errno": ER_INVALID_WIF_SETTINGS,
+                            },
+                        )
+                    parse_workload_identity_host(self._workload_identity_host)
                 self.auth_class = AuthByWorkloadIdentity(
                     provider=self._workload_identity_provider,
                     token=self._token,
                     entra_resource=self._workload_identity_entra_resource,
                     impersonation_path=self._workload_identity_impersonation_path,
                     aws_use_outbound_token=self._workload_identity_aws_use_outbound_token,
+                    workload_identity_host=self._workload_identity_host,
                 )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
@@ -1891,6 +1938,7 @@ class SnowflakeConnection:
                 "workload_identity_entra_resource",
                 "workload_identity_impersonation_path",
                 "workload_identity_aws_use_outbound_token",
+                "workload_identity_host",
             ]
             for dependent_option in workload_identity_dependent_options:
                 if (

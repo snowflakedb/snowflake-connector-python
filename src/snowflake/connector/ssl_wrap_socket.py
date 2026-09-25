@@ -23,9 +23,11 @@ import OpenSSL.SSL
 
 from .constants import (
     ENV_VAR_MIN_TLS_VERSION,
+    ENV_VAR_TLS_CIPHERS,
     OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,
     OCSPMode,
     get_min_tls_version,
+    get_tls_ciphers,
 )
 from .crl import CertRevocationCheckMode, CRLConfig, CRLValidator
 from .errorcode import ER_FAILED_TO_CONNECT_TO_DB, ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
@@ -142,6 +144,70 @@ def _raise_version_floor(ctx: PyOpenSSLContext | ssl.SSLContext) -> None:
         ) from exc
 
 
+def _apply_cipher_policy(ctx: PyOpenSSLContext) -> None:
+    """Restrict ``ctx`` to the ciphers configured via ``SNOWFLAKE_TLS_CIPHERS``.
+
+    No-op when unconfigured, which leaves OpenSSL's defaults exactly as they were.
+
+    The two protocol generations need different OpenSSL calls. TLS 1.2 and below go
+    through ``set_ciphers``; TLS 1.3 suites are only reachable through
+    ``SSL_CTX_set_ciphersuites``, which the Python standard library never exposed --
+    the connector can only honor them because its handshakes run on a
+    ``PyOpenSSLContext``, where pyOpenSSL surfaces it as
+    ``set_tls13_ciphersuites``. That is also why this restriction covers Snowflake
+    and cloud-storage traffic but not requests issued by the AWS or Azure SDKs,
+    which build standard-library contexts of their own.
+
+    Unlike the version floor this is a replacement rather than a raise-only clamp:
+    cipher lists have no ordering, so there is no "stricter" to compare against. A
+    value OpenSSL does not recognize is therefore surfaced rather than ignored --
+    silently negotiating ciphers the operator meant to exclude is the failure this
+    must not produce.
+    """
+    policy = get_tls_ciphers()
+    if policy is None:
+        return
+
+    if policy.tls12:
+        try:
+            ctx.set_ciphers(policy.tls12)
+        except (ssl.SSLError, OpenSSL.SSL.Error, ValueError, TypeError) as exc:
+            raise OperationalError(
+                msg=(
+                    f"Could not apply the TLS 1.2 ciphers requested via "
+                    f"{ENV_VAR_TLS_CIPHERS} ({policy.tls12!r}): {exc}"
+                ),
+                errno=ER_FAILED_TO_CONNECT_TO_DB,
+            ) from exc
+
+    if policy.tls13:
+        setter = getattr(ctx._ctx, "set_tls13_ciphersuites", None)
+        if setter is None:
+            # Guarded rather than assumed: the declared pyOpenSSL floor provides
+            # this, but a force-installed older build must not silently negotiate
+            # suites the operator excluded.
+            raise OperationalError(
+                msg=(
+                    f"{ENV_VAR_TLS_CIPHERS} requests TLS 1.3 cipher suites "
+                    f"({policy.tls13!r}) but the installed pyOpenSSL does not "
+                    f"support set_tls13_ciphersuites; upgrade to pyOpenSSL 25.3.0 "
+                    f"or newer."
+                ),
+                errno=ER_FAILED_TO_CONNECT_TO_DB,
+            )
+        try:
+            # pyOpenSSL requires bytes here, unlike set_ciphers.
+            setter(policy.tls13.encode("ascii"))
+        except (OpenSSL.SSL.Error, ValueError, TypeError) as exc:
+            raise OperationalError(
+                msg=(
+                    f"Could not apply the TLS 1.3 cipher suites requested via "
+                    f"{ENV_VAR_TLS_CIPHERS} ({policy.tls13!r}): {exc}"
+                ),
+                errno=ER_FAILED_TO_CONNECT_TO_DB,
+            ) from exc
+
+
 def _apply_stdlib_hardening(dst: PyOpenSSLContext, src: ssl.SSLContext | None) -> None:
     """Carry TLS hardening from a stdlib ``SSLContext`` onto ``dst``.
 
@@ -191,6 +257,7 @@ def _apply_stdlib_hardening(dst: PyOpenSSLContext, src: ssl.SSLContext | None) -
             pass
 
     _raise_version_floor(dst)
+    _apply_cipher_policy(dst)
 
 
 def _build_context_with_partial_chain(

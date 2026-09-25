@@ -18,8 +18,11 @@ from snowflake.connector.vendored.requests.exceptions import (
 )
 from snowflake.connector.wif_util import (
     AttestationProvider,
+    AwsStsEndpoint,
     WorkloadIdentityAttestation,
     get_aws_sts_hostname,
+    parse_workload_identity_host,
+    resolve_aws_sts_endpoint,
 )
 
 from ..csp_helpers import (
@@ -246,6 +249,7 @@ def test_explicit_aws_encodes_audience_host_signature_to_api(
         ("af-south-1", "sts.af-south-1.amazonaws.com"),
         ("us-gov-west-1", "sts.us-gov-west-1.amazonaws.com"),
         ("cn-north-1", "sts.cn-north-1.amazonaws.com.cn"),
+        ("us-iso-east-1", "sts.us-iso-east-1.c2s.ic.gov"),
     ],
 )
 def test_explicit_aws_uses_regional_hostnames(
@@ -279,44 +283,185 @@ def test_explicit_aws_generates_unique_assertion_content(
 
 
 @pytest.mark.parametrize(
-    "region, partition, expected_hostname",
+    "region, expected_hostname",
     [
-        # AWS partition
-        ("us-east-1", "aws", "sts.us-east-1.amazonaws.com"),
-        ("eu-west-2", "aws", "sts.eu-west-2.amazonaws.com"),
-        ("ap-southeast-1", "aws", "sts.ap-southeast-1.amazonaws.com"),
-        (
-            "us-east-1",
-            "aws",
-            "sts.us-east-1.amazonaws.com",
-        ),  # Redundant but good for coverage
-        # AWS China partition
-        ("cn-north-1", "aws-cn", "sts.cn-north-1.amazonaws.com.cn"),
-        ("cn-northwest-1", "aws-cn", "sts.cn-northwest-1.amazonaws.com.cn"),
-        # AWS GovCloud partition
-        ("us-gov-west-1", "aws-us-gov", "sts.us-gov-west-1.amazonaws.com"),
-        ("us-gov-east-1", "aws-us-gov", "sts.us-gov-east-1.amazonaws.com"),
+        ("us-east-1", "sts.us-east-1.amazonaws.com"),
+        ("eu-west-2", "sts.eu-west-2.amazonaws.com"),
+        ("ap-southeast-1", "sts.ap-southeast-1.amazonaws.com"),
+        ("cn-north-1", "sts.cn-north-1.amazonaws.com.cn"),
+        ("cn-northwest-1", "sts.cn-northwest-1.amazonaws.com.cn"),
+        ("us-gov-west-1", "sts.us-gov-west-1.amazonaws.com"),
+        ("us-gov-east-1", "sts.us-gov-east-1.amazonaws.com"),
+        ("us-iso-east-1", "sts.us-iso-east-1.c2s.ic.gov"),
+        ("us-isob-east-1", "sts.us-isob-east-1.sc2s.sgov.gov"),
+        ("eu-isoe-west-1", "sts.eu-isoe-west-1.cloud.adc-e.uk"),
+        ("us-isof-south-1", "sts.us-isof-south-1.csp.hci.ic.gov"),
+        ("eusc-de-east-1", "sts.eusc-de-east-1.amazonaws.eu"),
     ],
 )
-def test_get_aws_sts_hostname_valid_inputs(region, partition, expected_hostname):
-    assert get_aws_sts_hostname(region, partition) == expected_hostname
+def test_get_aws_sts_hostname_valid_inputs(region, expected_hostname):
+    assert get_aws_sts_hostname(region, "unused") == expected_hostname
+
+
+def test_get_aws_sts_hostname_empty_region():
+    with pytest.raises(ProgrammingError) as excinfo:
+        get_aws_sts_hostname("", None)
+    assert "Could not resolve an STS endpoint" in str(excinfo.value)
+
+
+def test_get_aws_sts_hostname_ignores_legacy_global_endpoint(monkeypatch):
+    monkeypatch.setenv("AWS_STS_REGIONAL_ENDPOINTS", "legacy")
+    assert get_aws_sts_hostname("us-east-1") == "sts.us-east-1.amazonaws.com"
 
 
 @pytest.mark.parametrize(
-    "region, partition",
+    "wif_host, expected",
     [
-        ("us-east-1", "unknown-partition"),  # Unknown partition
-        ("some-region", "invalid-partition"),  # Invalid partition
-        ("us-east-1", None),  # None partition
-        ("us-east-1", 456),  # Non-string partition
-        ("", ""),  # Empty region and partition
-        ("us-east-1", ""),  # Empty partition
+        (
+            "sts.custom.example.com",
+            AwsStsEndpoint(
+                "sts.custom.example.com", "https://sts.custom.example.com", True
+            ),
+        ),
+        (
+            "sts.custom.example.com:8443",
+            AwsStsEndpoint(
+                "sts.custom.example.com:8443",
+                "https://sts.custom.example.com:8443",
+                True,
+            ),
+        ),
+        (
+            "https://sts.custom.example.com",
+            AwsStsEndpoint(
+                "sts.custom.example.com", "https://sts.custom.example.com", True
+            ),
+        ),
+        (
+            "https://sts.custom.example.com///",
+            AwsStsEndpoint(
+                "sts.custom.example.com", "https://sts.custom.example.com", True
+            ),
+        ),
+        (
+            "http://sts.custom.example.com",
+            AwsStsEndpoint(
+                "sts.custom.example.com", "http://sts.custom.example.com", True
+            ),
+        ),
+        (
+            "  sts.custom.example.com  ",
+            AwsStsEndpoint(
+                "sts.custom.example.com", "https://sts.custom.example.com", True
+            ),
+        ),
     ],
 )
-def test_get_aws_sts_hostname_invalid_inputs(region, partition):
+def test_parse_workload_identity_host_valid(wif_host, expected):
+    assert parse_workload_identity_host(wif_host) == expected
+
+
+@pytest.mark.parametrize(
+    "wif_host, error_snippet",
+    [
+        (
+            "ftp://sts.custom.example.com",
+            'must use https or http, got scheme "ftp"',
+        ),
+        (
+            "https://sts.custom.example.com?Action=Foo",
+            "must not contain user info, a query or a fragment",
+        ),
+        (
+            "https:///sts",
+            "does not contain a hostname",
+        ),
+        (
+            "https://sts.custom.example.com#frag",
+            "must not contain user info, a query or a fragment",
+        ),
+        (
+            "https://user:pass@sts.custom.example.com",  # pragma: allowlist secret
+            "must not contain user info, a query or a fragment",
+        ),
+        ("", "workload_identity_host is empty"),
+        ("   ", "workload_identity_host is empty"),
+        (
+            "https://sts.custom.example.com/foo",
+            "must not contain a path",
+        ),
+    ],
+)
+def test_parse_workload_identity_host_invalid(wif_host, error_snippet):
     with pytest.raises(ProgrammingError) as excinfo:
-        get_aws_sts_hostname(region, partition)
-    assert "Invalid AWS partition" in str(excinfo.value)
+        parse_workload_identity_host(wif_host)
+    assert error_snippet in str(excinfo.value)
+
+
+def test_resolve_aws_sts_endpoint_prefers_override():
+    endpoint = resolve_aws_sts_endpoint(
+        "us-east-1", workload_identity_host="sts.custom.example.com"
+    )
+    assert endpoint == AwsStsEndpoint(
+        "sts.custom.example.com", "https://sts.custom.example.com", True
+    )
+
+
+def test_aws_workload_identity_host_is_used_in_signed_request(
+    fake_aws_environment: FakeAwsEnvironment,
+):
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AWS,
+        workload_identity_host="sts.vpce-abc.amazonaws.com",
+    )
+    auth_class.prepare(conn=None)
+
+    data = extract_api_data(auth_class)
+    decoded_token = json.loads(b64decode(data["TOKEN"]))
+    parsed_url = urlparse(decoded_token["url"])
+    assert parsed_url.hostname == "sts.vpce-abc.amazonaws.com"
+    assert decoded_token["headers"]["Host"] == "sts.vpce-abc.amazonaws.com"
+
+
+def test_aws_workload_identity_host_is_passed_to_sts_client_for_outbound_token(
+    fake_aws_environment: FakeAwsEnvironment,
+):
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AWS,
+        aws_use_outbound_token=True,
+        workload_identity_host="https://sts.vpce-abc.amazonaws.com",
+    )
+    auth_class.prepare(conn=None)
+
+    assert fake_aws_environment.sts_client_kwargs
+    last_kwargs = fake_aws_environment.sts_client_kwargs[-1]
+    assert last_kwargs["endpoint_url"] == "https://sts.vpce-abc.amazonaws.com"
+    assert last_kwargs["config"].use_fips_endpoint is False
+    assert last_kwargs["config"].use_dualstack_endpoint is False
+
+
+def test_aws_impersonation_uses_overridden_sts_endpoint(
+    fake_aws_environment: FakeAwsEnvironment,
+):
+    impersonation_path = [
+        "arn:aws:iam::123456789:role/role2",
+        "arn:aws:iam::123456789:role/role3",
+    ]
+    fake_aws_environment.assumption_path = impersonation_path
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AWS,
+        impersonation_path=impersonation_path,
+        workload_identity_host="sts.vpce-abc.amazonaws.com",
+    )
+    auth_class.prepare(conn=None)
+
+    assert fake_aws_environment.assume_role_call_count == 2
+    assert all(
+        kwargs.get("endpoint_url") == "https://sts.vpce-abc.amazonaws.com"
+        and kwargs["config"].use_fips_endpoint is False
+        and kwargs["config"].use_dualstack_endpoint is False
+        for kwargs in fake_aws_environment.sts_client_kwargs
+    )
 
 
 def test_aws_impersonation_calls_correct_apis_for_each_role_in_impersonation_path(

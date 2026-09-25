@@ -633,6 +633,7 @@ def test_otel_error_message(caplog, mock_post_requests):
         ),
         ("workload_identity_impersonation_path", ["subject-b", "subject-c"]),
         ("workload_identity_aws_use_outbound_token", True),
+        ("workload_identity_host", "sts.custom.example.com"),
     ],
 )
 def test_cannot_set_dependent_params_without_wlid_authenticator(
@@ -737,6 +738,53 @@ def test_workload_identity_impersonation_path_populates_auth_class_for_supported
             workload_identity_impersonation_path=impersonation_path,
         )
         assert conn.auth_class.impersonation_path == impersonation_path
+
+
+def test_workload_identity_host_rejected_for_non_aws_provider(monkeypatch):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        with pytest.raises(ProgrammingError) as excinfo:
+            snowflake.connector.connect(
+                account="account",
+                authenticator="WORKLOAD_IDENTITY",
+                workload_identity_provider="AZURE",
+                workload_identity_host="sts.custom.example.com",
+            )
+        assert "workload_identity_host is supported only for AWS" in str(excinfo.value)
+
+
+def test_workload_identity_host_invalid_value_fails_at_connect(monkeypatch):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        with pytest.raises(ProgrammingError) as excinfo:
+            snowflake.connector.connect(
+                account="account",
+                authenticator="WORKLOAD_IDENTITY",
+                workload_identity_provider="AWS",
+                workload_identity_host="ftp://sts.custom.example.com",
+            )
+        assert "must use https or http" in str(excinfo.value)
+
+
+def test_workload_identity_host_is_plumbed_into_auth_class(monkeypatch):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        conn = snowflake.connector.connect(
+            account="account",
+            authenticator="WORKLOAD_IDENTITY",
+            workload_identity_provider="AWS",
+            workload_identity_host="sts.custom.example.com",
+        )
+        assert conn.auth_class.workload_identity_host == "sts.custom.example.com"
 
 
 @pytest.mark.parametrize(

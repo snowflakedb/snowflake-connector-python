@@ -51,6 +51,7 @@ try:
     from snowflake.connector.errors import OperationalError, TooManyRequests
     from snowflake.connector.result_batch import (
         MAX_DOWNLOAD_RETRY,
+        MAX_INCOMPLETE_CHUNK_RETRY,
         ArrowResultBatch,
         JSONResultBatch,
         RemoteChunkInfo,
@@ -63,6 +64,7 @@ try:
     )
 except ImportError:
     MAX_DOWNLOAD_RETRY = None
+    MAX_INCOMPLETE_CHUNK_RETRY = None
     ArrowConverterContext = None
     ArrowResultBatch = None
     JSONResultBatch = None
@@ -390,17 +392,35 @@ def test_short_remote_chunk_raises_instead_of_ending_iteration():
 
     Such a chunk used to simply stop producing rows, and the fetch methods treat
     a stopped iterator as a normal end of results, so callers silently received
-    an incomplete result set.
+    an incomplete result set. After one re-download that is still short, raise.
     """
     rows = [["val1", 1], ["val2", 2]]
     batch, response = _make_remote_json_batch(len(rows) + 1, rows)
 
-    with mock.patch.object(batch, "_download", return_value=response):
+    with mock.patch.object(batch, "_download", return_value=response) as download:
         with pytest.raises(OperationalError) as ex:
             list(batch.create_iter())
 
+    assert download.call_count == MAX_INCOMPLETE_CHUNK_RETRY + 1
     assert ex.value.errno == ER_INCOMPLETE_RESULT_CHUNK
     assert "holds 2 row(s) but the server reported 3" in ex.value.msg
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(JSONResultBatch is None, reason="vendored requests unavailable")
+def test_short_remote_chunk_recovers_on_redownload():
+    """SNOW-4109042: a truncated first download that recovers on retry yields all rows."""
+    full_rows = [["val1", 1], ["val2", 2], ["val3", 3]]
+    short_rows = full_rows[:2]
+    batch, short_response = _make_remote_json_batch(len(full_rows), short_rows)
+    _, full_response = _make_remote_json_batch(len(full_rows), full_rows)
+
+    with mock.patch.object(
+        batch, "_download", side_effect=[short_response, full_response]
+    ) as download:
+        assert len(list(batch.create_iter())) == len(full_rows)
+
+    assert download.call_count == 2
 
 
 @pytest.mark.skipolddriver
@@ -409,8 +429,10 @@ def test_complete_remote_chunk_iterates_without_error():
     rows = [["val1", 1], ["val2", 2]]
     batch, response = _make_remote_json_batch(len(rows), rows)
 
-    with mock.patch.object(batch, "_download", return_value=response):
+    with mock.patch.object(batch, "_download", return_value=response) as download:
         assert len(list(batch.create_iter())) == len(rows)
+
+    assert download.call_count == 1
 
 
 CHUNKS = [

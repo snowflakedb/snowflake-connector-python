@@ -7,6 +7,7 @@ import ssl
 import threading
 from datetime import datetime, timedelta, timezone
 
+import OpenSSL.SSL
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -16,9 +17,12 @@ from cryptography.x509.oid import NameOID
 import snowflake.connector.ssl_wrap_socket as ssw  # pylint: disable=import-error
 from snowflake.connector.constants import (  # pylint: disable=import-error
     ENV_VAR_MIN_TLS_VERSION,
+    ENV_VAR_TLS_CIPHERS,
     OCSPMode,
     get_min_tls_version,
+    get_tls_ciphers,
 )
+from snowflake.connector.errors import OperationalError  # pylint: disable=import-error
 from snowflake.connector.vendored.urllib3.util.ssl_ import (  # pylint: disable=import-error
     create_urllib3_context,
 )
@@ -360,3 +364,116 @@ def test_caller_version_floor_is_enforced_end_to_end(tmp_path):
     with pytest.raises(ssl.SSLError):
         _wrap(certfile, ssl.TLSVersion.TLSv1_3, addr)
     stop_evt.wait(5)
+
+
+def _enabled_ciphers(ctx):
+    """Cipher names a context would offer, split into (TLS 1.3, TLS 1.2 and below)."""
+    names = OpenSSL.SSL.Connection(ctx._ctx, None).get_cipher_list()
+    return (
+        [n for n in names if n.startswith("TLS_")],
+        [n for n in names if not n.startswith("TLS_")],
+    )
+
+
+def test_cipher_policy_unset_leaves_openssl_defaults(monkeypatch):
+    """Unconfigured must not narrow anything -- the feature is strictly opt-in."""
+    monkeypatch.delenv(ENV_VAR_TLS_CIPHERS, raising=False)
+    tls13, tls12 = _enabled_ciphers(ssw._build_context_with_partial_chain(None))
+    assert len(tls13) > 1 and len(tls12) > 1
+
+
+@pytest.mark.skipif(not _HAS_TLS13, reason="TLS 1.3 not available")
+def test_cipher_policy_restricts_tls13_suites(monkeypatch):
+    """TLS 1.3 suites are restricted, and the TLS 1.2 list is left alone.
+
+    This is the half the standard library cannot reach at all: ``set_ciphers()``
+    only governs TLS 1.2 and below, so it works solely because the connector's
+    handshakes run on a ``PyOpenSSLContext``.
+    """
+    monkeypatch.setenv(
+        ENV_VAR_TLS_CIPHERS, "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256"
+    )
+    tls13, tls12 = _enabled_ciphers(ssw._build_context_with_partial_chain(None))
+    assert tls13 == ["TLS_AES_256_GCM_SHA384", "TLS_AES_128_GCM_SHA256"]
+    assert len(tls12) > 1, "TLS 1.2 list should be untouched when only 1.3 is named"
+
+
+def test_cipher_policy_restricts_tls12_ciphers(monkeypatch):
+    """Naming only TLS 1.2 ciphers must not disturb the TLS 1.3 suites."""
+    monkeypatch.setenv(ENV_VAR_TLS_CIPHERS, "ECDHE-RSA-AES256-GCM-SHA384")
+    tls13, tls12 = _enabled_ciphers(ssw._build_context_with_partial_chain(None))
+    assert tls12 == ["ECDHE-RSA-AES256-GCM-SHA384"]
+    assert len(tls13) > 1, "TLS 1.3 suites should be untouched when only 1.2 is named"
+
+
+@pytest.mark.skipif(not _HAS_TLS13, reason="TLS 1.3 not available")
+def test_cipher_policy_splits_a_mixed_list(monkeypatch):
+    """One variable covers both generations; names route themselves by shape."""
+    monkeypatch.setenv(
+        ENV_VAR_TLS_CIPHERS, "TLS_AES_256_GCM_SHA384:ECDHE-RSA-AES256-GCM-SHA384"
+    )
+    tls13, tls12 = _enabled_ciphers(ssw._build_context_with_partial_chain(None))
+    assert tls13 == ["TLS_AES_256_GCM_SHA384"]
+    assert tls12 == ["ECDHE-RSA-AES256-GCM-SHA384"]
+
+
+@pytest.mark.parametrize("raw", ["NOT_A_CIPHER", "TLS_NOPE_SHA999"])
+def test_cipher_policy_rejects_unknown_names(monkeypatch, raw):
+    """An unrecognized name must fail loudly, not leave the ciphers unrestricted.
+
+    There is no raise-only clamp for ciphers, so a silently ignored value would
+    mean negotiating exactly what the operator meant to exclude.
+    """
+    monkeypatch.setenv(ENV_VAR_TLS_CIPHERS, raw)
+    with pytest.raises(OperationalError, match=ENV_VAR_TLS_CIPHERS):
+        ssw._build_context_with_partial_chain(None)
+
+
+def test_cipher_policy_rejects_a_value_with_no_names(monkeypatch):
+    monkeypatch.setenv(ENV_VAR_TLS_CIPHERS, " : ")
+    with pytest.raises(ValueError, match=ENV_VAR_TLS_CIPHERS):
+        get_tls_ciphers()
+
+
+@pytest.mark.skipif(not _HAS_TLS13, reason="TLS 1.3 not available")
+def test_cipher_policy_changes_the_negotiated_suite(tmp_path, monkeypatch):
+    """The configured suite must be the one actually negotiated on the wire.
+
+    Both peers here support all three TLS 1.3 suites, and left alone they settle on
+    AES-256. Pinning AES-128 and observing it on the completed handshake shows the
+    restriction reached the socket rather than merely being recorded on the context.
+    """
+    cert, key = _self_signed()
+    certfile, keyfile = _write_pem(tmp_path, cert, key)
+
+    def negotiated():
+        addr, stop_evt = _start_server(certfile, keyfile, None)
+        try:
+            sock = socket.socket()
+            sock.settimeout(5)
+            sock.connect(addr)
+            wrapped = ssw.ssl_wrap_socket_with_cert_revocation_checks(
+                sock=sock,
+                server_hostname="localhost",
+                ssl_context=create_urllib3_context(ssl_minimum_version=None),
+                ca_certs=certfile,
+            )
+            try:
+                # WrappedSocket exposes no cipher(); read it off the
+                # underlying pyOpenSSL connection.
+                return wrapped.connection.get_cipher_name()
+            finally:
+                wrapped.close()
+        finally:
+            stop_evt.wait(5)
+
+    monkeypatch.delenv(ENV_VAR_TLS_CIPHERS, raising=False)
+    default_suite = negotiated()
+
+    monkeypatch.setenv(ENV_VAR_TLS_CIPHERS, "TLS_AES_128_GCM_SHA256")
+    pinned_suite = negotiated()
+
+    assert pinned_suite == "TLS_AES_128_GCM_SHA256"
+    assert (
+        default_suite != pinned_suite
+    ), f"control negotiated {default_suite!r} too, so this proves nothing"
