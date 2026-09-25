@@ -437,7 +437,6 @@ max_file_size=10000000
     await run_test(aio_connection, "drop table if exists {name}")
 
 
-@pytest.mark.flaky(reruns=3)
 async def test_put_copy_many_files(tmpdir, aio_connection, db_parameters):
     """Puts and Copies many_files."""
     # generates N files
@@ -533,7 +532,6 @@ ratio number(6,2))
 
 @pytest.mark.aws
 @pytest.mark.azure
-@pytest.mark.flaky(reruns=3)
 async def test_put_copy_duplicated_files_s3(tmpdir, aio_connection, db_parameters):
     """[s3] Puts and Copies duplicated files."""
     # generates N files
