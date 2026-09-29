@@ -659,6 +659,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         self._rest = None
         for name, (value, _) in DEFAULT_CONFIGURATION.items():
             setattr(self, f"_{name}", value)
+        self._ocsp_explicit: frozenset[str] = frozenset()
 
         self._heartbeat_task = None
         is_kwargs_empty = not connection_init_kwargs
@@ -675,6 +676,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 DeprecationWarning,
                 stacklevel=2,
             )
+            self._insecure_mode = connection_init_kwargs["insecure_mode"]
 
             if (
                 "disable_ocsp_checks" in connection_init_kwargs

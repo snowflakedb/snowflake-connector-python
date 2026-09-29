@@ -185,6 +185,13 @@ async def test_connector_factory_creates_sessions():
     await session.close()
 
 
+async def test_default_aio_http_config_ocsp_mode_is_disabled():
+    config = AioHttpConfig()
+    assert config.snowflake_ocsp_mode == OCSPMode.DISABLE_OCSP_CHECKS
+    connector = SnowflakeSSLConnector(session_manager=SessionManager())
+    assert connector._snowflake_ocsp_mode == OCSPMode.DISABLE_OCSP_CHECKS
+
+
 async def test_clone_independent_pools():
     """A clone must *not* share its SessionPool objects with the original."""
     base = SessionManager(

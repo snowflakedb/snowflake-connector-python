@@ -42,8 +42,27 @@ from .vendored.urllib3.util.ssl_match_hostname import CertificateError, match_ho
 if TYPE_CHECKING:
     from cryptography import x509
 
-DEFAULT_OCSP_MODE: OCSPMode = OCSPMode.FAIL_OPEN
+DEFAULT_OCSP_MODE: OCSPMode = OCSPMode.DISABLE_OCSP_CHECKS
 FEATURE_OCSP_MODE: OCSPMode = DEFAULT_OCSP_MODE
+
+
+def apply_feature_ocsp_mode(mode: OCSPMode) -> OCSPMode:
+    """Update the process-global OCSP mode.
+
+    A later default (OCSP off) does not overwrite a non-default already
+    stored on the process. FAIL_CLOSED is the stricter enabled mode and
+    is not overwritten by FAIL_OPEN; async is already per-connection, so
+    this global must not weaken a fail-closed handshake.
+    """
+    global FEATURE_OCSP_MODE
+    if FEATURE_OCSP_MODE != DEFAULT_OCSP_MODE and mode == DEFAULT_OCSP_MODE:
+        return FEATURE_OCSP_MODE
+    if FEATURE_OCSP_MODE == OCSPMode.FAIL_CLOSED and mode == OCSPMode.FAIL_OPEN:
+        return FEATURE_OCSP_MODE
+    FEATURE_OCSP_MODE = mode
+    return FEATURE_OCSP_MODE
+
+
 FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT: int = (
     OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
 )

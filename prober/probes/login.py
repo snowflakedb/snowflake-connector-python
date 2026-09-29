@@ -21,21 +21,21 @@ def connect(connection_parameters: dict):
         snowflake.connector.SnowflakeConnection: A connection object if successful.
     """
     try:
-        # Initialize the Snowflake connection
-        connection = snowflake.connector.connect(
-            user=connection_parameters["user"],
-            account=connection_parameters["account"],
-            host=connection_parameters["host"],
-            port=connection_parameters["port"],
-            warehouse=connection_parameters["warehouse"],
-            database=connection_parameters["database"],
-            schema=connection_parameters["schema"],
-            role=connection_parameters["role"],
-            authenticator=connection_parameters["authenticator"],
-            private_key=connection_parameters["private_key"],
-            ocsp_fail_open=connection_parameters.get("ocsp_fail_open", True),
-        )
-        return connection
+        connect_kwargs = {
+            "user": connection_parameters["user"],
+            "account": connection_parameters["account"],
+            "host": connection_parameters["host"],
+            "port": connection_parameters["port"],
+            "warehouse": connection_parameters["warehouse"],
+            "database": connection_parameters["database"],
+            "schema": connection_parameters["schema"],
+            "role": connection_parameters["role"],
+            "authenticator": connection_parameters["authenticator"],
+            "private_key": connection_parameters["private_key"],
+        }
+        if "ocsp_fail_open" in connection_parameters:
+            connect_kwargs["ocsp_fail_open"] = connection_parameters["ocsp_fail_open"]
+        return snowflake.connector.connect(**connect_kwargs)
     except Exception as e:
         logger.error(f"Error connecting to Snowflake: {e}")
         return None

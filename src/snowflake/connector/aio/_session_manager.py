@@ -44,7 +44,7 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
     def __init__(
         self,
         *args,
-        snowflake_ocsp_mode: OCSPMode = OCSPMode.FAIL_OPEN,
+        snowflake_ocsp_mode: OCSPMode = OCSPMode.DISABLE_OCSP_CHECKS,
         session_manager: SessionManager | None = None,
         **kwargs,
     ):
@@ -139,7 +139,7 @@ class AioHttpConfig(BaseHttpConfig):
     """Trust environment variables for proxy configuration (HTTP_PROXY, HTTPS_PROXY, NO_PROXY).
     Required for proxy support set by proxy.set_proxies() in connection initialization."""
 
-    snowflake_ocsp_mode: OCSPMode = OCSPMode.FAIL_OPEN
+    snowflake_ocsp_mode: OCSPMode = OCSPMode.DISABLE_OCSP_CHECKS
     """OCSP validation mode obtained from connection._ocsp_mode()."""
 
     def get_connector(

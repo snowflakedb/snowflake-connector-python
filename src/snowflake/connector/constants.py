@@ -384,12 +384,17 @@ class OCSPMode(Enum):
 
     OCSP mode descriptions:
         FAIL_CLOSED: If the client or driver does not receive a valid OCSP CA response for any reason,
-            the connection fails.
+            the connection fails. Selected by setting ocsp_fail_open=False when disable is not true.
         FAIL_OPEN: A response indicating a revoked certificate results in a failed connection. A response with any
             other certificate errors or statuses allows the connection to occur, but denotes the message in the logs
-            at the WARNING level with the relevant details in JSON format.
+            at the WARNING level with the relevant details in JSON format. Selected by setting ocsp_fail_open=True
+            when disable is not true. disable_ocsp_checks=True (or insecure_mode=True) always
+            turns OCSP off, including when ocsp_fail_open is set. ocsp_fail_open=None
+            (the stored default) and disable_ocsp_checks=False / insecure_mode=False
+            are not an opt-in.
         INSECURE (deprecated): The connection will occur anyway.
         DISABLE_OCSP_CHECKS: The OCSP check will not happen. If the certificate is valid then connection will occur.
+            This is the default unless the user opts into OCSP.
     """
 
     FAIL_CLOSED = "FAIL_CLOSED"

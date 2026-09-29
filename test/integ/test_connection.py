@@ -1152,7 +1152,7 @@ def test_ocsp_cache_working(conn_cnx):
         OCSP_RESPONSE_VALIDATION_CACHE.telemetry["hit"]
         + OCSP_RESPONSE_VALIDATION_CACHE.telemetry["miss"]
     )
-    with conn_cnx() as cnx:
+    with conn_cnx(ocsp_fail_open=True) as cnx:
         assert cnx
     assert (
         OCSP_RESPONSE_VALIDATION_CACHE.telemetry["hit"]
@@ -1454,16 +1454,52 @@ def test_ocsp_mode_disable_ocsp_checks(
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(disable_ocsp_checks=True) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
+        assert conn._ocsp_mode().name == "DISABLE_OCSP_CHECKS"
+        assert conn.disable_ocsp_checks is True
         assert "snowflake.connector.ocsp_snowflake" not in caplog.text
         caplog.clear()
 
+    # OCSP is opt-in; a bare connection does not run OCSP checks.
     with conn_cnx() as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
+        assert conn._ocsp_mode().name == "DISABLE_OCSP_CHECKS"
+        assert conn.disable_ocsp_checks is True
+        assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+        if is_public_test or is_local_dev_setup:
+            assert "This connection does not perform OCSP checks." in caplog.text
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "ocsp_fail_open,expected_mode", [(True, "FAIL_OPEN"), (False, "FAIL_CLOSED")]
+)
+def test_ocsp_mode_opt_in_fail_open(
+    conn_cnx, is_public_test, is_local_dev_setup, caplog, ocsp_fail_open, expected_mode
+):
+    caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
+    with conn_cnx(ocsp_fail_open=ocsp_fail_open) as conn, conn.cursor() as cur:
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        assert conn._ocsp_mode().name == expected_mode
+        assert conn.disable_ocsp_checks is False
         if is_public_test or is_local_dev_setup:
             assert "snowflake.connector.ocsp_snowflake" in caplog.text
             assert "This connection does not perform OCSP checks." not in caplog.text
         else:
             assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_cache_filename_ignored_when_ocsp_off(conn_cnx, tmp_path, caplog):
+    caplog.set_level(logging.WARNING, "snowflake.connector.connection")
+    cache_file = tmp_path / "ocsp_cache.json"
+    with (
+        conn_cnx(ocsp_response_cache_filename=str(cache_file)) as conn,
+        conn.cursor() as cur,
+    ):
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        assert conn._ocsp_mode().name == "DISABLE_OCSP_CHECKS"
+        assert "ocsp_response_cache_filename" in caplog.text
+        assert "OCSP is disabled unless you opt in" in caplog.text
 
 
 @pytest.mark.skipolddriver
@@ -1690,7 +1726,9 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with (
-        conn_cnx(insecure_mode=True, disable_ocsp_checks=False) as conn,
+        conn_cnx(
+            insecure_mode=True, disable_ocsp_checks=False, ocsp_fail_open=True
+        ) as conn,
         conn.cursor() as cur,
     ):
         assert cur.execute("select 1").fetchall() == [(1,)]
@@ -1846,7 +1884,7 @@ def test_mock_non_existing_server(conn_cnx, caplog):
                     "snowflake.connector.ocsp_snowflake.OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME",
                     tmp.name,
                 ):
-                    with conn_cnx():
+                    with conn_cnx(ocsp_fail_open=True):
                         pass
         assert all(
             s in caplog.text

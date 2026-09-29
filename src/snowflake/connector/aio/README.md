@@ -14,7 +14,7 @@ is not intended for production environments.**
 - ❌ `mfa_callback` / `password_callback` - not supported
 - ❌ `_probe_connection=True` - no connection diagnostic
 - ❌ Raw binary response handling - not supported
-- ❌ CRL (Certificate Revocation List) - not supported (only OCSP is supported)
+- ❌ CRL (Certificate Revocation List) - not supported (only OCSP is supported). OCSP is off by default; set `ocsp_fail_open=True`/`False` to enable it.
 
 ## Installation & Import
 

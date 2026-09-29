@@ -1052,7 +1052,7 @@ async def test_ocsp_cache_working(conn_cnx):
         OCSP_RESPONSE_VALIDATION_CACHE.telemetry["hit"]
         + OCSP_RESPONSE_VALIDATION_CACHE.telemetry["miss"]
     )
-    async with conn_cnx() as cnx:
+    async with conn_cnx(ocsp_fail_open=True) as cnx:
         assert cnx
     assert (
         OCSP_RESPONSE_VALIDATION_CACHE.telemetry["hit"]
@@ -1380,16 +1380,11 @@ async def test_ocsp_mode_disable_ocsp_checks(
     )
     async with conn_cnx(**kwargs) as conn, conn.cursor() as cur:
         assert await (await cur.execute("select 1")).fetchall() == [(1,)]
-        if disable_ocsp_checks is True:
-            assert "snowflake.connector.aio._ocsp_snowflake" not in caplog.text
-        else:
-            if is_public_test or is_local_dev_setup:
-                assert "snowflake.connector.aio._ocsp_snowflake" in caplog.text
-                assert (
-                    "This connection does not perform OCSP checks." not in caplog.text
-                )
-            else:
-                assert "snowflake.connector.aio._ocsp_snowflake" not in caplog.text
+        assert conn._ocsp_mode().name == "DISABLE_OCSP_CHECKS"
+        assert conn.disable_ocsp_checks is True
+        assert "snowflake.connector.aio._ocsp_snowflake" not in caplog.text
+        if is_public_test or is_local_dev_setup:
+            assert "This connection does not perform OCSP checks." in caplog.text
 
 
 @pytest.mark.skipolddriver
@@ -1448,7 +1443,9 @@ async def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_ena
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.aio._ocsp_snowflake")
     async with (
-        conn_cnx(insecure_mode=True, disable_ocsp_checks=False) as conn,
+        conn_cnx(
+            insecure_mode=True, disable_ocsp_checks=False, ocsp_fail_open=True
+        ) as conn,
         conn.cursor() as cur,
     ):
         assert await (await cur.execute("select 1")).fetchall() == [(1,)]
@@ -1461,6 +1458,39 @@ async def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_ena
             assert "This connection does not perform OCSP checks." not in caplog.text
         else:
             assert "snowflake.connector.aio._ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "ocsp_fail_open,expected_mode", [(True, "FAIL_OPEN"), (False, "FAIL_CLOSED")]
+)
+async def test_ocsp_mode_opt_in_fail_open(
+    conn_cnx, is_public_test, is_local_dev_setup, caplog, ocsp_fail_open, expected_mode
+):
+    caplog.set_level(logging.DEBUG, "snowflake.connector.aio._ocsp_snowflake")
+    async with conn_cnx(ocsp_fail_open=ocsp_fail_open) as conn, conn.cursor() as cur:
+        assert await (await cur.execute("select 1")).fetchall() == [(1,)]
+        assert conn._ocsp_mode().name == expected_mode
+        assert conn.disable_ocsp_checks is False
+        if is_public_test or is_local_dev_setup:
+            assert "snowflake.connector.aio._ocsp_snowflake" in caplog.text
+            assert "This connection does not perform OCSP checks." not in caplog.text
+        else:
+            assert "snowflake.connector.aio._ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+async def test_ocsp_cache_filename_ignored_when_ocsp_off(conn_cnx, tmp_path, caplog):
+    caplog.set_level(logging.WARNING, "snowflake.connector.connection")
+    cache_file = tmp_path / "ocsp_cache.json"
+    async with (
+        conn_cnx(ocsp_response_cache_filename=str(cache_file)) as conn,
+        conn.cursor() as cur,
+    ):
+        assert await (await cur.execute("select 1")).fetchall() == [(1,)]
+        assert conn._ocsp_mode().name == "DISABLE_OCSP_CHECKS"
+        assert "ocsp_response_cache_filename" in caplog.text
+        assert "OCSP is disabled unless you opt in" in caplog.text
 
 
 # TODO (SNOW-2871292): uncomment when issues with ocsp revoked certs in tests are fixed (reapply #2559)
@@ -1620,7 +1650,7 @@ async def test_mock_non_existing_server(conn_cnx, caplog):
                     "snowflake.connector.ocsp_snowflake.OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME",
                     tmp.name,
                 ):
-                    async with conn_cnx():
+                    async with conn_cnx(ocsp_fail_open=True):
                         pass
         assert all(
             s in caplog.text

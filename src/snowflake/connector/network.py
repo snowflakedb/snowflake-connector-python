@@ -379,8 +379,10 @@ class SnowflakeRestful:
         self._session_manager = session_manager
         self._lock_token = Lock()
 
-        # OCSP mode (OCSPMode.FAIL_OPEN by default)
-        ssl_wrap_socket.FEATURE_OCSP_MODE = (
+        # OCSP mode. FEATURE_OCSP_MODE is process-global. A later default
+        # (OCSP off) client does not overwrite a non-default already stored.
+        # FAIL_CLOSED is not overwritten by a later FAIL_OPEN.
+        ssl_wrap_socket.apply_feature_ocsp_mode(
             self._connection._ocsp_mode()
             if self._connection
             else ssl_wrap_socket.DEFAULT_OCSP_MODE
