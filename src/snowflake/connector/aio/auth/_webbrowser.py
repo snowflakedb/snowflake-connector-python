@@ -25,7 +25,6 @@ from ...constants import (
     HTTP_HEADER_USER_AGENT,
 )
 from ...errorcode import (
-    ER_IDP_CONNECTION_ERROR,
     ER_INVALID_VALUE,
     ER_NO_HOSTNAME_FOUND,
     ER_UNABLE_TO_OPEN_BROWSER,
@@ -111,7 +110,7 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
                     )
                 else:
                     raise ex
-            socket_connection.listen(0)  # no backlog
+            socket_connection.listen(5)
             callback_port = socket_connection.getsockname()[1]
 
             if conn._disable_console_login:
@@ -246,34 +245,45 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
                             else:
                                 logger.debug("Exceeded retry count")
 
-                data = raw_data.decode("utf-8").split("\r\n")
+                if not raw_data:
+                    continue
 
-                if not await self._process_options(data, socket_client):
-                    await self._process_receive_saml_token(conn, data, socket_client)
+                data = raw_data.decode("utf-8").splitlines()
+
+                method = self._request_method(data)
+                if method == "OPTIONS":
+                    await self._process_options(data, socket_client)
+                    continue
+                if method not in {"GET", "POST"}:
+                    continue
+                if not self._validate_callback_origin(data):
+                    continue
+                if await self._process_receive_saml_token(conn, data, socket_client):
                     break
 
             finally:
-                socket_client.shutdown(socket.SHUT_RDWR)
-                socket_client.close()
+                self._close_socket_client(socket_client)
 
     async def _process_options(
         self, data: list[str], socket_client: socket.socket
     ) -> bool:
         """Allows JS Ajax access to this endpoint."""
-        for line in data:
-            if line.startswith("OPTIONS "):
-                break
-        else:
+        if self._request_method(data) != "OPTIONS":
             return False
 
         self._get_user_agent(data)
         requested_headers, requested_origin = self._check_post_requested(data)
-        if not requested_headers:
-            return False
+        if requested_origin is None:
+            return True
+
+        if requested_headers and any(
+            header.strip().lower() != "content-type"
+            for header in requested_headers.split(",")
+        ):
+            return True
 
         if not self._validate_origin(requested_origin):
-            # validate Origin and fail if not match with the server.
-            return False
+            return True
 
         self._origin = requested_origin
         content = [
@@ -281,8 +291,8 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
             "Date: {}".format(
                 time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
             ),
-            "Access-Control-Allow-Methods: POST, GET",
-            f"Access-Control-Allow-Headers: {requested_headers}",
+            "Access-Control-Allow-Methods: POST",
+            "Access-Control-Allow-Headers: Content-Type",
             "Access-Control-Max-Age: 86400",
             f"Access-Control-Allow-Origin: {self._origin}",
             "",
@@ -295,9 +305,9 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
 
     async def _process_receive_saml_token(
         self, conn: SnowflakeConnection, data: list[str], socket_client: socket.socket
-    ) -> None:
+    ) -> bool:
         if not self._process_get(data) and not await self._process_post(conn, data):
-            return  # error
+            return False
 
         content = [
             "HTTP/1.1 200 OK",
@@ -324,32 +334,23 @@ You can close this window now and go back where you started from.
         await self._event_loop.sock_sendall(
             socket_client, "\r\n".join(content).encode("utf-8")
         )
+        return True
 
     async def _process_post(self, conn: SnowflakeConnection, data: list[str]) -> bool:
-        for line in data:
-            if line.startswith("POST "):
-                break
-        else:
-            await self._handle_failure(
-                conn=conn,
-                ret={
-                    "code": ER_IDP_CONNECTION_ERROR,
-                    "message": "Invalid HTTP request from web browser. Idp "
-                    "authentication could have failed.",
-                },
-            )
+        body = self._request_body(data)
+        if self._request_method(data) != "POST" or body is None:
             return False
 
         self._get_user_agent(data)
         try:
             # parse the response as JSON
-            payload = json.loads(data[-1])
+            payload = json.loads(body)
             self._token = payload.get("token")
             self.consent_cache_id_token = payload.get("consent", True)
         except Exception:
             # key=value form.
-            self._token = parse_qs(data[-1])["token"][0]
-        return True
+            self._token = (parse_qs(body).get("token") or [None])[0]
+        return self._token is not None
 
     async def _get_sso_url(
         self,

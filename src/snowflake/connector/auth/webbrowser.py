@@ -21,7 +21,6 @@ from ..constants import (
     HTTP_HEADER_USER_AGENT,
 )
 from ..errorcode import (
-    ER_IDP_CONNECTION_ERROR,
     ER_INVALID_VALUE,
     ER_NO_HOSTNAME_FOUND,
     ER_UNABLE_TO_OPEN_BROWSER,
@@ -141,7 +140,7 @@ class AuthByWebBrowser(AuthByPlugin):
                     )
                 else:
                     raise ex
-            socket_connection.listen(0)  # no backlog
+            socket_connection.listen(5)
             callback_port = socket_connection.getsockname()[1]
 
             if conn._disable_console_login:
@@ -277,32 +276,43 @@ class AuthByWebBrowser(AuthByPlugin):
                             else:
                                 logger.debug("Exceeded retry count")
 
-                data = raw_data.decode("utf-8").split("\r\n")
+                if not raw_data:
+                    continue
 
-                if not self._process_options(data, socket_client):
-                    self._process_receive_saml_token(conn, data, socket_client)
+                data = raw_data.decode("utf-8").splitlines()
+
+                method = self._request_method(data)
+                if method == "OPTIONS":
+                    self._process_options(data, socket_client)
+                    continue
+                if method not in {"GET", "POST"}:
+                    continue
+                if not self._validate_callback_origin(data):
+                    continue
+                if self._process_receive_saml_token(conn, data, socket_client):
                     break
 
             finally:
-                socket_client.shutdown(socket.SHUT_RDWR)
-                socket_client.close()
+                self._close_socket_client(socket_client)
 
     def _process_options(self, data: list[str], socket_client: socket.socket) -> bool:
         """Allows JS Ajax access to this endpoint."""
-        for line in data:
-            if line.startswith("OPTIONS "):
-                break
-        else:
+        if self._request_method(data) != "OPTIONS":
             return False
 
         self._get_user_agent(data)
         requested_headers, requested_origin = self._check_post_requested(data)
-        if not requested_headers:
-            return False
+        if requested_origin is None:
+            return True
+
+        if requested_headers and any(
+            header.strip().lower() != "content-type"
+            for header in requested_headers.split(",")
+        ):
+            return True
 
         if not self._validate_origin(requested_origin):
-            # validate Origin and fail if not match with the server.
-            return False
+            return True
 
         self._origin = requested_origin
         content = [
@@ -310,8 +320,8 @@ class AuthByWebBrowser(AuthByPlugin):
             "Date: {}".format(
                 time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
             ),
-            "Access-Control-Allow-Methods: POST, GET",
-            f"Access-Control-Allow-Headers: {requested_headers}",
+            "Access-Control-Allow-Methods: POST",
+            "Access-Control-Allow-Headers: Content-Type",
             "Access-Control-Max-Age: 86400",
             f"Access-Control-Allow-Origin: {self._origin}",
             "",
@@ -321,24 +331,103 @@ class AuthByWebBrowser(AuthByPlugin):
         return True
 
     def _validate_origin(self, requested_origin: str) -> bool:
-        ret = urlsplit(requested_origin)
-        netloc = ret.netloc.split(":")
-        host_got = netloc[0]
-        port_got = (
-            netloc[1] if len(netloc) > 1 else (443 if self._protocol == "https" else 80)
-        )
+        try:
+            parsed = urlsplit(requested_origin)
+            expected_scheme = (self._protocol or "").lower()
+            expected_port = (
+                int(self._port)
+                if self._port is not None
+                else self._default_port(expected_scheme)
+            )
+            actual_port = parsed.port or self._default_port(parsed.scheme.lower())
+        except (TypeError, ValueError):
+            return False
 
         return (
-            ret.scheme == self._protocol
-            and host_got == self._host
-            and port_got == self._port
+            parsed.scheme.lower() == expected_scheme
+            and parsed.hostname is not None
+            and parsed.hostname.lower() == (self._host or "").lower()
+            and actual_port == expected_port
+            and parsed.username is None
+            and parsed.password is None
+            and parsed.path in ("", "/")
+            and not parsed.query
+            and not parsed.fragment
         )
+
+    @staticmethod
+    def _default_port(protocol: str) -> int | None:
+        if protocol == "https":
+            return 443
+        if protocol == "http":
+            return 80
+        return None
+
+    @staticmethod
+    def _header_lines(data: list[str]) -> list[str]:
+        try:
+            return data[: data.index("")]
+        except ValueError:
+            return data
+
+    @classmethod
+    def _request_method(cls, data: list[str]) -> str | None:
+        header_lines = cls._header_lines(data)
+        if not header_lines:
+            return None
+        parts = header_lines[0].split(maxsplit=1)
+        return parts[0].upper() if parts else None
+
+    @classmethod
+    def _request_body(cls, data: list[str]) -> str | None:
+        try:
+            separator = data.index("")
+        except ValueError:
+            return None
+        return "\n".join(data[separator + 1 :])
+
+    @classmethod
+    def _get_header(cls, data: list[str], name: str) -> str | None:
+        prefix = name.lower() + ":"
+        for line in cls._header_lines(data)[1:]:
+            if line.lower().startswith(prefix):
+                return line.split(":", 1)[1].strip()
+        return None
+
+    def _validate_callback_origin(self, data: list[str]) -> bool:
+        method = self._request_method(data)
+        if method not in {"GET", "POST"}:
+            self._origin = None
+            return False
+        requested_origin = self._get_header(data, "Origin")
+        if method == "GET" and (
+            requested_origin is None or requested_origin.lower() == "null"
+        ):
+            self._origin = None
+            return True
+        if requested_origin is None or not self._validate_origin(requested_origin):
+            return False
+        self._origin = requested_origin
+        return True
+
+    @staticmethod
+    def _close_socket_client(socket_client: socket.socket | None) -> None:
+        if socket_client is None:
+            return
+        try:
+            socket_client.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            socket_client.close()
+        except OSError:
+            pass
 
     def _process_receive_saml_token(
         self, conn: SnowflakeConnection, data: list[str], socket_client: socket.socket
-    ) -> None:
+    ) -> bool:
         if not self._process_get(data) and not self._process_post(conn, data):
-            return  # error
+            return False
 
         content = [
             "HTTP/1.1 200 OK",
@@ -363,79 +452,60 @@ You can close this window now and go back where you started from.
         content.append(msg)
 
         socket_client.sendall("\r\n".join(content).encode("utf-8"))
+        return True
 
     def _check_post_requested(self, data: list[str]) -> tuple[str | None, str | None]:
-        request_line = None
-        header_line = None
-        origin_line = None
-        for line in data:
-            if line.startswith("Access-Control-Request-Method:"):
-                request_line = line
-            elif line.startswith("Access-Control-Request-Headers:"):
-                header_line = line
-            elif line.startswith("Origin:"):
-                origin_line = line
-
+        requested_method = self._get_header(data, "Access-Control-Request-Method")
+        requested_origin = self._get_header(data, "Origin")
         if (
-            not request_line
-            or not header_line
-            or not origin_line
-            or request_line.split(":")[1].strip() != "POST"
+            requested_method is None
+            or requested_origin is None
+            or requested_method.upper() != "POST"
         ):
             return None, None
 
         return (
-            header_line.split(":")[1].strip(),
-            ":".join(origin_line.split(":")[1:]).strip(),
+            self._get_header(data, "Access-Control-Request-Headers") or "",
+            requested_origin,
         )
 
-    def _process_get_url(self, url: str) -> None:
+    def _process_get_url(self, url: str) -> bool:
         parsed = parse_qs(urlparse(url).query)
         if "token" not in parsed or not parsed["token"][0]:
-            return
+            return False
         self._token = parsed["token"][0]
+        return True
 
     def _process_get(self, data: list[str]) -> bool:
-        for line in data:
-            if line.startswith("GET "):
-                target_line = line
-                break
-        else:
+        header_lines = self._header_lines(data)
+        if self._request_method(data) != "GET" or not header_lines:
             return False
 
         self._get_user_agent(data)
-        _, url, _ = target_line.split()
-        self._process_get_url(url)
-        return True
+        try:
+            _, url, _ = header_lines[0].split()
+        except ValueError:
+            return False
+        return self._process_get_url(url)
 
     def _process_post(self, conn: SnowflakeConnection, data: list[str]) -> bool:
-        for line in data:
-            if line.startswith("POST "):
-                break
-        else:
-            self._handle_failure(
-                conn=conn,
-                ret={
-                    "code": ER_IDP_CONNECTION_ERROR,
-                    "message": "Invalid HTTP request from web browser. Idp "
-                    "authentication could have failed.",
-                },
-            )
+        body = self._request_body(data)
+        if self._request_method(data) != "POST" or body is None:
             return False
 
         self._get_user_agent(data)
         try:
             # parse the response as JSON
-            payload = json.loads(data[-1])
+            payload = json.loads(body)
             self._token = payload.get("token")
             self.consent_cache_id_token = payload.get("consent", True)
         except Exception:
             # key=value form.
-            self._token = parse_qs(data[-1])["token"][0]
-        return True
+            self._token = (parse_qs(body).get("token") or [None])[0]
+        return self._token is not None
 
     def _get_user_agent(self, data: list[str]) -> None:
-        for line in data:
+        for line in self._header_lines(data):
             if line.lower().startswith("user-agent"):
                 logger.debug(line)
                 break
