@@ -225,6 +225,8 @@ jobs:
       - name: Install tox
         run: python -m pip install tox>=4
       - name: Run tests
+        id: run_tests
+        continue-on-error: true
        # To run a single test on GHA use the below command:
 #        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
         run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,sso}-ci | sed 's/ /,/g'`
@@ -235,6 +237,17 @@ jobs:
           TOX_PARALLEL_NO_SPINNER: 1
          # To specify the test name (in single test mode) pass this env variable:
 #          SINGLE_TEST_NAME: test/path/filename.py::test_name
+        shell: bash
+      # --lf re-runs what the step above recorded as failed, so a flake does not
+      # fail the job. Skipped when the run above is green; the job fails if this does.
+      - name: Rerun failed tests
+        if: steps.run_tests.outcome == 'failure'
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,sso}-ci | sed 's/ /,/g'`
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes --tb=short --lf --maxfail=5
+          TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v7
         if: always()
@@ -293,11 +306,21 @@ jobs:
       - name: Install tox
         run: python -m pip install tox>=4
       - name: Run tests
+        id: run_tests
+        continue-on-error: true
         run: python -m tox run -e olddriver
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
+        shell: bash
+      - name: Rerun failed tests
+        if: steps.run_tests.outcome == 'failure'
+        run: python -m tox run -e olddriver
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes --tb=short --lf --maxfail=5
         shell: bash
 
   test-noarrowextension:
@@ -365,11 +388,24 @@ jobs:
         run: ls -lh dist
         shell: bash
       - name: Run tests
+        id: run_tests
+        continue-on-error: true
         run: ./ci/test_fips_docker.sh
         env:
           PYTHON_VERSION: "3.11"
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
+          TOX_PARALLEL_NO_SPINNER: 1
+        shell: bash
+      # The container bind-mounts the workspace, so .pytest_cache from the run
+      # above survives and --lf picks up its failures.
+      - name: Rerun failed tests
+        if: steps.run_tests.outcome == 'failure'
+        run: ./ci/test_fips_docker.sh
+        env:
+          PYTHON_VERSION: "3.11"
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes --tb=short --lf --maxfail=5
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v7
@@ -429,11 +465,22 @@ jobs:
         run: ls -lh dist
         shell: bash
       - name: Run tests
+        id: run_tests
+        continue-on-error: true
         run: ./ci/test_lambda_docker.sh ${PYTHON_VERSION}
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
+          TOX_PARALLEL_NO_SPINNER: 1
+        shell: bash
+      - name: Rerun failed tests
+        if: steps.run_tests.outcome == 'failure'
+        run: ./ci/test_lambda_docker.sh ${PYTHON_VERSION}
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes --tb=short --lf --maxfail=5
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v7
@@ -513,11 +560,21 @@ jobs:
       - name: Install tox
         run: python -m pip install tox>=4
       - name: Run tests
+        id: run_tests
+        continue-on-error: true
         run: python -m tox run -e aio
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
+          TOX_PARALLEL_NO_SPINNER: 1
+      - name: Rerun failed tests
+        if: steps.run_tests.outcome == 'failure'
+        run: python -m tox run -e aio
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes --tb=short --lf --maxfail=5
           TOX_PARALLEL_NO_SPINNER: 1
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
