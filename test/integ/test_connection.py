@@ -71,6 +71,23 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+@pytest.fixture
+def isolate_feature_ocsp_mode():
+    """Reset process-global FEATURE_OCSP_MODE around OCSP mode tests.
+
+    FEATURE_OCSP_MODE is sticky: a prior opt-in (FAIL_OPEN/FAIL_CLOSED) in the
+    same pytest-xdist worker is not overwritten by a later DISABLE connection,
+    which makes disable/insecure_mode integ assertions flake under -n auto.
+    """
+    from snowflake.connector import ssl_wrap_socket
+
+    ssl_wrap_socket.FEATURE_OCSP_MODE = ssl_wrap_socket.DEFAULT_OCSP_MODE
+    try:
+        yield
+    finally:
+        ssl_wrap_socket.FEATURE_OCSP_MODE = ssl_wrap_socket.DEFAULT_OCSP_MODE
+
+
 def test_basic(conn_testaccount):
     """Basic Connection test."""
     assert conn_testaccount, "invalid cnx"
@@ -1449,7 +1466,7 @@ def test_server_session_keep_alive(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_ocsp_mode_disable_ocsp_checks(
-    conn_cnx, is_public_test, is_local_dev_setup, caplog
+    conn_cnx, is_public_test, is_local_dev_setup, caplog, isolate_feature_ocsp_mode
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(disable_ocsp_checks=True) as conn, conn.cursor() as cur:
@@ -1474,7 +1491,13 @@ def test_ocsp_mode_disable_ocsp_checks(
     "ocsp_fail_open,expected_mode", [(True, "FAIL_OPEN"), (False, "FAIL_CLOSED")]
 )
 def test_ocsp_mode_opt_in_fail_open(
-    conn_cnx, is_public_test, is_local_dev_setup, caplog, ocsp_fail_open, expected_mode
+    conn_cnx,
+    is_public_test,
+    is_local_dev_setup,
+    caplog,
+    ocsp_fail_open,
+    expected_mode,
+    isolate_feature_ocsp_mode,
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(ocsp_fail_open=ocsp_fail_open) as conn, conn.cursor() as cur:
@@ -1489,7 +1512,9 @@ def test_ocsp_mode_opt_in_fail_open(
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_cache_filename_ignored_when_ocsp_off(conn_cnx, tmp_path, caplog):
+def test_ocsp_cache_filename_ignored_when_ocsp_off(
+    conn_cnx, tmp_path, caplog, isolate_feature_ocsp_mode
+):
     caplog.set_level(logging.WARNING, "snowflake.connector.connection")
     cache_file = tmp_path / "ocsp_cache.json"
     with (
@@ -1503,7 +1528,9 @@ def test_ocsp_cache_filename_ignored_when_ocsp_off(conn_cnx, tmp_path, caplog):
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_mode_insecure_mode(conn_cnx, is_public_test, is_local_dev_setup, caplog):
+def test_ocsp_mode_insecure_mode(
+    conn_cnx, is_public_test, is_local_dev_setup, caplog, isolate_feature_ocsp_mode
+):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(insecure_mode=True) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
@@ -1514,7 +1541,7 @@ def test_ocsp_mode_insecure_mode(conn_cnx, is_public_test, is_local_dev_setup, c
 
 @pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_match(
-    conn_cnx, is_public_test, is_local_dev_setup, caplog
+    conn_cnx, is_public_test, is_local_dev_setup, caplog, isolate_feature_ocsp_mode
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with (
@@ -1533,7 +1560,7 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_match(
 
 @pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_disabled(
-    conn_cnx, is_public_test, is_local_dev_setup, caplog
+    conn_cnx, is_public_test, is_local_dev_setup, caplog, isolate_feature_ocsp_mode
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with (
@@ -1722,7 +1749,7 @@ def test_no_new_warnings_or_errors_on_successful_basic_select(conn_cnx, caplog):
 
 @pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
-    conn_cnx, is_public_test, is_local_dev_setup, caplog
+    conn_cnx, is_public_test, is_local_dev_setup, caplog, isolate_feature_ocsp_mode
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with (
