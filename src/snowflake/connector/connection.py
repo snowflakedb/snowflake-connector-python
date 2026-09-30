@@ -1930,6 +1930,7 @@ class SnowflakeConnection:
         # read OAuth token from
         token_file_path = kwargs.get("token_file_path")
         if token_file_path:
+            token_file_path = expand_tilde(token_file_path)
             with open(token_file_path) as f:
                 self._token = f.read()
 

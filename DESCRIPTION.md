@@ -7,6 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v4.8.1 (Unreleased)
+  - Added tilde (`~`) expansion to the `token_file_path` connection parameter, matching `private_key_file` (SNOW-3995071, #3006).
+
 - v4.8.0(Sep 30,2026)
   - Fixed external-browser (SSO) authentication to validate the `Origin` header on the local callback server, rejecting tokens delivered from unexpected origins. A trailing slash in the origin (e.g. `https://account.snowflakecomputing.com/`) is now accepted on par with the bare origin, matching JDBC and other driver behaviour. Preconnect probe connections (empty recv) no longer count against the retry budget and no longer abort the login flow.
   - Added the `SNOWFLAKE_TLS_CIPHERS` environment variable to restrict which TLS ciphers the connector offers. It takes a colon-separated list; names beginning with `TLS_` are applied as TLS 1.3 cipher suites and the remainder as the cipher list for TLS 1.2 and below, so a single variable covers both. Leaving it unset keeps OpenSSL's defaults unchanged, and an unrecognized cipher name is rejected rather than silently ignored. The restriction covers Snowflake API traffic, cloud-storage (stage) transfers, OCSP/CRL fetches and IdP requests. Requests issued by the AWS and Azure SDKs, and asynchronous connections, are not covered — for TLS 1.3 suites specifically they cannot be, because the Python standard library exposes no API for restricting them.

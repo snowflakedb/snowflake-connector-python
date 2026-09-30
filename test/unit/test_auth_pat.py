@@ -101,3 +101,48 @@ def test_pat_authenticator_creates_auth_by_pat(
     assert isinstance(conn.auth_class, expected_auth_class)
 
     conn.close()
+
+
+def test_pat_token_file_path_expands_tilde(monkeypatch, tmp_path):
+    """Test that a leading tilde in token_file_path is expanded to the user home."""
+    import json
+
+    import snowflake.connector
+
+    mock_home = tmp_path / "home"
+    (mock_home / ".snowflake").mkdir(parents=True)
+    (mock_home / ".snowflake" / "pat.token").write_text("pat_from_file")
+    # Path.expanduser reads USERPROFILE on Windows and HOME elsewhere
+    monkeypatch.setenv("HOME", str(mock_home))
+    monkeypatch.setenv("USERPROFILE", str(mock_home))
+
+    sent_tokens = []
+
+    def mock_post_request(request, url, headers, json_body, **kwargs):
+        sent_tokens.append(json.loads(json_body)["data"]["TOKEN"])
+        return {
+            "success": True,
+            "message": None,
+            "data": {
+                "token": "TOKEN",
+                "masterToken": "MASTER_TOKEN",
+                "idToken": None,
+                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
+            },
+        }
+
+    monkeypatch.setattr(
+        snowflake.connector.network.SnowflakeRestful, "_post_request", mock_post_request
+    )
+
+    conn = snowflake.connector.connect(
+        user="user",
+        account="account",
+        authenticator=PROGRAMMATIC_ACCESS_TOKEN,
+        token_file_path="~/.snowflake/pat.token",
+    )
+
+    assert isinstance(conn.auth_class, AuthByPAT)
+    assert sent_tokens == ["pat_from_file"]
+
+    conn.close()
