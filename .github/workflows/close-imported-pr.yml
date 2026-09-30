@@ -46,11 +46,11 @@ jobs:
     # snowflakedb/snowflake-connector-python.
     #
     # Gate 2 — actor guard. Only pushes from the outbound mirror carry
-    # the trailers. Skip direct human pushes. Replace `mirror-bot` with
-    # the actual login or app slug used to push from the outbound job.
+    # the trailers. Skip direct human pushes.
     if: >-
       github.repository == 'snowflakedb/snowflake-connector-python'
-      && (github.event_name == 'workflow_dispatch' || github.actor == 'sfc-gh-drivers-sa')
+      && (github.event_name == 'workflow_dispatch'
+          || github.actor == 'snowflake-copybara[bot]')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (for git log on dispatch backfill)
