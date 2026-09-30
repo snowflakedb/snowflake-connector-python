@@ -152,6 +152,10 @@ class SnowflakeStorageClient(ABC):
                 meta.src_stream or meta.intermediate_stream
             )
 
+    # Override in Azure
+    def _compute_content_md5(self) -> None:
+        return
+
     def encrypt(self) -> None:
         meta = self.meta
         logger.debug(f"encrypting file={meta.real_src_file_name}")
@@ -239,6 +243,7 @@ class SnowflakeStorageClient(ABC):
         else:
             self.data_file = meta.real_src_file_name
         logger.debug("finished preprocessing")
+        self._compute_content_md5()
         if meta.upload_size < meta.multipart_threshold or not self.chunked_transfer:
             self.num_of_chunks = 1
         else:

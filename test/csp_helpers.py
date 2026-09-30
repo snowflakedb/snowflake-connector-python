@@ -385,6 +385,7 @@ class FakeAwsEnvironment:
         )
         self.metadata_token = "test-token"
         self.web_identity_token = "fake.jwt.token-for-testing-only"
+        self.sts_client_kwargs: list[dict] = []
 
     def assume_role(self, **kwargs):
         if (
@@ -426,6 +427,7 @@ class FakeAwsEnvironment:
         return self.metadata_token
 
     def boto3_client(self, *args, **kwargs):
+        self.sts_client_kwargs.append(kwargs)
         mock_client = mock.Mock()
         mock_client.get_caller_identity.return_value = self.caller_identity
         mock_client.assume_role = self.assume_role

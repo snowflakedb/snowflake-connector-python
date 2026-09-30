@@ -62,6 +62,13 @@ def successful_web_callback(token):
     ).encode("utf-8")
 
 
+def browser_callback(request_line, *, headers=(), body="", line_ending="\r\n"):
+    lines = [request_line, *headers]
+    if body:
+        lines.extend(["", body])
+    return line_ending.join(lines).encode("utf-8")
+
+
 def _init_socket():
     mock_socket_instance = MagicMock()
     mock_socket_instance.getsockname.return_value = [None, CLIENT_PORT]
@@ -206,6 +213,7 @@ async def test_auth_webbrowser_post(_, disable_console_login):
                         "POST / HTTP/1.1",
                         "User-Agent: snowflake-agent",
                         f"Host: localhost:{CLIENT_PORT}",
+                        f"Origin: https://{HOST}",
                         "",
                         f"token={ref_token}&confirm=true",
                     ]
@@ -227,6 +235,9 @@ async def test_auth_webbrowser_post(_, disable_console_login):
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
             socket_pkg=mock_socket_pkg,
+            protocol="https",
+            host=HOST,
+            port=SNOWFLAKE_PORT,
         )
         with mock.patch.object(
             auth._event_loop,
@@ -259,6 +270,349 @@ async def test_auth_webbrowser_post(_, disable_console_login):
             assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
         else:
             mock_webbrowser.open_new.assert_called_once_with(REF_CONSOLE_LOGIN_SSO_URL)
+
+
+async def test_auth_webbrowser_preflight_accepts_lf_and_case_insensitive_post():
+    auth = AuthByWebBrowser(
+        application=APPLICATION,
+        protocol="https",
+        host=HOST,
+        port=SNOWFLAKE_PORT,
+    )
+    socket_client = MagicMock()
+    request = browser_callback(
+        "OPTIONS / HTTP/1.1",
+        headers=(
+            f"Origin: https://{HOST}",
+            "Access-Control-Request-Method: post",
+            "Access-Control-Request-Headers: content-type",
+        ),
+        body="Origin: https://example.com",
+        line_ending="\n",
+    ).decode()
+
+    with mock.patch.object(auth._event_loop, "sock_sendall") as sendall:
+        assert await auth._process_options(request.splitlines(), socket_client)
+
+    response = sendall.call_args.args[1].decode()
+    assert "Access-Control-Allow-Origin: https://" + HOST in response
+    assert "Access-Control-Allow-Headers: Content-Type" in response
+    assert "example.com" not in response
+
+
+@pytest.mark.parametrize(
+    "request_line,origin_header,body",
+    [
+        ("POST / HTTP/1.1", None, "token=IGNORED"),
+        ("POST / HTTP/1.1", "Origin: null", "token=IGNORED"),
+        ("POST / HTTP/1.1", "Origin: https://example.com", "token=IGNORED"),
+        (
+            "GET /?token=IGNORED HTTP/1.1",
+            "Origin: https://example.com",
+            "",
+        ),
+    ],
+)
+async def test_auth_webbrowser_rejects_callback_without_account_origin(
+    request_line, origin_header, body
+):
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+    headers = () if origin_header is None else (origin_header,)
+    recv_func = recv_setup(
+        [
+            browser_callback(
+                request_line,
+                headers=headers,
+                body=body,
+            ),
+            browser_callback(
+                "GET /?token=ACCEPTED HTTP/1.1",
+                headers=(f"Origin: https://{HOST}",),
+            ),
+        ]
+    )
+    mock_socket_pkg = _init_socket()
+    auth = AuthByWebBrowser(
+        application=APPLICATION,
+        protocol="https",
+        host=HOST,
+        port=SNOWFLAKE_PORT,
+    )
+
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ), mock.patch.object(
+        auth._event_loop,
+        "sock_accept",
+        side_effect=_mock_event_loop_sock_accept(),
+    ) as accept, mock.patch.object(
+        auth._event_loop, "sock_sendall", return_value=None
+    ), mock.patch.object(
+        auth._event_loop,
+        "sock_recv",
+        side_effect=_mock_event_loop_sock_recv(recv_func),
+    ):
+        await auth._receive_saml_token(rest._connection, mock_socket_pkg.return_value)
+
+    assert auth.assertion_content == "ACCEPTED"
+    assert accept.call_count == 2
+
+
+async def test_auth_webbrowser_rejected_preflight_keeps_listening():
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+    recv_func = recv_setup(
+        [
+            browser_callback(
+                "OPTIONS / HTTP/1.1",
+                headers=(
+                    "Origin: https://example.com",
+                    "Access-Control-Request-Method: POST",
+                    "Access-Control-Request-Headers: Content-Type",
+                ),
+                body="token=IGNORED",
+            ),
+            successful_web_callback("ACCEPTED"),
+        ]
+    )
+    mock_socket_pkg = _init_socket()
+    auth = AuthByWebBrowser(
+        application=APPLICATION,
+        protocol="https",
+        host=HOST,
+        port=SNOWFLAKE_PORT,
+    )
+
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ), mock.patch.object(
+        auth._event_loop,
+        "sock_accept",
+        side_effect=_mock_event_loop_sock_accept(),
+    ) as accept, mock.patch.object(
+        auth._event_loop, "sock_sendall", return_value=None
+    ), mock.patch.object(
+        auth._event_loop,
+        "sock_recv",
+        side_effect=_mock_event_loop_sock_recv(recv_func),
+    ):
+        await auth._receive_saml_token(rest._connection, mock_socket_pkg.return_value)
+
+    assert auth.assertion_content == "ACCEPTED"
+    assert not rest._connection.errorhandler.called
+    assert accept.call_count == 2
+
+
+async def test_auth_webbrowser_handles_options_method_case_insensitively():
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+    recv_func = recv_setup(
+        [
+            browser_callback(
+                "options / HTTP/1.1",
+                headers=(
+                    f"Origin: https://{HOST}",
+                    "Access-Control-Request-Method: POST",
+                    "Access-Control-Request-Headers: Content-Type",
+                ),
+            ),
+            successful_web_callback("ACCEPTED"),
+        ]
+    )
+    mock_socket_pkg = _init_socket()
+    auth = AuthByWebBrowser(
+        application=APPLICATION,
+        protocol="https",
+        host=HOST,
+        port=SNOWFLAKE_PORT,
+    )
+
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ), mock.patch.object(
+        auth._event_loop,
+        "sock_accept",
+        side_effect=_mock_event_loop_sock_accept(),
+    ) as accept, mock.patch.object(
+        auth._event_loop, "sock_sendall", return_value=None
+    ), mock.patch.object(
+        auth._event_loop,
+        "sock_recv",
+        side_effect=_mock_event_loop_sock_recv(recv_func),
+    ):
+        await auth._receive_saml_token(rest._connection, mock_socket_pkg.return_value)
+
+    assert auth.assertion_content == "ACCEPTED"
+    assert accept.call_count == 2
+
+
+@pytest.mark.parametrize("method", ["HEAD", "PATCH"])
+async def test_auth_webbrowser_ignores_other_methods_and_keeps_listening(method):
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+    recv_func = recv_setup(
+        [
+            browser_callback(f"{method} / HTTP/1.1"),
+            successful_web_callback("ACCEPTED"),
+        ]
+    )
+    mock_socket_pkg = _init_socket()
+    auth = AuthByWebBrowser(
+        application=APPLICATION,
+        protocol="https",
+        host=HOST,
+        port=SNOWFLAKE_PORT,
+    )
+
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ), mock.patch.object(
+        auth._event_loop,
+        "sock_accept",
+        side_effect=_mock_event_loop_sock_accept(),
+    ) as accept, mock.patch.object(
+        auth._event_loop, "sock_sendall", return_value=None
+    ), mock.patch.object(
+        auth._event_loop,
+        "sock_recv",
+        side_effect=_mock_event_loop_sock_recv(recv_func),
+    ):
+        await auth._receive_saml_token(rest._connection, mock_socket_pkg.return_value)
+
+    assert auth.assertion_content == "ACCEPTED"
+    assert not rest._connection.errorhandler.called
+    assert accept.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "first_request",
+    [
+        browser_callback(
+            "PATCH / HTTP/1.1",
+            body="GET /?token=IGNORED HTTP/1.1",
+        ),
+        "\r\n".join(
+            [
+                "POST / HTTP/1.1",
+                f"Origin: https://{HOST}",
+                "token=IGNORED",
+            ]
+        ).encode(),
+    ],
+)
+async def test_auth_webbrowser_uses_request_line_and_post_body_sections(
+    first_request,
+):
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+    recv_func = recv_setup([first_request, successful_web_callback("ACCEPTED")])
+    mock_socket_pkg = _init_socket()
+    auth = AuthByWebBrowser(
+        application=APPLICATION,
+        protocol="https",
+        host=HOST,
+        port=SNOWFLAKE_PORT,
+    )
+
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ), mock.patch.object(
+        auth._event_loop,
+        "sock_accept",
+        side_effect=_mock_event_loop_sock_accept(),
+    ) as accept, mock.patch.object(
+        auth._event_loop, "sock_sendall", return_value=None
+    ), mock.patch.object(
+        auth._event_loop,
+        "sock_recv",
+        side_effect=_mock_event_loop_sock_recv(recv_func),
+    ):
+        await auth._receive_saml_token(rest._connection, mock_socket_pkg.return_value)
+
+    assert auth.assertion_content == "ACCEPTED"
+    assert accept.call_count == 2
+
+
+async def test_auth_webbrowser_ignores_socket_shutdown_error():
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+    recv_func = recv_setup([successful_web_callback("ACCEPTED")])
+    mock_socket_pkg = _init_socket()
+    socket_client = MagicMock()
+    socket_client.shutdown.side_effect = OSError
+
+    async def accept(*_):
+        return socket_client, None
+
+    auth = AuthByWebBrowser(
+        application=APPLICATION,
+        protocol="https",
+        host=HOST,
+        port=SNOWFLAKE_PORT,
+    )
+
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ), mock.patch.object(
+        auth._event_loop, "sock_accept", side_effect=accept
+    ), mock.patch.object(
+        auth._event_loop, "sock_sendall", return_value=None
+    ), mock.patch.object(
+        auth._event_loop,
+        "sock_recv",
+        side_effect=_mock_event_loop_sock_recv(recv_func),
+    ):
+        await auth._receive_saml_token(rest._connection, mock_socket_pkg.return_value)
+
+    assert auth.assertion_content == "ACCEPTED"
+    socket_client.close.assert_called_once()
+
+
+async def test_auth_webbrowser_closes_optional_socket_client():
+    socket_client = MagicMock()
+    socket_client.shutdown.side_effect = OSError
+    socket_client.close.side_effect = OSError
+
+    AuthByWebBrowser._close_socket_client(None)
+    AuthByWebBrowser._close_socket_client(socket_client)
+
+    socket_client.shutdown.assert_called_once_with(socket.SHUT_RDWR)
+    socket_client.close.assert_called_once()
+
+
+@pytest.mark.parametrize("origin_header", [None, "Origin: null"])
+async def test_auth_webbrowser_accepts_browser_get_without_account_origin(
+    origin_header,
+):
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+    headers = () if origin_header is None else (origin_header,)
+    recv_func = recv_setup(
+        [
+            browser_callback(
+                "GET /?token=ACCEPTED HTTP/1.1",
+                headers=headers,
+            )
+        ]
+    )
+    mock_socket_pkg = _init_socket()
+    auth = AuthByWebBrowser(
+        application=APPLICATION,
+        protocol="https",
+        host=HOST,
+        port=SNOWFLAKE_PORT,
+    )
+
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ), mock.patch.object(
+        auth._event_loop,
+        "sock_accept",
+        side_effect=_mock_event_loop_sock_accept(),
+    ), mock.patch.object(
+        auth._event_loop, "sock_sendall", return_value=None
+    ), mock.patch.object(
+        auth._event_loop,
+        "sock_recv",
+        side_effect=_mock_event_loop_sock_recv(recv_func),
+    ):
+        await auth._receive_saml_token(rest._connection, mock_socket_pkg.return_value)
+
+    assert auth.assertion_content == "ACCEPTED"
 
 
 @pytest.mark.parametrize("disable_console_login", [True, False])
@@ -341,7 +695,10 @@ async def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
 
     # mock socket
     recv_func = recv_setup(
-        [("\r\n".join(["GARBAGE", "User-Agent: snowflake-agent"])).encode("utf-8")]
+        [
+            ("\r\n".join(["GARBAGE", "User-Agent: snowflake-agent"])).encode("utf-8"),
+            successful_web_callback("ACCEPTED"),
+        ]
     )
     mock_socket_pkg = _init_socket()
 
@@ -353,7 +710,6 @@ async def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
     with mock.patch(
         "select.select", return_value=([mock_socket_pkg.return_value], [], [])
     ):
-        # case 1: invalid HTTP request
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
@@ -385,8 +741,8 @@ async def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
             "should have opened for you to complete the login. If you can't see it, "
             "check existing browser windows, or your OS settings.\n"
         )
-        assert rest._connection.errorhandler.called  # an error
-        assert auth.assertion_content is None
+        assert not rest._connection.errorhandler.called
+        assert auth.assertion_content == "ACCEPTED"
 
 
 def _init_rest(
@@ -554,14 +910,15 @@ async def test_auth_webbrowser_socket_recv_retries_up_to_15_times_on_empty_bytea
         assert sleep.call_count == 0
 
 
-async def test_auth_webbrowser_socket_recv_loop_fails_after_15_attempts():
-    """Authentication by WebBrowser stops trying after 15 consective socket.recv emty bytearray returns."""
+async def test_auth_webbrowser_socket_recv_loop_continues_on_empty_recv():
+    """Empty recv from a preconnect probe causes the outer loop to continue to the next connection."""
     ref_token = "MOCK_TOKEN"
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock socket
     recv_func = recv_setup(
-        # 15th return is empty byte array, so successful_web_callback will never be fetched from recv
+        # 15 empty recvs exhaust the per-connection retry budget; the outer loop
+        # then continues and accepts a fresh connection that delivers the real token.
         ([bytearray()] * 15)
         + [successful_web_callback(ref_token)]
     )
@@ -585,6 +942,8 @@ async def test_auth_webbrowser_socket_recv_loop_fails_after_15_attempts():
             "sock_accept",
             side_effect=_mock_event_loop_sock_accept(),
         ), mock.patch.object(
+            auth._event_loop, "sock_sendall", return_value=None
+        ), mock.patch.object(
             auth._event_loop,
             "sock_recv",
             side_effect=_mock_event_loop_sock_recv(recv_func),
@@ -597,8 +956,8 @@ async def test_auth_webbrowser_socket_recv_loop_fails_after_15_attempts():
                 user=USER,
                 password=PASSWORD,
             )
-        assert rest._connection.errorhandler.called  # an error
-        assert auth.assertion_content is None
+        assert not rest._connection.errorhandler.called  # no error
+        assert auth.assertion_content == ref_token
         assert sleep.call_count == 0
 
 
@@ -664,11 +1023,12 @@ async def test_auth_webbrowser_socket_recv_does_not_block_with_env_var(monkeypat
             assert sleep_times == [0.25] * 14
 
 
-async def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attempts(
+async def test_auth_webbrowser_socket_recv_blocking_continues_after_15_attempts(
     monkeypatch,
 ):
-    """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
-    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+    """After 15 TimeoutErrors the outer loop continues to the next connection."""
+    ref_token = "MOCK_TOKEN"
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY, disable_console_login=True)
 
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "true")
 
@@ -679,8 +1039,14 @@ async def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attem
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
-    async def sock_recv_timeout(*_):
-        raise asyncio.TimeoutError()
+    counting = 0
+
+    async def sock_recv_15_timeouts_then_success(*_):
+        nonlocal counting
+        if counting < 15:
+            counting += 1
+            raise asyncio.TimeoutError()
+        return successful_web_callback(ref_token)
 
     # Mock select.select to return socket client
     with mock.patch(
@@ -692,7 +1058,7 @@ async def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attem
             socket_pkg=mock_socket_pkg,
         )
         with mock.patch.object(
-            auth._event_loop, "sock_recv", new=sock_recv_timeout
+            auth._event_loop, "sock_recv", new=sock_recv_15_timeouts_then_success
         ), mock.patch.object(
             auth._event_loop, "sock_sendall", return_value=None
         ), mock.patch.object(
@@ -708,11 +1074,12 @@ async def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attem
                 user=USER,
                 password=PASSWORD,
             )
-            assert rest._connection.errorhandler.called  # an error
-            assert auth.assertion_content is None
-            sleep_times = [t[0][0] for t in sleep.call_args_list]
-            assert sleep.call_count == 14
-            assert sleep_times == [0.25] * 14
+        assert not rest._connection.errorhandler.called  # no error
+        assert auth.assertion_content == ref_token
+        assert counting == 15
+        sleep_times = [t[0][0] for t in sleep.call_args_list]
+        assert sleep.call_count == 14
+        assert sleep_times == [0.25] * 14
 
 
 @pytest.mark.skipif(

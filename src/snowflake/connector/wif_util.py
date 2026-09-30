@@ -6,6 +6,7 @@ import os
 from base64 import b64encode
 from dataclasses import dataclass
 from enum import Enum, unique
+from urllib.parse import urlparse
 
 import jwt
 
@@ -122,53 +123,179 @@ def get_aws_region() -> str:
     return region
 
 
-def get_aws_sts_hostname(region: str, partition: str) -> str:
-    """Constructs the AWS STS hostname for a given region and partition.
+@dataclass(frozen=True)
+class AwsStsEndpoint:
+    """Resolved STS endpoint used by AWS Workload Identity Federation.
 
-    Args:
-        region (str): The AWS region (e.g., 'us-east-1', 'cn-north-1').
-        partition (str): The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov').
+    ``authority`` is the Host header (host[:port]). ``base_url`` is the scheme
+    plus authority with no trailing slash. ``overridden`` is True when the
+    value came from ``workload_identity_host``.
+    """
 
-    Returns:
-        str: The AWS STS hostname (e.g., 'sts.us-east-1.amazonaws.com')
-             if a valid hostname can be constructed, otherwise raises a ProgrammingError.
+    authority: str
+    base_url: str
+    overridden: bool
+
+
+def parse_workload_identity_host(host: str) -> AwsStsEndpoint:
+    """Normalizes ``workload_identity_host``: bare host or URL, https default."""
+    host = host.strip()
+    if not host:
+        raise ProgrammingError(
+            msg="workload_identity_host is empty",
+            errno=ER_INVALID_WIF_SETTINGS,
+        )
+
+    if "://" not in host:
+        host = "https://" + host
+
+    parsed = urlparse(host)
+    if parsed.scheme not in ("https", "http"):
+        raise ProgrammingError(
+            msg=(
+                f'workload_identity_host "{host}" must use https or http, '
+                f'got scheme "{parsed.scheme}"'
+            ),
+            errno=ER_INVALID_WIF_SETTINGS,
+        )
+    if not parsed.hostname:
+        raise ProgrammingError(
+            msg=f'workload_identity_host "{host}" does not contain a hostname',
+            errno=ER_INVALID_WIF_SETTINGS,
+        )
+    if parsed.username is not None or parsed.query or parsed.fragment or parsed.params:
+        raise ProgrammingError(
+            msg=(
+                f'workload_identity_host "{host}" must not contain user info, '
+                "a query or a fragment"
+            ),
+            errno=ER_INVALID_WIF_SETTINGS,
+        )
+    if parsed.path.rstrip("/"):
+        raise ProgrammingError(
+            msg=f'workload_identity_host "{host}" must not contain a path',
+            errno=ER_INVALID_WIF_SETTINGS,
+        )
+
+    return AwsStsEndpoint(
+        authority=parsed.netloc,
+        base_url=f"{parsed.scheme}://{parsed.netloc}",
+        overridden=True,
+    )
+
+
+def _default_sts_endpoint(region: str) -> AwsStsEndpoint:
+    """Resolves the regional STS endpoint via botocore's endpoint rules.
+
+    The DNS suffix is partition-specific and not derivable from the region name
+    — ISO partitions and the European Sovereign Cloud do not use amazonaws.com —
+    so formatting the hostname here would be wrong for partitions botocore
+    already knows about. FIPS, dualstack and the legacy global endpoint are
+    pinned off so this returns the plain regional endpoint used in the signed
+    GetCallerIdentity URL. SDK-driven flows (role chaining, outbound token)
+    resolve their own endpoints and continue to honour AWS_USE_FIPS_ENDPOINT
+    and AWS_USE_DUALSTACK_ENDPOINT when no override is set.
+    """
+    if not region:
+        raise ProgrammingError(
+            msg="Could not resolve an STS endpoint because AWS region is empty.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+    if not installed_boto:
+        raise MissingDependencyError(
+            msg="AWS Workload Identity Federation can't be used because boto3 or botocore optional dependency is not installed. Try installing missing dependencies.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+
+    resolver_session = botocore.session.Session()
+    # Pin on a fresh session so a shared AWS config with
+    # sts_regional_endpoints=legacy cannot put us-east-1 on sts.amazonaws.com.
+    resolver_session.set_config_variable("sts_regional_endpoints", "regional")
+    try:
+        client = resolver_session.create_client(
+            "sts",
+            region_name=region,
+            aws_access_key_id="dummy",
+            aws_secret_access_key="dummy",
+            config=_plain_regional_sts_config(),
+        )
+    except Exception as e:
+        raise ProgrammingError(
+            msg=f"Could not resolve an STS endpoint for region '{region}': {e}",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        ) from e
+
+    parsed = urlparse(client.meta.endpoint_url)
+    if not parsed.hostname:
+        raise ProgrammingError(
+            msg=f"Could not resolve an STS endpoint for region '{region}'.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+    return AwsStsEndpoint(
+        authority=parsed.netloc,
+        base_url=f"{parsed.scheme}://{parsed.netloc}",
+        overridden=False,
+    )
+
+
+def resolve_aws_sts_endpoint(
+    region: str, workload_identity_host: str | None = None
+) -> AwsStsEndpoint:
+    """Resolves the STS endpoint, using ``workload_identity_host`` when set."""
+    if workload_identity_host:
+        return parse_workload_identity_host(workload_identity_host)
+    return _default_sts_endpoint(region)
+
+
+def get_aws_sts_hostname(region: str, partition: str | None = None) -> str:
+    """Returns the regional STS hostname for a given AWS region.
+
+    ``partition`` is unused; the hostname is resolved from ``region`` via
+    botocore so partitions that do not use amazonaws.com still work. The
+    argument is kept so existing callers that pass a partition continue to
+    run.
 
     References:
     - https://docs.aws.amazon.com/sdkref/latest/guide/feature-sts-regionalized-endpoints.html
     - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_region-endpoints.html
     - https://docs.aws.amazon.com/general/latest/gr/sts.html
     """
-    if partition == "aws":
-        # For the 'aws' partition, STS endpoints are generally regional
-        # except for the global endpoint (sts.amazonaws.com) which is
-        # generally resolved to us-east-1 under the hood by the SDKs
-        # when a region is not explicitly specified.
-        # However, for explicit regional endpoints, the format is sts.<region>.amazonaws.com
-        return f"sts.{region}.amazonaws.com"
-    elif partition == "aws-cn":
-        # China regions have a different domain suffix
-        return f"sts.{region}.amazonaws.com.cn"
-    elif partition == "aws-us-gov":
-        return (
-            f"sts.{region}.amazonaws.com"  # GovCloud uses .com, but dedicated regions
-        )
-    else:
-        raise ProgrammingError(
-            msg=f"Invalid AWS partition: '{partition}'.",
-            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-        )
+    return resolve_aws_sts_endpoint(region).authority
 
 
-def get_aws_session(impersonation_path: list[str] | None = None):
+def _plain_regional_sts_config():
+    """botocore Config that does not select FIPS or dualstack STS endpoints."""
+    return botocore.config.Config(
+        use_fips_endpoint=False,
+        use_dualstack_endpoint=False,
+    )
+
+
+def _sts_client_kwargs(region: str, endpoint: AwsStsEndpoint) -> dict:
+    """boto3 STS client kwargs. Pins endpoint_url only when the host is overridden."""
+    if not endpoint.overridden:
+        return {}
+    return {
+        "region_name": region,
+        "endpoint_url": endpoint.base_url,
+        "config": _plain_regional_sts_config(),
+    }
+
+
+def get_aws_session(
+    impersonation_path: list[str] | None = None,
+    sts_client_kwargs: dict | None = None,
+):
     """Creates a boto3 session with the appropriate credentials.
 
     If impersonation_path is provided, this uses the role at the end of the path. Otherwise, this uses the role attached to the current workload.
     """
     session = boto3.session.Session()
+    sts_client_kwargs = sts_client_kwargs or {}
 
     impersonation_path = impersonation_path or []
     for arn in impersonation_path:
-        response = session.client("sts").assume_role(
+        response = session.client("sts", **sts_client_kwargs).assume_role(
             RoleArn=arn, RoleSessionName="identity-federation-session"
         )
         creds = response["Credentials"]
@@ -183,6 +310,7 @@ def get_aws_session(impersonation_path: list[str] | None = None):
 def create_aws_attestation(
     impersonation_path: list[str] | None = None,
     aws_use_outbound_token: bool = False,
+    workload_identity_host: str | None = None,
 ) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for AWS.
 
@@ -195,7 +323,18 @@ def create_aws_attestation(
         )
 
     # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
-    session = get_aws_session(impersonation_path)
+    region = get_aws_region()
+    endpoint = resolve_aws_sts_endpoint(region, workload_identity_host)
+    if endpoint.overridden and (
+        os.environ.get("AWS_USE_FIPS_ENDPOINT")
+        or os.environ.get("AWS_USE_DUALSTACK_ENDPOINT")
+    ):
+        logger.warning(
+            "workload_identity_host is set; FIPS/dualstack preferences no longer apply to STS"
+        )
+    session = get_aws_session(
+        impersonation_path, sts_client_kwargs=_sts_client_kwargs(region, endpoint)
+    )
 
     aws_creds = session.get_credentials()
     if not aws_creds:
@@ -203,7 +342,6 @@ def create_aws_attestation(
             msg="No AWS credentials were found. Ensure the application is running on AWS with an IAM role attached.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
-    region = get_aws_region()
     partition = session.get_partition_for_region(region)
     # The JWT-based GetWebIdentityToken method is opt-in via either the
     # workload_identity_aws_use_outbound_token connection option or the
@@ -216,7 +354,9 @@ def create_aws_attestation(
         == "true"
     )
     if aws_use_outbound_token or env_outbound_token_enabled:
-        sts_client = session.client("sts", region_name=region)
+        sts_client_kwargs = {"region_name": region}
+        sts_client_kwargs.update(_sts_client_kwargs(region, endpoint))
+        sts_client = session.client("sts", **sts_client_kwargs)
         response = sts_client.get_web_identity_token(
             Audience=[SNOWFLAKE_AUDIENCE], SigningAlgorithm="ES384"
         )
@@ -228,12 +368,11 @@ def create_aws_attestation(
             {"region": region, "partition": partition},
         )
     else:
-        sts_hostname = get_aws_sts_hostname(region, partition)
         request = AWSRequest(
             method="POST",
-            url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
+            url=f"{endpoint.base_url}/?Action=GetCallerIdentity&Version=2011-06-15",
             headers={
-                "Host": sts_hostname,
+                "Host": endpoint.authority,
                 "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
             },
         )
@@ -565,6 +704,7 @@ def create_attestation(
     impersonation_path: list[str] | None = None,
     session_manager: SessionManager | None = None,
     aws_use_outbound_token: bool = False,
+    workload_identity_host: str | None = None,
 ) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
 
@@ -578,7 +718,11 @@ def create_attestation(
     )
 
     if provider == AttestationProvider.AWS:
-        return create_aws_attestation(impersonation_path, aws_use_outbound_token)
+        return create_aws_attestation(
+            impersonation_path,
+            aws_use_outbound_token,
+            workload_identity_host,
+        )
     elif provider == AttestationProvider.AZURE:
         return create_azure_attestation(
             entra_resource, session_manager, impersonation_path
