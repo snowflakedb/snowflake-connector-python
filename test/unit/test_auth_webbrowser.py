@@ -13,6 +13,7 @@ from snowflake.connector import SnowflakeConnection
 from snowflake.connector.compat import IS_WINDOWS, urlencode
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
+from snowflake.connector.errorcode import ER_OAUTH_SERVER_TIMEOUT
 from snowflake.connector.network import (
     EXTERNAL_BROWSER_AUTHENTICATOR,
     ReauthenticationRequest,
@@ -1230,3 +1231,63 @@ def test_auth_prepare_body_does_not_overwrite_client_environment_fields():
             for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
         ]
     )
+
+
+def test_auth_webbrowser_fails_when_browser_login_is_never_completed():
+    """A browser login that is never completed must fail instead of hanging.
+
+    ``external_browser_timeout`` is the total budget for waiting on the browser
+    callback; before this was wired up an unfinished login blocked forever.
+    """
+    mock_socket_instance = MagicMock()
+    mock_socket_instance.getsockname.return_value = [None, CLIENT_PORT]
+    mock_socket_client = MagicMock()
+    mock_socket_client.recv.return_value = successful_web_callback("MOCK_TOKEN")
+    mock_socket_instance.accept.return_value = (mock_socket_client, None)
+    mock_socket_pkg = Mock(return_value=mock_socket_instance)
+
+    auth = AuthByWebBrowser(
+        application=APPLICATION,
+        webbrowser_pkg=MagicMock(),
+        socket_pkg=mock_socket_pkg,
+        protocol="https",
+        host=HOST,
+        port=SNOWFLAKE_PORT,
+        external_browser_timeout=1,
+    )
+
+    # select.select never reports the socket as readable: the browser callback
+    # never arrives. Without a deadline this loops (and blocks) forever.
+    with mock.patch("select.select", return_value=([], [], [])), mock.patch.object(
+        auth, "_handle_failure"
+    ) as handle_failure:
+        auth._receive_saml_token(MagicMock(), mock_socket_instance)
+
+    assert handle_failure.call_count == 1, (
+        "expected the timeout to be reported once, "
+        f"got {handle_failure.call_count} call(s)"
+    )
+    assert (
+        handle_failure.call_args.kwargs["ret"]["code"] == ER_OAUTH_SERVER_TIMEOUT
+    ), "expected the same errno the OAuth flow uses for a callback timeout"
+
+
+def test_auth_webbrowser_without_timeout_keeps_the_wait_unbounded():
+    """Without external_browser_timeout the wait stays unbounded, as before."""
+    auth = AuthByWebBrowser(
+        application=APPLICATION,
+        webbrowser_pkg=MagicMock(),
+        socket_pkg=Mock(return_value=MagicMock()),
+        protocol="https",
+        host=HOST,
+        port=SNOWFLAKE_PORT,
+    )
+
+    with mock.patch("select.select", return_value=([], [], [])) as select_mock, mock.patch.object(
+        auth, "_handle_failure"
+    ):
+        auth._receive_saml_token(MagicMock(), MagicMock())
+
+    assert (
+        select_mock.call_args[0][3] is None
+    ), "select should keep blocking when no timeout is configured"
