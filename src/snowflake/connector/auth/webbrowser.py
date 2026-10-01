@@ -23,6 +23,7 @@ from ..constants import (
 from ..errorcode import (
     ER_INVALID_VALUE,
     ER_NO_HOSTNAME_FOUND,
+    ER_OAUTH_SERVER_TIMEOUT,
     ER_UNABLE_TO_OPEN_BROWSER,
 )
 from ..errors import OperationalError
@@ -58,9 +59,12 @@ class AuthByWebBrowser(AuthByPlugin):
         protocol: str | None = None,
         host: str | None = None,
         port: str | None = None,
+        external_browser_timeout: int | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
+        # Total time we may wait for the browser to complete the login. When it
+        # is None the wait is unbounded, which matches the historical behaviour.
         self.consent_cache_id_token = True
         self._token: str | None = None
         self._application = application
@@ -74,6 +78,7 @@ class AuthByWebBrowser(AuthByPlugin):
         self._protocol = protocol
         self._host = host
         self._port = port
+        self._external_browser_timeout = external_browser_timeout
         self._origin = None
 
     def reset_secrets(self) -> None:
@@ -219,6 +224,13 @@ class AuthByWebBrowser(AuthByPlugin):
 
     def _receive_saml_token(self, conn: SnowflakeConnection, socket_connection) -> None:
         """Receives SAML token from web browser."""
+        # Overall budget for waiting on the browser callback. Without a deadline
+        # a login that is never completed blocks forever; see issue #3045.
+        deadline: float | None = (
+            None
+            if self._external_browser_timeout is None
+            else time.monotonic() + self._external_browser_timeout
+        )
         while True:
             try:
                 attempts = 0
@@ -241,9 +253,30 @@ class AuthByWebBrowser(AuthByPlugin):
                 #   an immediate successive call to socket_client.recv gets the actual data
                 while len(raw_data) == 0 and attempts < max_attempts:
                     attempts += 1
-                    read_sockets, _write_sockets, _exception_sockets = select.select(
-                        [socket_connection], [], []
+                    remaining = (
+                        None
+                        if deadline is None
+                        else max(0.0, deadline - time.monotonic())
                     )
+                    read_sockets, _write_sockets, _exception_sockets = select.select(
+                        [socket_connection], [], [], remaining
+                    )
+
+                    if not read_sockets:
+                        # The browser login was never completed within the
+                        # configured budget: fail instead of waiting forever.
+                        self._handle_failure(
+                            conn=conn,
+                            ret={
+                                "code": ER_OAUTH_SERVER_TIMEOUT,
+                                "message": (
+                                    "Unable to receive the OAuth message within a "
+                                    "given timeout. Please check the redirect URI "
+                                    "and try again."
+                                ),
+                            },
+                        )
+                        return
 
                     if read_sockets[0] is not None:
                         # Receive the data in small chunks and retransmit it
