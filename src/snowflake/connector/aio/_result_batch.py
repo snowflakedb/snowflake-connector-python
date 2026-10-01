@@ -26,6 +26,7 @@ from snowflake.connector.network import (
     get_http_retryable_error,
     is_retryable_http_code,
 )
+from snowflake.connector.options import warn_if_incompatible_pyarrow
 from snowflake.connector.result_batch import SSE_C_AES, SSE_C_ALGORITHM, SSE_C_KEY
 from snowflake.connector.result_batch import ArrowResultBatch as ArrowResultBatchSync
 from snowflake.connector.result_batch import DownloadMetrics
@@ -382,6 +383,8 @@ class ArrowResultBatch(ResultBatch, ArrowResultBatchSync):
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]:
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
+        if iter_unit == IterUnit.TABLE_UNIT:
+            warn_if_incompatible_pyarrow()
         if self._local:
             try:
                 return self._from_data(self._data, iter_unit)

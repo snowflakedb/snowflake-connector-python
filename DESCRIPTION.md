@@ -7,6 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v4.8.1 (Unreleased)
+  - The incompatible `pyarrow` version warning is no longer raised when importing `snowflake.connector`. It is now raised, once per process, on first use of an API that returns or consumes pyarrow or pandas objects (`fetch_arrow_*`, `fetch_pandas_*`, `ResultBatch.to_arrow`/`to_pandas`, `write_pandas`), so a `pyarrow` installed by an unrelated package no longer warns users who do not use these APIs (SNOW-3790287, #2950).
+
 - v4.8.0(Sep 30,2026)
   - Fixed external-browser (SSO) authentication to validate the `Origin` header on the local callback server, rejecting tokens delivered from unexpected origins. A trailing slash in the origin (e.g. `https://account.snowflakecomputing.com/`) is now accepted on par with the bare origin, matching JDBC and other driver behaviour. Preconnect probe connections (empty recv) no longer count against the retry budget and no longer abort the login flow.
   - Added the `SNOWFLAKE_TLS_CIPHERS` environment variable to restrict which TLS ciphers the connector offers. It takes a colon-separated list; names beginning with `TLS_` are applied as TLS 1.3 cipher suites and the remainder as the cipher list for TLS 1.2 and below, so a single variable covers both. Leaving it unset keeps OpenSSL's defaults unchanged, and an unrecognized cipher name is rejected rather than silently ignored. The restriction covers Snowflake API traffic, cloud-storage (stage) transfers, OCSP/CRL fetches and IdP requests. Requests issued by the AWS and Azure SDKs, and asynchronous connections, are not covered — for TLS 1.3 suites specifically they cannot be, because the Python standard library exposes no API for restricting them.
