@@ -36,6 +36,7 @@ from .network import (
 )
 from .options import installed_pandas
 from .options import pyarrow as pa
+from .options import warn_if_incompatible_pyarrow
 from .secret_detector import SecretDetector
 from .session_manager import HttpConfig, SessionManager, SessionManagerFactory
 from .time_util import TimerContextManager
@@ -954,6 +955,8 @@ class ArrowResultBatch(ResultBatch):
         force_microsecond_precision: bool = False,
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]:
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
+        if iter_unit == IterUnit.TABLE_UNIT:
+            warn_if_incompatible_pyarrow()
         if self._local:
             try:
                 return self._from_data(

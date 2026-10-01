@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, Literal, Sequence
 
 from snowflake.connector import ProgrammingError
-from snowflake.connector.options import pandas
+from snowflake.connector.options import pandas, warn_if_incompatible_pyarrow
 
 # Import utilities from sync version
 from snowflake.connector.pandas_tools import (
@@ -270,6 +270,7 @@ async def write_pandas(
         Returns the COPY INTO command's results to verify ingestion in the form of a tuple of whether all chunks were
         ingested correctly, # of chunks, # of ingested rows, and ingest's output.
     """
+    warn_if_incompatible_pyarrow()
     if database is not None and schema is None:
         raise ProgrammingError(
             "Schema has to be provided to write_pandas when a database is provided"

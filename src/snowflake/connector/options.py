@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import importlib
 import os
 import warnings
@@ -97,7 +98,7 @@ def _import_or_missing_pandas_option() -> (
     """This function tries importing the following packages: pandas, pyarrow.
 
     If available it returns pandas and pyarrow packages with a flag of whether they were imported.
-    It also warns users if they have an unsupported pyarrow version installed if possible.
+    The pyarrow version is not checked here; see warn_if_incompatible_pyarrow.
     """
     try:
         pandas = importlib.import_module("pandas")
@@ -110,38 +111,49 @@ def _import_or_missing_pandas_option() -> (
         if "ARROW_DEFAULT_MEMORY_POOL" not in os.environ:
             os.environ["ARROW_DEFAULT_MEMORY_POOL"] = "system"
 
-        # Check whether we have the currently supported pyarrow installed
-        try:
-            pyarrow_dist = distribution("pyarrow")
-            snowflake_connector_dist = distribution("snowflake-connector-python")
-
-            dependencies = snowflake_connector_dist.metadata.get_all(
-                "Requires-Dist", []
-            )
-            pandas_pyarrow_extra = None
-            for dependency in dependencies:
-                dep = Requirement(dependency)
-                if (
-                    dep.marker is not None
-                    and dep.marker.evaluate({"extra": "pandas"})
-                    and dep.name == "pyarrow"
-                ):
-                    pandas_pyarrow_extra = dep
-                    break
-
-            installed_pyarrow_version = pyarrow_dist.version
-            if not pandas_pyarrow_extra.specifier.contains(installed_pyarrow_version):
-                warn_incompatible_dep(
-                    "pyarrow", installed_pyarrow_version, pandas_pyarrow_extra
-                )
-
-        except PackageNotFoundError as e:
-            logger.info(
-                f"Cannot determine if compatible pyarrow is installed because of missing package(s): {e}"
-            )
         return pandas, pyarrow, True
     except ImportError:
         return MissingPandas(), MissingPandas(), False
+
+
+@functools.lru_cache(maxsize=None)
+def warn_if_incompatible_pyarrow() -> None:
+    """Warns users if they have an unsupported pyarrow version installed if possible.
+
+    This is called by the APIs that hand pyarrow or pandas objects to the user, not at
+    import time, as pyarrow may be installed by an unrelated package. The check runs
+    at most once per process.
+    """
+    if not installed_pandas:
+        return
+    try:
+        pyarrow_dist = distribution("pyarrow")
+        snowflake_connector_dist = distribution("snowflake-connector-python")
+
+        dependencies = snowflake_connector_dist.metadata.get_all("Requires-Dist", [])
+        pandas_pyarrow_extra = None
+        for dependency in dependencies:
+            dep = Requirement(dependency)
+            if (
+                dep.marker is not None
+                and dep.marker.evaluate({"extra": "pandas"})
+                and dep.name == "pyarrow"
+            ):
+                pandas_pyarrow_extra = dep
+                break
+
+        installed_pyarrow_version = pyarrow_dist.version
+        if pandas_pyarrow_extra is not None and not (
+            pandas_pyarrow_extra.specifier.contains(installed_pyarrow_version)
+        ):
+            warn_incompatible_dep(
+                "pyarrow", installed_pyarrow_version, pandas_pyarrow_extra
+            )
+
+    except PackageNotFoundError as e:
+        logger.info(
+            f"Cannot determine if compatible pyarrow is installed because of missing package(s): {e}"
+        )
 
 
 def _import_or_missing_keyring_option() -> tuple[ModuleLikeObject, bool]:
