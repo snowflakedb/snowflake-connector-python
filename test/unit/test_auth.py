@@ -497,3 +497,34 @@ def test_oauth_token_invalid_error_handling(auth_instance, expected_exc_type):
     auth = Auth(rest)
     with pytest.raises(expected_exc_type):
         auth.authenticate(auth_instance, account, user)
+
+
+def test_temporary_credential_token_key_field_order():
+    """Auth temporary credential helpers must build TokenKey as (user, host)."""
+    from unittest.mock import MagicMock
+
+    from snowflake.connector.token_cache import TokenKey, TokenType
+
+    host = "MYACCOUNT.EU-CENTRAL-1.SNOWFLAKECOMPUTING.COM"
+    user = "ALICE"
+    auth = Auth(MagicMock())
+    cache = MagicMock()
+    auth._token_cache = cache
+
+    auth._write_temporary_credential(host, user, TokenType.ID_TOKEN, "dummy_id_token")
+    stored_key = cache.store.call_args[0][0]
+    assert isinstance(stored_key, TokenKey)
+    assert stored_key.user == user
+    assert stored_key.host == host
+    assert stored_key.string_key() == f"{host}:{user}:ID_TOKEN"
+
+    cache.retrieve.return_value = None
+    auth._read_temporary_credential(host, user, TokenType.ID_TOKEN)
+    retrieved_key = cache.retrieve.call_args[0][0]
+    assert retrieved_key.user == user
+    assert retrieved_key.host == host
+
+    auth._delete_temporary_credential(host, user, TokenType.ID_TOKEN)
+    removed_key = cache.remove.call_args[0][0]
+    assert removed_key.user == user
+    assert removed_key.host == host
