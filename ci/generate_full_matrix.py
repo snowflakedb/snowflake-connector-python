@@ -8,7 +8,7 @@ To customize, edit the configuration constants below and run the script.
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from itertools import product
 from pathlib import Path
@@ -33,6 +33,7 @@ class OperatingSystemInfo:
 
     name: str  # GitHub Actions runner image (e.g., "ubuntu-latest")
     download_name: str  # Artifact download name (e.g., "manylinux_x86_64")
+    extra_fields: dict = field(default_factory=dict)
 
 
 class OperatingSystem(Enum):
@@ -53,6 +54,10 @@ class OperatingSystem(Enum):
     WINDOWS_ARM = OperatingSystemInfo(
         name="windows-11-arm",
         download_name="win_arm64",
+        # WoA is unit-gated only: pyarrow publishes no win_arm64 wheel
+        # (blocks the pandas category) and integ runs on this runner are not
+        # yet wired to live accounts.
+        extra_fields={"tox_envs": "unit"},
     )
 
 
@@ -75,17 +80,23 @@ class CSP(Enum):
     GCP = "gcp"
 
 
-# OS-Python combinations to exclude from all matrices
+# OS-Python combinations to exclude from the FULL matrix
 # Format: (os_name, python_version)
 EXCLUSIONS: List[Tuple[str, str]] = [
-    # Windows 11 ARM tests don't pass — exclude all versions
+    # Windows 11 ARM: only 3.13 is test-gated (unit). The other versions are
+    # still built (see build_matrix) but not tested here.
     ("windows-11-arm", "3.10"),
     ("windows-11-arm", "3.11"),
     ("windows-11-arm", "3.12"),
-    ("windows-11-arm", "3.13"),
     ("windows-11-arm", "3.14"),
     # cryptography doesn't publish cp314t-win_arm64 wheels yet
     ("windows-11-arm", "3.14t"),
+]
+
+# OS-Python combinations to exclude from the PR matrix
+# (superset of EXCLUSIONS: PR runs do not include the WoA gate either)
+PR_EXCLUSIONS: List[Tuple[str, str]] = EXCLUSIONS + [
+    ("windows-11-arm", "3.13"),
 ]
 
 # Additional fields to add to each matrix entry (optional)
@@ -106,9 +117,13 @@ INDENT = 2
 
 
 def _add_to_matrix(
-    matrix: list[dict], os: OperatingSystemInfo, csp_name: str, py_config: PythonVersion
+    matrix: list[dict],
+    os: OperatingSystemInfo,
+    csp_name: str,
+    py_config: PythonVersion,
+    exclusions: List[Tuple[str, str]],
 ):
-    if (os.name, py_config.version) in EXCLUSIONS:
+    if (os.name, py_config.version) in exclusions:
         return
 
     entry = {
@@ -117,6 +132,9 @@ def _add_to_matrix(
         "python-version": py_config.version,
         "cloud-provider": csp_name,
     }
+
+    # Add per-OS fields (e.g. tox_envs for the WoA unit gate)
+    entry.update(os.extra_fields)
 
     # Add any additional fields
     if ADDITIONAL_FIELDS:
@@ -135,7 +153,9 @@ def generate_matrix(pr_only: bool = False):
             csp_name = csp_to_test.pop(0).value if csp_to_test else CSP.AWS.value
             for py_version in Python:
                 if py_version.value.test_on_pr:
-                    _add_to_matrix(matrix, os_config, csp_name, py_version.value)
+                    _add_to_matrix(
+                        matrix, os_config, csp_name, py_version.value, PR_EXCLUSIONS
+                    )
     else:
         operating_systems = [os_enum.value for os_enum in OperatingSystem]
         python_versions = [py_enum.value for py_enum in Python]
@@ -144,7 +164,10 @@ def generate_matrix(pr_only: bool = False):
         for os_config, py_config, csp_name in product(
             operating_systems, python_versions, cloud_providers
         ):
-            _add_to_matrix(matrix, os_config, csp_name, py_config)
+            # WoA gate runs once (aws); the other CSPs would add untested duplicates
+            if os_config.name == "windows-11-arm" and csp_name != CSP.AWS.value:
+                continue
+            _add_to_matrix(matrix, os_config, csp_name, py_config, EXCLUSIONS)
     return matrix
 
 

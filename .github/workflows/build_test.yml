@@ -62,9 +62,12 @@ jobs:
             MATRIX=$(jq -c . < ./.github/workflows/generated_pr_matrix.json)
           fi
           echo "test_matrix=$MATRIX" >> "$GITHUB_OUTPUT"
-          # Always build manylinux_x86_64+py3.11 even when not in the PR test matrix:
-          # the FIPS test job depends on that wheel artifact.
-          echo "build_matrix=$(echo "$MATRIX" | jq -c '[group_by(.os_download_name, .["python-version"]) | .[] | first] + [{"os_image_name": "ubuntu-latest", "os_download_name": "manylinux_x86_64", "python-version": "3.11"}] | unique_by([.os_download_name, .["python-version"]])')" >> "$GITHUB_OUTPUT"
+          # Always build manylinux_x86_64+py3.11 (the FIPS test job depends on
+          # that wheel artifact) and all Windows on Arm wheels (3.10-3.14) even
+          # when not in the PR test matrix; only win_arm64 py3.13 is test-gated
+          # (see generated_full_matrix.json).
+          # No 3.14t: cryptography publishes no cp314t-win_arm64 wheel.
+          echo "build_matrix=$(echo "$MATRIX" | jq -c '[group_by(.os_download_name, .["python-version"]) | .[] | first] + [{"os_image_name": "ubuntu-latest", "os_download_name": "manylinux_x86_64", "python-version": "3.11"}, {"os_image_name": "windows-11-arm", "os_download_name": "win_arm64", "python-version": "3.10"}, {"os_image_name": "windows-11-arm", "os_download_name": "win_arm64", "python-version": "3.11"}, {"os_image_name": "windows-11-arm", "os_download_name": "win_arm64", "python-version": "3.12"}, {"os_image_name": "windows-11-arm", "os_download_name": "win_arm64", "python-version": "3.13"}, {"os_image_name": "windows-11-arm", "os_download_name": "win_arm64", "python-version": "3.14"}] | unique_by([.os_download_name, .["python-version"]])')" >> "$GITHUB_OUTPUT"
   lint:
     name: Check linting
     runs-on: ubuntu-latest
@@ -227,7 +230,7 @@ jobs:
       - name: Run tests
        # To run a single test on GHA use the below command:
 #        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
-        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,sso}-ci | sed 's/ /,/g'`
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-${{ matrix.tox_envs || 'extras,unit-parallel,integ-parallel,pandas-parallel,sso' }}-ci | sed 's/ /,/g'`
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
