@@ -99,23 +99,44 @@ async def test_ok_response_download(mock_get):
         (555, OtherHTTPRetryableError),  # random 5xx error
     ],
 )
-async def test_retryable_response_download(errcode, error_class):
+async def test_retryable_response_download(errcode, error_class, caplog):
     """This test checks that responses which are deemed 'retryable' are handled correctly."""
     # retryable exceptions
+    amz_headers = {"x-amz-request-id": "test-req-id", "x-amz-id-2": "test-ext-id"}
     with mock.patch(
-        REQUEST_MODULE_PATH + ".get", side_effect=create_async_mock_response(errcode)
+        REQUEST_MODULE_PATH + ".get",
+        side_effect=create_async_mock_response(errcode, headers=amz_headers),
     ) as mock_get:
         # mock_get.return_value = create_async_mock_response(errcode)
 
         with mock.patch("asyncio.sleep", return_value=None):
-            with pytest.raises(error_class) as ex:
-                _ = await result_batch._download()
+            with caplog.at_level(
+                logging.WARNING, logger="snowflake.connector.aio._result_batch"
+            ):
+                with pytest.raises(error_class) as ex:
+                    _ = await result_batch._download()
             err_msg = ex.value.msg
             if isinstance(errcode, HTTPStatus):
                 assert str(errcode.value) in err_msg
             else:
                 assert str(errcode) in err_msg
         assert mock_get.call_count == MAX_DOWNLOAD_RETRY
+        batch_logs = [
+            r
+            for r in caplog.records
+            if r.name == "snowflake.connector.aio._result_batch"
+        ]
+        assert (
+            sum(r.levelno == logging.WARNING for r in batch_logs)
+            == MAX_DOWNLOAD_RETRY - 1
+        )
+        assert sum(r.levelno == logging.ERROR for r in batch_logs) == 1
+        # S3 trace headers are surfaced in every retry/failure log line (SNOW-4218352)
+        assert all(
+            "S3 request id: test-req-id" in r.getMessage()
+            and "S3 extended request id: test-ext-id" in r.getMessage()
+            for r in batch_logs
+        )
 
 
 async def test_unauthorized_response_download():
@@ -150,21 +171,36 @@ async def test_non_200_response_download(status_code):
         assert mock_get.call_count == MAX_DOWNLOAD_RETRY
 
 
-async def test_retries_until_success():
+async def test_retries_until_success(caplog):
     with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
         error_codes = [BAD_REQUEST, UNAUTHORIZED, 201]
         # There is an OK added to the list of responses so that there is a success
         # and the retry loop ends.
+        amz_headers = {"x-amz-request-id": "test-req-id", "x-amz-id-2": "test-ext-id"}
         mock_responses = [
-            create_async_mock_response(code)("") for code in error_codes + [OK]
+            create_async_mock_response(code, headers=amz_headers)("")
+            for code in error_codes + [OK]
         ]
         mock_get.side_effect = mock_responses
 
         with mock.patch("asyncio.sleep", return_value=None):
-            res, _ = await result_batch._download()
+            with caplog.at_level(
+                logging.WARNING, logger="snowflake.connector.aio._result_batch"
+            ):
+                res, _ = await result_batch._download()
             assert res == "success"
         # call `get` once for each error and one last time when it succeeds
         assert mock_get.call_count == len(error_codes) + 1
+        batch_logs = [
+            r
+            for r in caplog.records
+            if r.name == "snowflake.connector.aio._result_batch"
+        ]
+        assert sum(r.levelno == logging.WARNING for r in batch_logs) == len(error_codes)
+        assert sum(r.levelno == logging.ERROR for r in batch_logs) == 0
+        warning_logs = [r for r in batch_logs if r.levelno == logging.WARNING]
+        assert warning_logs
+        assert all("S3 request id: test-req-id" in r.getMessage() for r in warning_logs)
 
 
 @pytest.mark.skipolddriver

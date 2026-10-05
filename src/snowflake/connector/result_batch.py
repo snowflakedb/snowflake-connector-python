@@ -55,6 +55,29 @@ MAX_INLINE_RESULT_RETRY = 1
 MAX_INCOMPLETE_CHUNK_RETRY = 1
 
 
+def _s3_request_id_log_suffix(response: Response | None) -> str:
+    """Return a ``', S3 request id: ..., S3 extended request id: ...'`` log suffix, or ``''``.
+
+    S3 returns these trace headers (``x-amz-request-id`` / ``x-amz-id-2``) on every
+    response, including error responses, so surfacing them in the retry/failure logs
+    lets support correlate a failed chunk download with AWS-side records. Empty string
+    when no response arrived (pure network failure) or the headers are absent (non-S3
+    stage).
+    """
+    headers = getattr(response, "headers", None)
+    if headers is None or not hasattr(headers, "get"):
+        return ""
+    parts = []
+    for name, label in (
+        ("x-amz-request-id", "S3 request id"),
+        ("x-amz-id-2", "S3 extended request id"),
+    ):
+        value = headers.get(name)
+        if isinstance(value, str) and value:
+            parts.append(f"{label}: {value}")
+    return f", {', '.join(parts)}" if parts else ""
+
+
 def inline_first_chunk_rowcount(data: dict[str, Any]) -> int:
     """Rows attributed to the inline first chunk: ``total`` minus remote chunk rowCounts.
 
@@ -520,6 +543,7 @@ class ResultBatch(abc.ABC):
             else exponential_backoff()()
         )
         for retry in range(MAX_DOWNLOAD_RETRY):
+            amz_request_id_suffix = ""
             try:
                 with TimerContextManager() as download_metric:
                     logger.debug(f"started downloading result batch id: {self.id}")
@@ -560,6 +584,7 @@ class ResultBatch(abc.ABC):
                         )
                         response = local_session_manager.get(**request_data)
 
+                    amz_request_id_suffix = _s3_request_id_log_suffix(response)
                     if response.status_code == OK:
                         logger.debug(
                             f"successfully downloaded result batch id: {self.id}"
@@ -581,12 +606,18 @@ class ResultBatch(abc.ABC):
                 if retry == MAX_DOWNLOAD_RETRY - 1:
                     # Re-throw if we failed on the last retry
                     e = e.args[0] if isinstance(e, RetryRequest) else e
+                    logger.error(
+                        f"Failed to fetch the large result set batch "
+                        f"{self.id} after {MAX_DOWNLOAD_RETRY} attempts, "
+                        f"giving up for the reason: '{e}'{amz_request_id_suffix}",
+                        exc_info=True,
+                    )
                     raise e
                 sleep_timer = next(backoff)
-                logger.exception(
+                logger.warning(
                     f"Failed to fetch the large result set batch "
                     f"{self.id} for the {retry + 1} th time, "
-                    f"backing off for {sleep_timer}s for the reason: '{e}'"
+                    f"backing off for {sleep_timer}s for the reason: '{e}'{amz_request_id_suffix}"
                 )
                 time.sleep(sleep_timer)
 

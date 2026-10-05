@@ -34,6 +34,7 @@ from snowflake.connector.result_batch import RemoteChunkInfo
 from snowflake.connector.result_batch import ResultBatch as ResultBatchSync
 from snowflake.connector.result_batch import (
     _create_nanoarrow_iterator,
+    _s3_request_id_log_suffix,
     inline_first_chunk_rowcount,
 )
 from snowflake.connector.secret_detector import SecretDetector
@@ -232,6 +233,7 @@ class ResultBatch(ResultBatchSync):
 
         content, encoding = None, None
         for retry in range(max(MAX_DOWNLOAD_RETRY, 1)):
+            amz_request_id_suffix = ""
             try:
 
                 async with TimerContextManager() as download_metric:
@@ -284,6 +286,7 @@ class ResultBatch(ResultBatchSync):
                         ) as session:
                             response, content, encoding = await download_chunk(session)
 
+                    amz_request_id_suffix = _s3_request_id_log_suffix(response)
                     if response.status == OK:
                         break
                     # Raise error here to correctly go in to exception clause
@@ -301,12 +304,18 @@ class ResultBatch(ResultBatchSync):
                 if retry == MAX_DOWNLOAD_RETRY - 1:
                     # Re-throw if we failed on the last retry
                     e = e.args[0] if isinstance(e, RetryRequest) else e
+                    logger.error(
+                        f"Failed to fetch the large result set batch "
+                        f"{self.id} after {MAX_DOWNLOAD_RETRY} attempts, "
+                        f"giving up for the reason: '{e}'{amz_request_id_suffix}",
+                        exc_info=True,
+                    )
                     raise e
                 sleep_timer = next(backoff)
-                logger.exception(
+                logger.warning(
                     f"Failed to fetch the large result set batch "
                     f"{self.id} for the {retry + 1} th time, "
-                    f"backing off for {sleep_timer}s for the reason: '{e}'"
+                    f"backing off for {sleep_timer}s for the reason: '{e}'{amz_request_id_suffix}"
                 )
                 await asyncio.sleep(sleep_timer)
 

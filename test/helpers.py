@@ -48,27 +48,37 @@ except ImportError:
     pass
 
 
-def create_mock_response(status_code: int) -> Mock:
+def create_mock_response(status_code: int, headers: dict | None = None) -> Mock:
     """Create a Mock "Response" with a given status code. See `test_result_batch.py` for examples.
     Args:
         status_code: the status code of the response.
+        headers: optional response headers (e.g. S3 ``x-amz-*`` trace headers).
     Returns:
         A Mock object that can be used as a Mock Response in tests.
     """
     mock_resp = Mock()
     mock_resp.status_code = status_code
     mock_resp.raw = "success" if status_code == OK else "fail"
+    mock_resp.headers = headers or {}
     return mock_resp
 
 
-def create_async_mock_response(status: int) -> AsyncMock:
-    async def _create_async_mock_response(url, *, status, **kwargs):
+def create_async_mock_response(status: int, headers: dict | None = None) -> AsyncMock:
+    # ``response_headers`` is named distinctly from the request ``headers`` kwarg the
+    # real ``http_session.get(**request_data)`` passes, so the call-time request
+    # headers don't override the bound response headers.
+    async def _create_async_mock_response(
+        url, *, status, response_headers=None, **kwargs
+    ):
         resp = AsyncMock(status=status)
         resp.read.return_value = "success" if status == OK else "fail"
         resp.status = status
+        resp.headers = response_headers or {}
         return resp
 
-    return functools.partial(_create_async_mock_response, status=status)
+    return functools.partial(
+        _create_async_mock_response, status=status, response_headers=headers
+    )
 
 
 def verify_log_tuple(
