@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v4.8.1 (Unreleased)
+  - Integration tests reset the process-global OCSP mode around each test. A test that opted into OCSP fail-closed otherwise left later tests on the same worker checking revocation. Google Cloud Storage certificates publish no OCSP URL, so PUT and GET on GCP then failed with RevocationCheckError 254001.
   - Fixed large result set batch chunk download logging every transient retry at ERROR level with a traceback. Intermediate retries now log at WARNING; only the final failure after all retries are exhausted logs at ERROR with a traceback. These retry and failure logs now also include the S3 request IDs (`x-amz-request-id` / `x-amz-id-2`) when present, to aid troubleshooting and correlation with AWS-side records (SNOW-4218352).
 - v4.8.0(Sep 30,2026)
   - Fixed external-browser (SSO) authentication to validate the `Origin` header on the local callback server, rejecting tokens delivered from unexpected origins. A trailing slash in the origin (e.g. `https://account.snowflakecomputing.com/`) is now accepted on par with the bare origin, matching JDBC and other driver behaviour. Preconnect probe connections (empty recv) no longer count against the retry budget and no longer abort the login flow.

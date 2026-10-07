@@ -416,6 +416,38 @@ def reset_default_paramstyle() -> Generator[None]:
         snowflake.connector.paramstyle = "pyformat"
 
 
+@pytest.fixture(autouse=True)
+def reset_feature_ocsp_mode() -> Generator[None]:
+    """Keep process-global OCSP mode from leaking across tests.
+
+    ``FEATURE_OCSP_MODE`` is sticky: once a connection opts into fail-closed,
+    a later default (OCSP off) connection does not turn it off. pytest-xdist
+    reuses a worker process, so one opt-in test leaves every later handshake
+    on that worker in fail-closed mode. Google Cloud Storage certificates
+    publish no OCSP URL, and those handshakes then fail PUT/GET with
+    ``RevocationCheckError`` 254001.
+
+    Assign the default directly. ``apply_feature_ocsp_mode`` will not
+    overwrite a non-default mode with OCSP off.
+    """
+    try:
+        from snowflake.connector import ssl_wrap_socket
+    except ImportError:
+        yield
+        return
+
+    default = getattr(ssl_wrap_socket, "DEFAULT_OCSP_MODE", None)
+    if default is None or not hasattr(ssl_wrap_socket, "FEATURE_OCSP_MODE"):
+        yield
+        return
+
+    ssl_wrap_socket.FEATURE_OCSP_MODE = default
+    try:
+        yield
+    finally:
+        ssl_wrap_socket.FEATURE_OCSP_MODE = default
+
+
 @pytest.fixture()
 def conn_cnx() -> Callable[..., ContextManager[SnowflakeConnection]]:
     return db
