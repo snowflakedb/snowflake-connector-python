@@ -12,6 +12,7 @@ repos:
             (?x)^(
                 src/snowflake/connector/nanoarrow_cpp/ArrowIterator/flatcc/.*\.h|
                 src/snowflake/connector/nanoarrow_cpp/ArrowIterator/nanoarrow_ipc.c|
+                ci/mirroring/mirroring.md|
             )$
     -   id: end-of-file-fixer
         exclude: >
