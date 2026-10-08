@@ -47,6 +47,7 @@ pip freeze
 cd $CONNECTOR_DIR
 
 # Run tests in parallel using pytest-xdist
+# The workflow re-runs this script with PYTEST_ADDOPTS=--lf to retry flakes.
 pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test --ignore=test/integ/aio_it --ignore=test/unit/aio --ignore=test/wif/test_wif_async.py
 
 deactivate
