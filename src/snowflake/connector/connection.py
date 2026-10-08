@@ -1614,6 +1614,7 @@ class SnowflakeConnection:
                         host=self.host,  # TODO: delete this?
                         port=self.port,
                         timeout=self.login_timeout,
+                        external_browser_timeout=self._external_browser_timeout,
                         backoff_generator=self._backoff_generator,
                     )
                 else:
