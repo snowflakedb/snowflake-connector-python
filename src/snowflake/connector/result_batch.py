@@ -34,7 +34,7 @@ from .network import (
     raise_failed_request_error,
     raise_okta_unauthorized_error,
 )
-from .options import installed_pandas
+from .options import installed_pandas, missing_pandas_extra_message
 from .options import pyarrow as pa
 from .secret_detector import SecretDetector
 from .session_manager import HttpConfig, SessionManager, SessionManagerFactory
@@ -649,10 +649,7 @@ class ResultBatch(abc.ABC):
 
     def _check_can_use_pandas(self) -> None:
         if not installed_pandas:
-            msg = (
-                "Optional dependency: 'pandas' is not installed, please see the following link for install "
-                "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation"
-            )
+            msg = missing_pandas_extra_message()
             errno = ER_NO_PYARROW
 
             raise Error.errorhandler_make_exception(
