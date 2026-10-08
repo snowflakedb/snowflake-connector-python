@@ -559,7 +559,9 @@ class Auth:
         user: str,
         cred_type: TokenType,
     ) -> str | None:
-        return self.get_token_cache().retrieve(TokenKey(host, user, cred_type))
+        return self.get_token_cache().retrieve(
+            TokenKey(user=user, host=host, tokenType=cred_type)
+        )
 
     def read_temporary_credentials(
         self,
@@ -603,7 +605,9 @@ class Auth:
                 "no credential is given when try to store temporary credential"
             )
             return
-        self.get_token_cache().store(TokenKey(host, user, cred_type), cred)
+        self.get_token_cache().store(
+            TokenKey(user=user, host=host, tokenType=cred_type), cred
+        )
 
     def write_temporary_credentials(
         self,
@@ -637,7 +641,9 @@ class Auth:
     def _delete_temporary_credential(
         self, host: str, user: str, cred_type: TokenType
     ) -> None:
-        self.get_token_cache().remove(TokenKey(host, user, cred_type))
+        self.get_token_cache().remove(
+            TokenKey(user=user, host=host, tokenType=cred_type)
+        )
 
     def get_token_cache(self) -> TokenCache:
         if self._token_cache is None:
