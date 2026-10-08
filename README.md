@@ -1,4 +1,4 @@
-# Snowflake Connector for Python
+# Snowflake Connector for Python..
 
 > [!IMPORTANT]
 > A new version of the driver is being developed in [snowflakedb/drivers](https://github.com/snowflakedb/drivers) and is currently in public preview. See the [documentation](https://docs.snowflake.com/en/developer-guide/python-connector/python-connector-universal-core) for more information.
