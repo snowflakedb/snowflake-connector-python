@@ -481,6 +481,19 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             # A lone remove() is safe and does not destroy macOS Keychain ACL.
             self._invalidate_refresh_token()
 
+    def _oauth_credential_missing(self, value: str | None) -> bool:
+        return value is None or value == ""
+
+    def _is_public_oauth_client(self) -> bool:
+        return self._oauth_credential_missing(self._client_secret)
+
+    def _fields_for_token_request(self, fields: dict[str, str]) -> dict[str, str]:
+        # RFC 6749 public clients send client_id in the body and omit HTTP Basic.
+        if self._is_public_oauth_client() and self._client_id:
+            fields = dict(fields)
+            fields.setdefault("client_id", self._client_id)
+        return fields
+
     def _get_refresh_token_response(
         self, conn: SnowflakeConnection
     ) -> urllib3.BaseHTTPResponse | None:
@@ -490,6 +503,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         }
         if self._scope:
             fields["scope"] = self._scope
+        fields = self._fields_for_token_request(fields)
         try:
             # TODO(SNOW-2229411) Session manager should be used here. It may require additional security validation (since we would transition from PoolManager to requests.Session) and some parameters would be passed implicitly. OAuth token exchange must NOT reuse pooled HTTP sessions. We should create a fresh SessionManager with use_pooling=False for each call.
             return self._post_token_request(conn, fields)
@@ -593,7 +607,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
                     self._token_request_url,
                     headers=self._create_token_request_headers(),
                     encode_multipart=False,
-                    fields=fields,
+                    fields=self._fields_for_token_request(fields),
                 )
             except Exception as exc:
                 if not self._is_retryable_oauth_token_exception(exc):
@@ -698,14 +712,15 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         )
 
     def _create_token_request_headers(self) -> dict[str, str]:
-        return {
-            "Authorization": "Basic "
-            + base64.b64encode(
-                f"{self._client_id}:{self._client_secret}".encode()
-            ).decode(),
+        headers = {
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         }
+        if not self._is_public_oauth_client():
+            headers["Authorization"] = "Basic " + base64.b64encode(
+                f"{self._client_id}:{self._client_secret}".encode()
+            ).decode()
+        return headers
 
     @staticmethod
     def _log_if_http_in_use(url: str) -> None:
