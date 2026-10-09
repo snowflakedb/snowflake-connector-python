@@ -639,9 +639,11 @@ class SnowflakeConverter:
             hour=hours, minute=mins, second=secs
         )
 
-    def _decimal_to_snowflake(self, value: decimal.Decimal) -> str | None:
+    def _decimal_to_snowflake(
+        self, value: decimal.Decimal
+    ) -> decimal.Decimal | str | None:
         if isinstance(value, decimal.Decimal):
-            return str(value)
+            return value if value.is_finite() else str(value)
 
         return None
 
@@ -739,6 +741,8 @@ class SnowflakeConverter:
             return "NULL"
         elif isinstance(value, bool):
             return "TRUE" if value else "FALSE"
+        elif isinstance(value, decimal.Decimal):
+            return str(value)
         elif IS_NUMERIC(value):
             return str(repr(value))
         elif IS_BINARY(value):

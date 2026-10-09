@@ -24,6 +24,35 @@ logger = getLogger(__name__)
 ConverterSnowSQL = SnowflakeConverterSnowSQL
 
 
+@pytest.mark.parametrize(
+    "literal",
+    ["1.3", "12345678901234567890123456789012345678", "-0.00", "1.2300", "1E-20"],
+)
+def test_decimal_client_side_binding(literal):
+    converter = SnowflakeConverter()
+    value = converter.to_snowflake(Decimal(literal))
+    assert converter.quote(converter.escape(value)) == literal
+
+
+@pytest.mark.parametrize("literal", ["NaN", "sNaN", "Infinity", "-Infinity"])
+def test_non_finite_decimal_client_side_binding(literal):
+    converter = SnowflakeConverter()
+    value = converter.to_snowflake(Decimal(literal))
+    assert converter.quote(converter.escape(value)) == f"'{literal}'"
+
+
+def test_decimal_list_client_side_binding():
+    converter = SnowflakeConverter()
+    value = converter.to_snowflake([Decimal("1.30"), "1.30", None, Decimal("-0.00")])
+    assert converter.quote(converter.escape(value)) == "1.30,'1.30',NULL,-0.00"
+
+
+def test_decimal_server_side_binding():
+    converter = SnowflakeConverter()
+    value = Decimal("12345678901234567890.123456789")
+    assert converter.to_snowflake_bindings("FIXED", value) == str(value)
+
+
 def test_is_dst():
     """SNOW-6020: Failed to convert to local time during DST is being changed."""
     # DST to non-DST
