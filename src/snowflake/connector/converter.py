@@ -127,6 +127,16 @@ def _extract_timestamp(value: str, ctx: dict) -> tuple[float, int]:
         value, ctx["max_fraction"], scale
     )
 
+    # A negative sub-microsecond fraction borrows a whole second in
+    # _adjust_fraction_of_nanoseconds; when the microsecond part is a whole
+    # number gmtime won't floor it, so borrow the second here too.
+    if (
+        value[0] == "-"
+        and fraction_of_nanoseconds != 0
+        and microseconds == int(microseconds)
+    ):
+        microseconds -= 1
+
     return microseconds, fraction_of_nanoseconds
 
 
