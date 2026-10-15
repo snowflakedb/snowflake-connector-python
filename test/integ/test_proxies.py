@@ -2,7 +2,7 @@
 """Integration test for proxy with real Snowflake connection.
 
 Requirements:
-    mitmproxy is installed automatically via the [development] extras in setup.cfg
+    mitmproxy is installed automatically via the [development] extras in pyproject.toml
     (Python 3.12+ only - mitmproxy 12+ requires Python 3.12 and is needed for cryptography >=46)
 
 Important:
