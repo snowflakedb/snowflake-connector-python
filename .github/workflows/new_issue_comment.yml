@@ -1,0 +1,32 @@
+name: Comment on new issues
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Ask reporter to verify against 5.0.0
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const body = [
+              'Thank you for reporting this issue.',
+              '',
+              'Version **5.0.0** of the Snowflake Connector for Python has been released, and development has moved to [snowflakedb/drivers](https://github.com/snowflakedb/drivers).',
+              '',
+              'Please verify whether this issue still occurs with connector version **5.0.0**. If it does, open a new issue in [snowflakedb/drivers](https://github.com/snowflakedb/drivers/issues/new) and include a link to this report.',
+              '',
+              'See the [documentation](https://docs.snowflake.com/en/developer-guide/universal-core/universal-core) for more information.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
