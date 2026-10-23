@@ -279,7 +279,6 @@ credentials=(
 
 
 @pytest.mark.aws
-@pytest.mark.flaky(reruns=3)
 def test_put_get_duplicated_data_user_stage(
     is_public_test,
     tmpdir,
