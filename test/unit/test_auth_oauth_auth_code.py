@@ -154,7 +154,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(
             "https://example.snowflakecomputing.com/oauth/authorize",
             "https://example.snowflakecomputing.com/oauth/token",
             False,
-            ProgrammingError,
+            None,
         ),
         (
             "Non-Snowflake IdP",
@@ -194,7 +194,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(
             "https://example.snowflakecomputing.cn/oauth/authorize",
             "https://example.snowflakecomputing.cn/oauth/token",
             False,
-            ProgrammingError,
+            None,
         ),
         (
             "Uppercase account name — host case must not break idp detection",
@@ -214,6 +214,16 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(
             "https://MyAccount.snowflakecomputing.com/oauth/authorize",
             "https://MyAccount.snowflakecomputing.com/oauth/token",
             True,
+            None,
+        ),
+        (
+            "Public PKCE client with None secret keeps custom client_id",
+            "custom-public-client-id",
+            None,
+            "example.snowflakecomputing.com",
+            "https://example.snowflakecomputing.com/oauth/authorize",
+            "https://example.snowflakecomputing.com/oauth/token-request",
+            False,
             None,
         ),
     ],
@@ -258,6 +268,42 @@ def test_eligible_for_default_client_credentials_via_constructor(
             assert_initialized_correctly()
     else:
         assert_initialized_correctly()
+
+
+def test_public_pkce_client_omits_basic_auth_and_sends_client_id():
+    auth = AuthByOauthCode(
+        application="app",
+        client_id="custom-public-client-id",
+        client_secret=None,
+        authentication_url="https://example.snowflakecomputing.com/oauth/authorize",
+        token_request_url="https://example.snowflakecomputing.com/oauth/token-request",
+        redirect_uri="http://127.0.0.1:8730/",
+        scope="session:role:TEST_ROLE",
+        host="example.snowflakecomputing.com",
+    )
+    headers = auth._create_token_request_headers()
+    assert "Authorization" not in headers
+    fields = auth._fields_for_token_request(
+        {"grant_type": "authorization_code", "code": "abc"}
+    )
+    assert fields["client_id"] == "custom-public-client-id"
+
+
+def test_confidential_client_still_sends_basic_auth():
+    auth = AuthByOauthCode(
+        application="app",
+        client_id="testClientID",
+        client_secret="testClientSecret",
+        authentication_url="https://example.snowflakecomputing.com/oauth/authorize",
+        token_request_url="https://example.snowflakecomputing.com/oauth/token",
+        redirect_uri="https://redirectUri:{port}",
+        scope="scope",
+        host="example.snowflakecomputing.com",
+    )
+    headers = auth._create_token_request_headers()
+    assert headers["Authorization"].startswith("Basic ")
+    fields = auth._fields_for_token_request({"grant_type": "authorization_code"})
+    assert "client_id" not in fields
 
 
 @pytest.mark.parametrize(
