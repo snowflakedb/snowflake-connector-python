@@ -9,12 +9,10 @@ import decimal
 from decimal import Decimal
 
 import numpy
-import pytest
 
 import snowflake.connector
 
 
-@pytest.mark.skipolddriver
 async def test_decfloat_bindings(conn_cnx):
     # set required decimal precision
     decimal.getcontext().prec = 38
@@ -54,7 +52,6 @@ async def test_decfloat_bindings(conn_cnx):
         snowflake.connector.paramstyle = original_style
 
 
-@pytest.mark.skipolddriver
 async def test_decfloat_from_compiler(conn_cnx):
     # set required decimal precision
     decimal.getcontext().prec = 38

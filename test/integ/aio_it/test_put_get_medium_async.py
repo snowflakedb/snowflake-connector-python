@@ -76,9 +76,7 @@ async def run_dict_result(cnx, db_parameters, sql):
     return await res.fetchall()
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["put_get_1.txt"], indirect=["file_src"])
 async def test_put_copy0(aio_connection, db_parameters, from_path, file_src):
     """Puts and Copies a file."""
@@ -134,9 +132,7 @@ ratio number(5,2))
     await run(aio_connection, db_parameters, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["gzip_sample.txt.gz"], indirect=["file_src"])
 async def test_put_copy_compressed(aio_connection, db_parameters, from_path, file_src):
     """Puts and Copies compressed files."""
@@ -166,9 +162,7 @@ async def test_put_copy_compressed(aio_connection, db_parameters, from_path, fil
     await run(aio_connection, db_parameters, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["bzip2_sample.txt.bz2"], indirect=["file_src"])
 @pytest.mark.skip(reason="BZ2 is not detected in this test case. Need investigation")
 async def test_put_copy_bz2_compressed(
@@ -199,9 +193,7 @@ async def test_put_copy_bz2_compressed(
     await run(aio_connection, db_parameters, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["brotli_sample.txt.br"], indirect=["file_src"])
 async def test_put_copy_brotli_compressed(
     aio_connection, db_parameters, from_path, file_src
@@ -235,9 +227,7 @@ async def test_put_copy_brotli_compressed(
     await run(aio_connection, db_parameters, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["zstd_sample.txt.zst"], indirect=["file_src"])
 async def test_put_copy_zstd_compressed(
     aio_connection, db_parameters, from_path, file_src
@@ -270,9 +260,7 @@ async def test_put_copy_zstd_compressed(
     await run(aio_connection, db_parameters, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["nation.impala.parquet"], indirect=["file_src"])
 async def test_put_copy_parquet_compressed(
     aio_connection, db_parameters, from_path, file_src
@@ -311,9 +299,7 @@ stage_file_format=(type='parquet')
     await run(aio_connection, db_parameters, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["TestOrcFile.test1.orc"], indirect=["file_src"])
 async def test_put_copy_orc_compressed(
     aio_connection, db_parameters, from_path, file_src
@@ -621,7 +607,6 @@ ratio number(6,2))
         )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.aws
 @pytest.mark.azure
 async def test_put_collision(tmpdir, aio_connection):
@@ -778,9 +763,7 @@ async def test_put_get_large_files_s3(tmpdir, aio_connection, db_parameters):
 
 @pytest.mark.aws
 @pytest.mark.azure
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["put_get_1.txt"], indirect=["file_src"])
 async def test_put_get_with_hint(
     tmpdir, aio_connection, db_parameters, from_path, file_src

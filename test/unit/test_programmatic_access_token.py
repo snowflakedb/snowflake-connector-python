@@ -11,7 +11,6 @@ except ImportError:
 from ..test_utils.wiremock.wiremock_utils import WiremockClient
 
 
-@pytest.mark.skipolddriver
 def test_valid_pat(wiremock_client: WiremockClient) -> None:
     wiremock_data_dir = (
         pathlib.Path(__file__).parent.parent
@@ -48,7 +47,6 @@ def test_valid_pat(wiremock_client: WiremockClient) -> None:
     cnx.close()
 
 
-@pytest.mark.skipolddriver
 def test_invalid_pat(wiremock_client: WiremockClient) -> None:
     wiremock_data_dir = (
         pathlib.Path(__file__).parent.parent

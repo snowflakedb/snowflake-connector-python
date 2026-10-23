@@ -165,7 +165,6 @@ def test_connection_ignore_exception(mockSnowflakeRestfulPostRequest):
     con.close()
 
 
-@pytest.mark.skipolddriver
 def test_invalid_authenticator():
     with pytest.raises(ProgrammingError) as excinfo:
         snowflake.connector.connect(
@@ -175,7 +174,6 @@ def test_invalid_authenticator():
     assert "Unknown authenticator: INVALID" in str(excinfo.value)
 
 
-@pytest.mark.skipolddriver
 def test_is_still_running():
     """Checks that is_still_running returns expected results."""
     statuses = [
@@ -200,7 +198,6 @@ def test_is_still_running():
         )
 
 
-@pytest.mark.skipolddriver
 def test_partner_env_var(mock_post_requests, monkeypatch):
     PARTNER_NAME = "Amanda"
 
@@ -212,7 +209,6 @@ def test_partner_env_var(mock_post_requests, monkeypatch):
     )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "sys_modules,application",
     [
@@ -555,7 +551,6 @@ def test_expired_detection():
     assert conn.expired
 
 
-@pytest.mark.skipolddriver
 def test_disable_saml_url_check_config():
     with mock.patch(
         "snowflake.connector.network.SnowflakeRestful._post_request",
@@ -591,7 +586,6 @@ def test_request_guid():
     )
 
 
-@pytest.mark.skipolddriver
 def test_ssl_error_hint(caplog):
     from snowflake.connector.vendored.requests.exceptions import SSLError
 
@@ -882,7 +876,6 @@ def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
 
 # Skip for old drivers because the connection config of
 # reraise_error_in_file_transfer_work_function is newly introduced.
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("reraise_enabled", [True, False, None])
 def test_reraise_error_in_file_transfer_work_function_config(
     reraise_enabled: bool | None,
@@ -918,7 +911,6 @@ def test_reraise_error_in_file_transfer_work_function_config(
         assert actual_value == expected_value
 
 
-@pytest.mark.skipolddriver
 def test_connect_metadata_preservation():
     """Test that the sync connect function preserves metadata from SnowflakeConnection.__init__.
 
@@ -1029,7 +1021,6 @@ def test_connections_registry_lifecycle(crl_mock, mock_post_requests):
         crl_mock.stop_periodic_cleanup.assert_called_once()
 
 
-@pytest.mark.skipolddriver
 def test_server_session_keep_alive_skips_async_check(mock_post_requests):
     """Test that server_session_keep_alive=True skips _all_async_queries_finished check."""
     conn = fake_connector(server_session_keep_alive=True)
@@ -1050,7 +1041,6 @@ def test_server_session_keep_alive_skips_async_check(mock_post_requests):
     delete_session_mock.assert_not_called()
 
 
-@pytest.mark.skipolddriver
 def test_server_session_keep_alive_false_calls_async_check(mock_post_requests):
     """Test that server_session_keep_alive=False calls _all_async_queries_finished check."""
     conn = fake_connector(server_session_keep_alive=False)
@@ -1091,7 +1081,6 @@ def _run_cmd_query_with_final_names(
     conn.cmd_query(sql, 0, uuid.uuid4(), _no_results=True)
 
 
-@pytest.mark.skipolddriver
 def test_fqn_ddl_does_not_pollute_none_database_cache(mock_post_requests):
     """SNOW-3665226: when the session has no current database (e.g. the user has
     no default namespace), a fully-qualified DDL's finalDatabaseName /

@@ -3,8 +3,6 @@ from __future__ import annotations
 import json
 from unittest import mock
 
-import pytest
-
 import snowflake.connector.aio
 
 
@@ -43,7 +41,6 @@ async def _connect_and_capture(captured_requests):
     return [body for (url, body) in captured_requests if "login-request" in url]
 
 
-@pytest.mark.skipolddriver
 async def test_spcs_token_present_async(monkeypatch):
     """SPCS_TOKEN is injected into async login request when env var is set and file exists."""
     monkeypatch.setenv("SNOWFLAKE_RUNNING_INSIDE_SPCS", "true")
@@ -57,7 +54,6 @@ async def test_spcs_token_present_async(monkeypatch):
     assert login_bodies[0]["data"]["SPCS_TOKEN"] == "TEST_SPCS_TOKEN_ASYNC"
 
 
-@pytest.mark.skipolddriver
 async def test_spcs_token_absent_async(monkeypatch):
     """SPCS_TOKEN is not added to async login request when file does not exist."""
     monkeypatch.setenv("SNOWFLAKE_RUNNING_INSIDE_SPCS", "true")
@@ -74,7 +70,6 @@ async def test_spcs_token_absent_async(monkeypatch):
     assert "SPCS_TOKEN" not in login_bodies[0]["data"]
 
 
-@pytest.mark.skipolddriver
 async def test_not_in_spcs_async(monkeypatch):
     """SPCS_TOKEN is not added when SNOWFLAKE_RUNNING_INSIDE_SPCS is not set (async)."""
     monkeypatch.delenv("SNOWFLAKE_RUNNING_INSIDE_SPCS", raising=False)
@@ -88,7 +83,6 @@ async def test_not_in_spcs_async(monkeypatch):
     assert "SPCS_TOKEN" not in login_bodies[0]["data"]
 
 
-@pytest.mark.skipolddriver
 async def test_spcs_token_with_whitespace_async(monkeypatch):
     """SPCS_TOKEN value has leading/trailing whitespace stripped (async)."""
     monkeypatch.setenv("SNOWFLAKE_RUNNING_INSIDE_SPCS", "true")

@@ -43,7 +43,6 @@ def test_no_auth(db_parameters):
         rest.close()
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "query_return_code", [QUERY_IN_PROGRESS_CODE, QUERY_IN_PROGRESS_ASYNC_CODE]
 )

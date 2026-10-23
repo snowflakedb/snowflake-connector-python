@@ -22,9 +22,7 @@ from ..integ_helpers import put
 
 
 @pytest.mark.aws
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, from_path):
     """[s3] Puts and Gets Small Data via User Stage."""
     if is_public_test or "AWS_ACCESS_KEY_ID" not in os.environ:
@@ -42,7 +40,6 @@ def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, fro
 
 @pytest.mark.skip(reason="endpoints don't have s3-acc string, skip it for now")
 @pytest.mark.internal
-@pytest.mark.skipolddriver
 @pytest.mark.aws
 @pytest.mark.parametrize(
     "from_path",
@@ -105,9 +102,7 @@ def test_put_get_accelerate_user_stage(tmpdir, conn_cnx, from_path, accelerate_c
 
 
 @pytest.mark.aws
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 def test_put_get_large_data_via_user_stage(
     is_public_test,
     tmpdir,
@@ -130,9 +125,7 @@ def test_put_get_large_data_via_user_stage(
 
 @pytest.mark.aws
 @pytest.mark.internal
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 def test_put_small_data_use_s3_regional_url(
     is_public_test,
     tmpdir,

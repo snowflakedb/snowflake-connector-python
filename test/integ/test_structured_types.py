@@ -3,10 +3,6 @@ from __future__ import annotations
 
 from textwrap import dedent
 
-import pytest
-
-pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
-
 
 def test_structured_array_types(conn_cnx):
     with conn_cnx() as cnx:

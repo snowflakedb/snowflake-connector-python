@@ -78,7 +78,6 @@ async def _test_runner(
             )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("is_compressed", [False, True])
 async def test_upload(
     conn_cnx: Callable[..., AsyncGenerator[SnowflakeConnection]],
@@ -94,7 +93,6 @@ async def test_upload(
     await _test_runner(conn_cnx, upload_task, is_compressed=is_compressed)
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("is_compressed", [False, True])
 async def test_upload_stream(
     conn_cnx: Callable[..., AsyncGenerator[SnowflakeConnection]],

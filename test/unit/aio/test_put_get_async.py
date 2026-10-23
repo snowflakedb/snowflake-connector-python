@@ -110,7 +110,6 @@ async def test_get_empty_file(tmpdir):
     assert not sf_file_transfer_agent.result()["rowset"]
 
 
-@pytest.mark.skipolddriver
 async def test_upload_file_with_azure_upload_failed_error(tmp_path):
     """Tests Upload file with expired Azure storage token."""
     file1 = tmp_path / "file1"
@@ -279,7 +278,6 @@ def _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, reraise_param_
 
 # Skip for old drivers because the connection config of
 # reraise_error_in_file_transfer_work_function is newly introduced.
-@pytest.mark.skipolddriver
 async def test_python_reraise_file_transfer_work_fn_error_as_is(tmp_path):
     """When reraise_error_in_file_transfer_work_function is True, exceptions are reraised immediately."""
     agent, test_exception, mock_client, mock_create_client_patch = (
@@ -302,7 +300,6 @@ async def test_python_reraise_file_transfer_work_fn_error_as_is(tmp_path):
         mock_client.prepare_upload.assert_awaited_once()
 
 
-@pytest.mark.skipolddriver
 async def test_python_not_reraise_file_transfer_work_fn_error_as_is(tmp_path):
     """When reraise_error_in_file_transfer_work_function is False, errors are stored and execution continues."""
     agent, test_exception, mock_client, mock_create_client_patch = (

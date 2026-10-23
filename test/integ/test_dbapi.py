@@ -753,7 +753,6 @@ def test_escape(conn_local):
         cur.execute("delete from %s" % TABLE1)
 
 
-@pytest.mark.skipolddriver
 def test_callproc(conn_local):
     name_sp = random_string(5, "test_stored_procedure_")
     message = random_string(10)
@@ -775,7 +774,6 @@ def test_callproc(conn_local):
         assert ret == (message,) and cur.fetchall() == [(message,)]
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("paramstyle", ["pyformat", "qmark"])
 def test_callproc_overload(conn_cnx, paramstyle):
     """Test calling stored procedures overloaded with different input parameters and returns."""
@@ -847,7 +845,6 @@ def test_callproc_overload(conn_cnx, paramstyle):
             assert ret == () and cursor.fetchall() == [(True,)]
 
 
-@pytest.mark.skipolddriver
 def test_callproc_invalid(conn_cnx):
     """Test invalid callproc"""
     name_sp = random_string(5, "test_stored_procedure_")

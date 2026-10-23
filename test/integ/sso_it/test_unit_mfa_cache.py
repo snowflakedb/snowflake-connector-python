@@ -21,7 +21,6 @@ except ImportError:
 
 
 # Although this is an unit test, we put it under test/integ/sso, since it needs keyring package installed
-@pytest.mark.skipolddriver
 @patch("snowflake.connector.network.SnowflakeRestful._post_request")
 def test_mfa_cache(mockSnowflakeRestfulPostRequest):
     """Connects with (username, pwd, mfa) mock."""

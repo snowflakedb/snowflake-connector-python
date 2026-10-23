@@ -22,7 +22,6 @@ def _ignore_deprecation_warnings():
         yield
 
 
-@pytest.mark.skipolddriver
 def test_crl_validation_enabled_mode(conn_cnx):
     """Test that connection works with CRL validation in ENABLED mode."""
     # ENABLED mode should work for normal Snowflake connections since they typically
@@ -48,7 +47,6 @@ def test_crl_validation_enabled_mode(conn_cnx):
         assert cnx.allow_certificates_without_crl_url is True
 
 
-@pytest.mark.skipolddriver
 def test_crl_validation_advisory_mode(conn_cnx):
     """Test that connection works with CRL validation in ADVISORY mode."""
     # ADVISORY mode should be more lenient and allow connections even if CRL checks fail
@@ -79,7 +77,6 @@ def test_crl_validation_advisory_mode(conn_cnx):
         assert cnx.crl_cache_dir is None
 
 
-@pytest.mark.skipolddriver
 def test_crl_validation_disabled_mode(conn_cnx):
     """Test that connection works with CRL validation in DISABLED mode (default)."""
     # DISABLED mode should work without any CRL checks
@@ -99,7 +96,6 @@ def test_crl_validation_disabled_mode(conn_cnx):
         assert cnx.cert_revocation_check_mode == "DISABLED"
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "crl_mode,allow_without_crl,should_succeed",
     [
@@ -154,7 +150,6 @@ def test_crl_validation_modes_parametrized(
             ), f"Expected CRL-related error, got: {e}"
 
 
-@pytest.mark.skipolddriver
 def test_crl_cache_configuration(conn_cnx):
     """Test CRL cache configuration options."""
     with tempfile.TemporaryDirectory() as temp_dir:

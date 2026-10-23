@@ -22,8 +22,6 @@ except ImportError:
     # skipping old driver test
     pass
 
-pytestmark = pytest.mark.skipolddriver
-
 
 def test_fetch():
     connection = mock_connection()

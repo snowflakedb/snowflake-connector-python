@@ -4,13 +4,10 @@ from snowflake.connector.version import VERSION
 
 from ..helpers import _wait_until_query_success, _wait_while_query_running
 
-pytestmark = [
-    pytest.mark.skipolddriver,
-    pytest.mark.xfail(
-        VERSION[:3] < (2, 9, 0),
-        reason="Multi-statement support not available until connector version 2.9.0.",
-    ),
-]
+pytestmark = pytest.mark.xfail(
+    VERSION[:3] < (2, 9, 0),
+    reason="Multi-statement support not available until connector version 2.9.0.",
+)
 
 import snowflake.connector.cursor
 from snowflake.connector import ProgrammingError, errors

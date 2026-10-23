@@ -61,9 +61,6 @@ Note: running multiple categories in one `tox` run should be done like:
 * **sso**: Tests specifically testing our optional dependency group "sso".
 * **extras**: Tests special cases under separate processes.
 
-Special categories:
-* **skipolddriver**: Legacy marker kept so existing tests that use it still collect. The old-driver CI job has been removed.
-
 ## Other test tags
 * **internal**: Tests that should only be run on our internal CI.
 * **external**: Tests that should only be run on our external CI.

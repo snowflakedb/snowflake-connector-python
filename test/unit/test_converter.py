@@ -86,7 +86,6 @@ def test_converter_to_snowflake_error():
         converter._bogus_to_snowflake("Bogus")
 
 
-@pytest.mark.skipolddriver
 def test_decfloat_to_decimal_converter():
     ctx = ArrowConverterContext()
     decimal = ctx.DECFLOAT_to_decimal(42, bytes.fromhex("11AA"))

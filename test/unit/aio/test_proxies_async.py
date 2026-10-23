@@ -92,7 +92,6 @@ async def test_basic_query_through_proxy_async(
     assert target_wm.saw_urls_matching(["/queries/v1/query-request"])
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("proxy_method", ["explicit_args", "env_vars"])
 async def test_large_query_through_proxy_async(
     wiremock_generic_mappings_dir,
@@ -216,7 +215,6 @@ async def _collect_proxy_precedence_flags(
     )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("no_proxy_source", ["param", "env"])
 async def test_no_proxy_bypass_storage(
     wiremock_backend_storage_proxy,
@@ -258,7 +256,6 @@ async def test_no_proxy_bypass_storage(
     assert flags.proxy_saw_storage is False
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("no_proxy_source", ["param", "env"])
 async def test_no_proxy_basic_param_proxy_bypass_backend(
     wiremock_backend_storage_proxy,
@@ -351,7 +348,6 @@ def fix_aiohttp_proxy_bypass(monkeypatch):
     yield
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("proxy_method", ["explicit_args", "env_vars"])
 @pytest.mark.parametrize("no_proxy_source", ["param", "env"])
 async def test_no_proxy_source_vs_proxy_method_matrix(
@@ -393,7 +389,6 @@ async def test_no_proxy_source_vs_proxy_method_matrix(
     assert flags.proxy_saw_storage is False
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("proxy_method", ["explicit_args", "env_vars"])
 @pytest.mark.parametrize("no_proxy_source", ["param", "env"])
 async def test_no_proxy_backend_matrix(
@@ -435,7 +430,6 @@ async def test_no_proxy_backend_matrix(
     assert flags.proxy_saw_storage is True
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "no_proxy_factory",
     [
@@ -498,7 +492,6 @@ async def test_no_proxy_multiple_values_param_only(
     assert proxy_saw_storage is False
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "no_proxy_factory",
     [
@@ -561,7 +554,6 @@ async def test_no_proxy_bypass_backend_and_storage_param_only(
     assert flags.proxy_saw_storage is False
 
 
-@pytest.mark.skipolddriver
 async def test_proxy_env_vars_take_precedence_over_connection_params(
     wiremock_two_proxies_backend,
     wiremock_mapping_dir,

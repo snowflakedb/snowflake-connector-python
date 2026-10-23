@@ -3,8 +3,6 @@ from __future__ import annotations
 import json
 from unittest import mock
 
-import pytest
-
 import snowflake.connector
 
 
@@ -38,7 +36,6 @@ def _connect_and_capture(captured_bodies):
         assert conn._rest.master_token == "MASTER_TOKEN"
 
 
-@pytest.mark.skipolddriver
 def test_spcs_token_present(monkeypatch):
     """SPCS_TOKEN is injected into the login request when env var is set and file exists."""
     monkeypatch.setenv("SNOWFLAKE_RUNNING_INSIDE_SPCS", "true")
@@ -52,7 +49,6 @@ def test_spcs_token_present(monkeypatch):
     assert captured_bodies[0]["data"]["SPCS_TOKEN"] == "TEST_SPCS_TOKEN"
 
 
-@pytest.mark.skipolddriver
 def test_spcs_token_absent(monkeypatch):
     """SPCS_TOKEN is not added when env var is set but token file does not exist."""
     monkeypatch.setenv("SNOWFLAKE_RUNNING_INSIDE_SPCS", "true")
@@ -69,7 +65,6 @@ def test_spcs_token_absent(monkeypatch):
     assert "SPCS_TOKEN" not in captured_bodies[0]["data"]
 
 
-@pytest.mark.skipolddriver
 def test_not_in_spcs(monkeypatch):
     """SPCS_TOKEN is not added when SNOWFLAKE_RUNNING_INSIDE_SPCS is not set."""
     monkeypatch.delenv("SNOWFLAKE_RUNNING_INSIDE_SPCS", raising=False)
@@ -83,7 +78,6 @@ def test_not_in_spcs(monkeypatch):
     assert "SPCS_TOKEN" not in captured_bodies[0]["data"]
 
 
-@pytest.mark.skipolddriver
 def test_spcs_token_with_whitespace(monkeypatch):
     """SPCS_TOKEN value has leading/trailing whitespace stripped."""
     monkeypatch.setenv("SNOWFLAKE_RUNNING_INSIDE_SPCS", "true")

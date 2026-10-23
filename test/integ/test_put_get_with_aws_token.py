@@ -38,9 +38,7 @@ from ..integ_helpers import put
 pytestmark = pytest.mark.aws
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 def test_put_get_with_aws(tmpdir, conn_cnx, from_path, caplog):
     """[s3] Puts and Gets a small text using AWS S3."""
     # create a data file
@@ -114,7 +112,6 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path, caplog):
     assert original_contents == contents, "Output is different from the original file"
 
 
-@pytest.mark.skipolddriver
 def test_put_with_invalid_token(tmpdir, conn_cnx):
     """[s3] SNOW-6154: Uses invalid combination of AWS credential."""
     # create a data file

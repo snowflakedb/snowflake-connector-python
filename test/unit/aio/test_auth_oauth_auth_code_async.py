@@ -370,7 +370,6 @@ async def test_auth_oauth_auth_code_uses_redirect_uri(
                         )
 
 
-@pytest.mark.skipolddriver
 async def test_oauth_authorization_code_allows_empty_user(
     monkeypatch, omit_oauth_urls_check
 ):

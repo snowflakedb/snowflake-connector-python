@@ -14,8 +14,6 @@ except ImportError:
 
 from ..integ_helpers import put
 
-pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
-
 try:
     from snowflake.connector.s3_storage_client import SnowflakeS3RestClient
 

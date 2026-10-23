@@ -105,7 +105,6 @@ def test_get_empty_file(tmpdir):
     assert not sf_file_transfer_agent.result()["rowset"]
 
 
-@pytest.mark.skipolddriver
 def test_percentage(tmp_path):
     """Tests for ProgressPercentage classes."""
     from snowflake.connector.file_transfer_agent import percent
@@ -319,7 +318,6 @@ def test_strip_stage_prefix_from_dst_file_name_for_download():
 
 # The server DoP cap is newly introduced and therefore should not be tested in
 # old drivers.
-@pytest.mark.skipolddriver
 def test_server_dop_cap(tmp_path):
     file1 = tmp_path / "file1"
     file2 = tmp_path / "file2"
@@ -454,7 +452,6 @@ def _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, reraise_param_
 
 # Skip for old drivers because the connection config of
 # reraise_error_in_file_transfer_work_function is newly introduced.
-@pytest.mark.skipolddriver
 def test_python_reraise_file_transfer_work_fn_error_as_is(tmp_path):
     """Tests that when reraise_error_in_file_transfer_work_function config is True,
     exceptions are reraised immediately without continuing execution after transfer().
@@ -481,7 +478,6 @@ def test_python_reraise_file_transfer_work_fn_error_as_is(tmp_path):
 
 # Skip for old drivers because the connection config of
 # reraise_error_in_file_transfer_work_function is newly introduced.
-@pytest.mark.skipolddriver
 def test_python_not_reraise_file_transfer_work_fn_error_as_is(tmp_path):
     """Tests that when reraise_error_in_file_transfer_work_function config is False (default),
     where exceptions are stored in file metadata but execution continues.

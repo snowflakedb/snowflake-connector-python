@@ -140,7 +140,6 @@ def test_oauth_client_credentials_parameters(
     conn.close()
 
 
-@pytest.mark.skipolddriver
 def test_oauth_client_credentials_allows_empty_user(monkeypatch):
     """Test that OAUTH_CLIENT_CREDENTIALS authenticator allows connection without user parameter."""
     import snowflake.connector
@@ -216,7 +215,6 @@ def _token_http_response(body: dict, status: int = 200) -> MagicMock:
     return resp
 
 
-@pytest.mark.skipolddriver
 def test_oauth_token_request_retries_transient_http_failure(monkeypatch):
     """SNOW-3984430: a transient IdP token-request failure should be retried."""
     monkeypatch.setattr(
@@ -243,7 +241,6 @@ def test_oauth_token_request_retries_transient_http_failure(monkeypatch):
     assert mock_http.request_encode_body.call_count == 2
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("status", [503, 429, 408])
 def test_oauth_token_request_retries_retryable_http_status(monkeypatch, status):
     """SNOW-3984430: 5xx, 429, and 408 from the IdP token endpoint should be retried."""
@@ -269,7 +266,6 @@ def test_oauth_token_request_retries_retryable_http_status(monkeypatch, status):
     assert mock_http.request_encode_body.call_count == 2
 
 
-@pytest.mark.skipolddriver
 def test_oauth_token_request_does_not_retry_http_400(monkeypatch):
     """SNOW-3984430: IdP auth errors must not be retried."""
     monkeypatch.setattr(
@@ -292,7 +288,6 @@ def test_oauth_token_request_does_not_retry_http_400(monkeypatch):
     assert mock_http.request_encode_body.call_count == 1
 
 
-@pytest.mark.skipolddriver
 def test_oauth_token_request_gives_up_after_retries(monkeypatch):
     """SNOW-3984430: transport errors become a DatabaseError after the attempt budget."""
     monkeypatch.setattr(
@@ -313,7 +308,6 @@ def test_oauth_token_request_gives_up_after_retries(monkeypatch):
     assert mock_http.request_encode_body.call_count == 3
 
 
-@pytest.mark.skipolddriver
 def test_oauth_token_request_gives_up_after_http_5xx_retries(monkeypatch):
     """SNOW-3984430: exhausted 5xx retries return the last body as an IdP error."""
     monkeypatch.setattr(
@@ -338,7 +332,6 @@ def test_oauth_token_request_gives_up_after_http_5xx_retries(monkeypatch):
     assert mock_http.request_encode_body.call_count == 3
 
 
-@pytest.mark.skipolddriver
 def test_oauth_token_request_does_not_retry_cert_error(monkeypatch):
     """SNOW-3984430: TLS certificate failures must fail immediately."""
     monkeypatch.setattr(
@@ -358,7 +351,6 @@ def test_oauth_token_request_does_not_retry_cert_error(monkeypatch):
     assert mock_http.request_encode_body.call_count == 1
 
 
-@pytest.mark.skipolddriver
 def test_oauth_token_request_stops_when_login_timeout_exceeded(monkeypatch):
     """SNOW-3984430: token-request retries must not sleep past login_timeout."""
     monkeypatch.setattr(

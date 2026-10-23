@@ -5,10 +5,7 @@
 
 from __future__ import annotations
 
-import pytest
 
-
-@pytest.mark.skipolddriver
 async def test_auth_no_auth():
     """Simple test for AuthNoAuth."""
 

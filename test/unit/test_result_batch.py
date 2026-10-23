@@ -107,7 +107,6 @@ def test_ok_response_download(mock_get):
     assert response.status_code == 200
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "errcode,error_class",
     [
@@ -418,7 +417,6 @@ def _make_remote_json_batch(rowcount: int, rows: list[list]) -> tuple:
     return batch, response
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(JSONResultBatch is None, reason="vendored requests unavailable")
 def test_short_remote_chunk_raises_instead_of_ending_iteration():
     """SNOW-4109042: a chunk holding fewer rows than promised must not look like EOF.
@@ -439,7 +437,6 @@ def test_short_remote_chunk_raises_instead_of_ending_iteration():
     assert "holds 2 row(s) but the server reported 3" in ex.value.msg
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(JSONResultBatch is None, reason="vendored requests unavailable")
 def test_short_remote_chunk_recovers_on_redownload():
     """SNOW-4109042: a truncated first download that recovers on retry yields all rows."""
@@ -456,7 +453,6 @@ def test_short_remote_chunk_recovers_on_redownload():
     assert download.call_count == 2
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(JSONResultBatch is None, reason="vendored requests unavailable")
 def test_complete_remote_chunk_iterates_without_error():
     rows = [["val1", 1], ["val2", 2]]
@@ -507,7 +503,6 @@ def _inline_arrow_batch(rowset_b64: str, first_chunk_len: int) -> ArrowResultBat
     )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(ArrowResultBatch is None, reason="connector build unavailable")
 def test_is_inline_result_incomplete_detects_empty_json_inline():
     """Detection used before GET /queries/{qid}/result recovery."""
@@ -551,7 +546,6 @@ def test_is_inline_result_incomplete_detects_empty_json_inline():
     )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(ArrowResultBatch is None, reason="connector build unavailable")
 def test_is_inline_result_incomplete_detects_empty_arrow_inline():
     from snowflake.connector.result_batch import is_inline_result_incomplete
@@ -591,7 +585,6 @@ def test_is_inline_result_incomplete_detects_empty_arrow_inline():
     )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(ArrowResultBatch is None, reason="connector build unavailable")
 @pytest.mark.parametrize("total,first_chunk_len", CHUNKS, ids=str)
 def test_empty_inline_arrow_chunk_raises(total, first_chunk_len):
@@ -611,7 +604,6 @@ def test_empty_inline_arrow_chunk_raises(total, first_chunk_len):
     assert f"holds 0 row(s) but the server reported {first_chunk_len}" in ex.value.msg
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(not _have_arrow, reason="pyarrow or nanoarrow extension missing")
 def test_short_inline_arrow_chunk_raises():
     """A partially delivered inline chunk is as silent as an empty one was."""
@@ -624,7 +616,6 @@ def test_short_inline_arrow_chunk_raises():
     assert ex.value.errno == ER_INCOMPLETE_RESULT_CHUNK
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(not _have_arrow, reason="pyarrow or nanoarrow extension missing")
 def test_complete_inline_arrow_chunk_iterates_without_error():
     rows = ["0", "1", "2", "3", "4"]
@@ -634,7 +625,6 @@ def test_complete_inline_arrow_chunk_iterates_without_error():
     assert list(batch.create_iter()) == [(v,) for v in rows]
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(not _have_arrow, reason="pyarrow or nanoarrow extension missing")
 def test_partially_consumed_inline_arrow_chunk_does_not_raise():
     """Stopping early is normal usage; only an exhausted chunk is verified."""
@@ -660,7 +650,6 @@ def _mock_cursor_for_batches():
     return cursor
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(not _have_arrow, reason="pyarrow or nanoarrow extension missing")
 def test_inline_arrow_chunk_without_declared_total_does_not_raise():
     """``data.get("total", 0)`` defaults to 0, which is not a promise of any rows.
@@ -685,7 +674,6 @@ def test_inline_arrow_chunk_without_declared_total_does_not_raise():
     assert len(list(batches[0].create_iter())) == len(rows)
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(JSONResultBatch is None, reason="vendored requests unavailable")
 def test_empty_inline_json_chunk_is_self_consistent():
     """SNOW-4109042: the JSON path has no batch-level mismatch to detect.
@@ -718,7 +706,6 @@ def test_empty_inline_json_chunk_is_self_consistent():
     assert list(batches[0].create_iter()) == []
 
 
-@pytest.mark.skipolddriver
 def test_create_batches_does_not_log_chunk_header_values(caplog):
     """SNOW-3675590: chunk header *values* can be secrets (e.g. the SSE-C
     customer key), so create_batches_from_response must log only header names.
@@ -789,7 +776,6 @@ def test_describe_value_hides_secrets_in_response_dict():
     assert "X-Amz-Signature" not in result
 
 
-@pytest.mark.skipolddriver
 def test_create_batches_error_logs_shape_not_raw_response(caplog):
     """SNOW-3675590: the malformed-response ERROR must log the structural shape
     rather than the response object — and it fires at ERROR level regardless of
@@ -818,7 +804,6 @@ def test_create_batches_error_logs_shape_not_raw_response(caplog):
     assert secret_url not in logged
 
 
-@pytest.mark.skipolddriver
 def test_create_batches_does_not_log_qrmk_value(caplog):
     """SNOW-3675590: the bare-qrmk (no chunkHeaders) path must not log the key.
 
@@ -866,7 +851,6 @@ def test_create_batches_does_not_log_qrmk_value(caplog):
     assert "MaskedMessageData" not in logged
 
 
-@pytest.mark.skipolddriver
 def test_qrmk_branch_does_not_log_qrmk_value_e2e(
     caplog,
     wiremock_generic_mappings_dir,

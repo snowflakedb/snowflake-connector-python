@@ -12,11 +12,8 @@ from unittest.mock import patch
 
 import pytest
 
-from snowflake.connector.util_text import random_string
-
-pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
-
 from snowflake.connector.aio._s3_storage_client import SnowflakeS3RestClient
+from snowflake.connector.util_text import random_string
 
 orig_send_req = SnowflakeS3RestClient._send_request_with_authentication_and_retry
 

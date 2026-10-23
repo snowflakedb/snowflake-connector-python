@@ -109,7 +109,6 @@ async def test_query_large_result_set_n_threads(
 
 
 @pytest.mark.aws
-@pytest.mark.skipolddriver
 async def test_query_large_result_set(conn_cnx, db_parameters, ingest_data, caplog):
     """[s3] Gets Large Result set."""
     caplog.set_level(logging.DEBUG)

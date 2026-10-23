@@ -19,7 +19,6 @@ import snowflake.connector.errors
 from ...test_utils.wiremock.wiremock_utils import WiremockClient
 
 
-@pytest.mark.skipolddriver
 async def test_valid_pat_async(wiremock_client: WiremockClient) -> None:
     wiremock_data_dir = (
         pathlib.Path(__file__).parent.parent.parent
@@ -55,7 +54,6 @@ async def test_valid_pat_async(wiremock_client: WiremockClient) -> None:
     await connection.close()
 
 
-@pytest.mark.skipolddriver
 async def test_invalid_pat_async(wiremock_client: WiremockClient) -> None:
     wiremock_data_dir = (
         pathlib.Path(__file__).parent.parent.parent

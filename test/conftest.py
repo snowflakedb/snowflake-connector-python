@@ -114,8 +114,6 @@ def pytest_collection_modifyitems(items) -> None:
             if part.endswith("_it"):
                 part = part[:-3]
             item.add_marker(part)
-            if part in ("unit", "pandas"):
-                item.add_marker("skipolddriver")
 
 
 @pytest.fixture(scope="session", autouse=True)

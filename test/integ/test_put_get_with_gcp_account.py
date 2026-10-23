@@ -54,9 +54,7 @@ pytestmark = pytest.mark.gcp
 
 
 @pytest.mark.parametrize("enable_gcs_downscoped", [True])
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 def test_put_get_with_gcp(
     tmpdir,
     conn_cnx,
@@ -650,9 +648,7 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
     assert original_contents == contents, "Output is different from the original file"
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 def test_put_overwrite_with_downscope(
     tmpdir,
     conn_cnx,

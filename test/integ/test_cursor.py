@@ -175,7 +175,6 @@ def _type_from_description(named_access: bool):
         return lambda meta: meta[1]
 
 
-@pytest.mark.skipolddriver
 def test_insert_select(conn, db_parameters, caplog):
     caplog.set_level(logging.DEBUG)
     """Inserts and selects integer data."""
@@ -220,7 +219,6 @@ def test_insert_select(conn, db_parameters, caplog):
             assert "Number of results in first chunk: 3" in caplog.text
 
 
-@pytest.mark.skipolddriver
 def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
     caplog.set_level(logging.DEBUG)
     """Inserts a record and select it by a separate connection."""
@@ -612,7 +610,6 @@ created_at timestamp, data variant)
             cnx.cursor().execute(f"drop table {name_variant}")
 
 
-@pytest.mark.skipolddriver
 def test_geography(conn_cnx):
     """Variant including JSON object."""
     name_geo = random_string(5, "test_geography_")
@@ -642,7 +639,6 @@ def test_geography(conn_cnx):
                 assert row in expected_data
 
 
-@pytest.mark.skipolddriver
 def test_geometry(conn_cnx):
     """Variant including JSON object."""
     name_geo = random_string(5, "test_geometry_")
@@ -672,7 +668,6 @@ def test_geometry(conn_cnx):
                 assert row in expected_data
 
 
-@pytest.mark.skipolddriver
 def test_file(conn_cnx):
     """Variant including JSON object."""
     name_file = random_string(5, "test_file_")
@@ -712,7 +707,6 @@ def test_file(conn_cnx):
                 assert row in expected_data
 
 
-@pytest.mark.skipolddriver
 def test_vector(conn_cnx, is_public_test):
     if is_public_test:
         pytest.xfail(
@@ -774,7 +768,6 @@ def test_invalid_bind_data_type(conn_cnx):
             cnx.cursor().execute("select 1 from dual where 1=%s", ([1, 2, 3],))
 
 
-@pytest.mark.skipolddriver
 def test_timeout_query(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as c:
@@ -849,7 +842,6 @@ def test_executemany(conn, db_parameters):
             assert c.rowcount == 5, "wrong number of records were inserted"
 
 
-@pytest.mark.skipolddriver
 def test_executemany_qmark_types(conn, db_parameters):
     table_name = random_string(5, "test_executemany_qmark_types_")
     with conn(paramstyle="qmark") as cnx:
@@ -884,7 +876,6 @@ def test_executemany_qmark_types(conn, db_parameters):
             assert {row[0] for row in cur} == {date_1, date_2, date_3, date_4}
 
 
-@pytest.mark.skipolddriver
 def test_executemany_params_iterator(conn):
     """Cursor.executemany() works with an interator of params."""
     table_name = random_string(5, "executemany_params_iterator_")
@@ -903,7 +894,6 @@ def test_executemany_params_iterator(conn):
             assert c.rowcount == 5, "wrong number of records were inserted"
 
 
-@pytest.mark.skipolddriver
 def test_executemany_empty_params(conn):
     """Cursor.executemany() does nothing if params is empty."""
     table_name = random_string(5, "executemany_empty_params_")
@@ -914,9 +904,6 @@ def test_executemany_empty_params(conn):
             assert c.query is None
 
 
-@pytest.mark.skipolddriver(
-    reason="old driver raises DatabaseError instead of InterfaceError"
-)
 def test_closed_cursor(conn, db_parameters):
     """Attempts to use the closed cursor. It should raise errors.
 
@@ -949,7 +936,6 @@ def test_closed_cursor(conn, db_parameters):
         ), "SNOW-647539: rowcount should remain available after cursor is closed"
 
 
-@pytest.mark.skipolddriver
 def test_fetchmany(conn, db_parameters, caplog):
     table_name = random_string(5, "test_fetchmany_")
     with conn() as cnx:
@@ -1020,7 +1006,6 @@ def test_process_params(conn, db_parameters):
             assert c.fetchone()[0] == 2, "the number of records"
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     ("interpolate_empty_sequences", "expected_outcome"), [(False, "%%s"), (True, "%s")]
 )
@@ -1104,7 +1089,6 @@ def test_binding_negative(negative_conn_cnx, db_parameters):
             )
 
 
-@pytest.mark.skipolddriver
 def test_execute_stores_query(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cursor:
@@ -1209,7 +1193,6 @@ def test_fetch_out_of_range_timestamp_value(conn, result_format):
             cur.fetchone()
 
 
-@pytest.mark.skipolddriver
 def test_null_in_non_null(conn):
     table_name = random_string(5, "null_in_non_null")
     error_msg = "NULL result in a non-nullable column"
@@ -1238,9 +1221,7 @@ def test_empty_execution(conn, sql):
                 cur.fetchall()
 
 
-@pytest.mark.parametrize(
-    "reuse_results", (False, pytest.param(True, marks=pytest.mark.skipolddriver))
-)
+@pytest.mark.parametrize("reuse_results", (False, True))
 def test_reset_fetch(conn, reuse_results):
     """Tests behavior after resetting an open cursor."""
     with conn(reuse_results=reuse_results) as cnx:
@@ -1306,7 +1287,6 @@ def test_execute_helper_params_error(conn_testaccount):
             cur._execute_helper("select %()s", statement_params="1")
 
 
-@pytest.mark.skipolddriver
 def test_desc_rewrite(conn, caplog):
     """Tests whether describe queries are rewritten as expected and this action is logged."""
     with conn() as cnx:
@@ -1327,7 +1307,6 @@ def test_desc_rewrite(conn, caplog):
                 cur.execute(f"drop table {table_name}")
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("result_format", [False, None, "json"])
 def test_execute_helper_cannot_use_arrow(conn_cnx, caplog, result_format):
     """Tests whether cannot use arrow is handled correctly inside of _execute_helper."""
@@ -1352,7 +1331,6 @@ def test_execute_helper_cannot_use_arrow(conn_cnx, caplog, result_format):
                 assert cur.fetchone() == (1,)
 
 
-@pytest.mark.skipolddriver
 def test_execute_helper_cannot_use_arrow_exception(conn_cnx):
     """Like test_execute_helper_cannot_use_arrow but when we are trying to force arrow an Exception should be raised."""
     with conn_cnx() as cnx:
@@ -1372,7 +1350,6 @@ def test_execute_helper_cannot_use_arrow_exception(conn_cnx):
                     )
 
 
-@pytest.mark.skipolddriver
 def test_check_can_use_arrow_resultset(conn_cnx, caplog):
     """Tests check_can_use_arrow_resultset has no effect when we can use arrow."""
     with conn_cnx() as cnx:
@@ -1385,7 +1362,6 @@ def test_check_can_use_arrow_resultset(conn_cnx, caplog):
     assert "Arrow" not in caplog.text
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("snowsql", [True, False])
 def test_check_cannot_use_arrow_resultset(conn_cnx, caplog, snowsql):
     """Tests check_can_use_arrow_resultset expected outcomes."""
@@ -1411,7 +1387,6 @@ def test_check_cannot_use_arrow_resultset(conn_cnx, caplog, snowsql):
                     )
 
 
-@pytest.mark.skipolddriver
 def test_check_can_use_pandas(conn_cnx):
     """Tests check_can_use_arrow_resultset has no effect when we can import pandas."""
     with conn_cnx() as cnx:
@@ -1420,7 +1395,6 @@ def test_check_can_use_pandas(conn_cnx):
                 cur.check_can_use_pandas()
 
 
-@pytest.mark.skipolddriver
 def test_check_cannot_use_pandas(conn_cnx):
     """Tests check_can_use_arrow_resultset has expected outcomes."""
     with conn_cnx() as cnx:
@@ -1435,7 +1409,6 @@ def test_check_cannot_use_pandas(conn_cnx):
                     assert pe.errno == ER_NO_PYARROW
 
 
-@pytest.mark.skipolddriver
 def test_not_supported_pandas(conn_cnx):
     """Check that fetch_pandas functions return expected error when arrow results are not available."""
     result_format = {PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "json"}
@@ -1507,7 +1480,6 @@ def test_scroll(conn_cnx):
                 assert nse.errno == SQLSTATE_FEATURE_NOT_SUPPORTED
 
 
-@pytest.mark.skipolddriver
 def test__log_telemetry_job_data(conn_cnx, caplog):
     """Tests whether we handle missing connection object correctly while logging a telemetry event."""
     with conn_cnx() as con:
@@ -1524,7 +1496,6 @@ def test__log_telemetry_job_data(conn_cnx, caplog):
     ) in caplog.record_tuples
 
 
-@pytest.mark.skipolddriver(reason="new feature in v2.5.0")
 @pytest.mark.parametrize(
     "result_format,expected_chunk_type",
     (
@@ -1597,7 +1568,6 @@ def test_resultbatch(
     assert total_rows == rowcount
 
 
-@pytest.mark.skipolddriver(reason="new feature in v2.5.0")
 @pytest.mark.parametrize(
     "result_format,patch_path",
     (
@@ -1664,7 +1634,6 @@ def test_resultbatch_lazy_fetching_and_schemas(
                     assert patched_download.call_count == 5
 
 
-@pytest.mark.skipolddriver(reason="new feature in v2.5.0")
 @pytest.mark.parametrize("result_format", ["json", "arrow"])
 def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format, lob_params):
     with conn_cnx(
@@ -1694,7 +1663,6 @@ def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format, lob_p
             ]
 
 
-@pytest.mark.skipolddriver
 def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
     """Make sure that we do not fail when _first_chunk_time is not present in cursor."""
     with conn_cnx() as con:
@@ -1743,7 +1711,6 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
                 fetch_next_fn()
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("result_format", ("json", "arrow"))
 def test_out_of_range_year_followed_by_correct_year(conn_cnx, result_format):
     """Tests whether the year 10000 is out of range exception is raised as expected."""
@@ -1763,7 +1730,6 @@ def test_out_of_range_year_followed_by_correct_year(conn_cnx, result_format):
                 cur.fetchall()
 
 
-@pytest.mark.skipolddriver
 def test_describe(conn_cnx):
     with conn_cnx() as con:
         with con.cursor() as cur:
@@ -1795,7 +1761,6 @@ def test_describe(conn_cnx):
                     cur.execute(f"drop table if exists {table_name}")
 
 
-@pytest.mark.skipolddriver
 def test_fetch_batches_with_sessions(conn_cnx):
     """Verifies that fetchall() reuses sessions for downloading result batches.
 
@@ -1863,7 +1828,6 @@ def test_fetch_batches_with_sessions(conn_cnx):
                 assert len(result) == rowcount
 
 
-@pytest.mark.skipolddriver
 def test_null_connection(conn_cnx):
     retries = 15
     with conn_cnx() as con:
@@ -1884,7 +1848,6 @@ def test_null_connection(conn_cnx):
             assert con.is_an_error(status)
 
 
-@pytest.mark.skipolddriver
 def test_multi_statement_failure(conn_cnx):
     """
     This test mocks the driver version sent to Snowflake to be 2.8.1, which does not support multi-statement.
@@ -1913,7 +1876,6 @@ def test_multi_statement_failure(conn_cnx):
         )
 
 
-@pytest.mark.skipolddriver
 def test_decoding_utf8_for_json_result(conn_cnx):
     # SNOW-787480, if not explicitly setting utf-8 decoding, the data will be
     # detected decoding as windows-1250 by chardet.detect
@@ -1952,7 +1914,6 @@ def test_decoding_utf8_for_json_result(conn_cnx):
         result_batch._load(mock_resp)
 
 
-@pytest.mark.skipolddriver
 def test_nanoarrow_usage_deprecation():
     with pytest.warns() as record:
         import snowflake.connector.cursor
@@ -1972,7 +1933,6 @@ def test_nanoarrow_usage_deprecation():
         )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "request_id",
     [
@@ -1994,7 +1954,6 @@ def test_custom_request_id_negative(request_id, conn_cnx):
                 )
 
 
-@pytest.mark.skipolddriver
 def test_custom_request_id(conn_cnx):
     request_id = uuid.uuid4()
 

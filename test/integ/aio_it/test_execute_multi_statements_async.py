@@ -87,7 +87,6 @@ SELECT * FROM {tbl2} ORDER BY 1 DESC;
             )
 
 
-@pytest.mark.skipolddriver
 async def test_execute_string_dict_cursor(conn_cnx, db_parameters):
     async with conn_cnx() as cnx:
         await cnx.execute_string(
@@ -264,7 +263,6 @@ async def test_execute_stream_with_error(conn_cnx):
             await anext(gen)
 
 
-@pytest.mark.skipolddriver
 async def test_execute_string_empty_lines(conn_cnx, db_parameters):
     """Tests whether execute_string can filter out empty lines."""
     async with conn_cnx() as cnx:

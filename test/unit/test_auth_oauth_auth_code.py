@@ -374,7 +374,6 @@ def test_auth_oauth_auth_code_uses_redirect_uri(
                         )
 
 
-@pytest.mark.skipolddriver
 def test_oauth_authorization_code_allows_empty_user(monkeypatch, omit_oauth_urls_check):
     """Test that OAUTH_AUTHORIZATION_CODE authenticator allows connection without user parameter."""
     import snowflake.connector

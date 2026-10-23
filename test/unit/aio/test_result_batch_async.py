@@ -83,7 +83,6 @@ async def test_ok_response_download(mock_get):
     assert mock_get.call_count == 1 and content == "success"
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "errcode,error_class",
     [
@@ -203,7 +202,6 @@ async def test_retries_until_success(caplog):
         assert all("S3 request id: test-req-id" in r.getMessage() for r in warning_logs)
 
 
-@pytest.mark.skipolddriver
 async def test_create_batches_does_not_log_chunk_header_values_async(caplog):
     """SNOW-3675590: async twin of test_result_batch.test_create_batches_does_not_log_chunk_header_values."""
     from snowflake.connector.aio._result_batch import create_batches_from_response
@@ -238,7 +236,6 @@ async def test_create_batches_does_not_log_chunk_header_values_async(caplog):
     assert secret_value not in logged
 
 
-@pytest.mark.skipolddriver
 async def test_create_batches_error_logs_shape_not_raw_response_async(caplog):
     """SNOW-3675590: async twin of test_result_batch.test_create_batches_error_logs_shape_not_raw_response."""
     from snowflake.connector.aio._result_batch import create_batches_from_response
@@ -262,7 +259,6 @@ async def test_create_batches_error_logs_shape_not_raw_response_async(caplog):
     assert secret_url not in logged
 
 
-@pytest.mark.skipolddriver
 async def test_create_batches_does_not_log_qrmk_value_async(caplog):
     """SNOW-3675590 (async): the bare-qrmk path must not log the key.
 
@@ -302,7 +298,6 @@ async def test_create_batches_does_not_log_qrmk_value_async(caplog):
     assert secret_qrmk not in logged
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.timeout(20)
 async def test_qrmk_branch_does_not_log_qrmk_value_e2e_async(
     caplog,

@@ -88,7 +88,6 @@ async def test_different_key_length(is_public_test, request, conn_cnx, db_parame
                 pass
 
 
-@pytest.mark.skipolddriver
 async def test_multiple_key_pair(is_public_test, request, conn_cnx, db_parameters):
     if is_public_test:
         pytest.skip("This test requires ACCOUNTADMIN privilege to set the public key")

@@ -18,8 +18,6 @@ from snowflake.connector._utils import (
     get_application_path,
 )
 
-pytestmark = pytest.mark.skipolddriver
-
 
 def test_get_application_path_is_fast_on_deep_call_stacks():
     """Regression test for GH-2908 / SNOW-3691001.

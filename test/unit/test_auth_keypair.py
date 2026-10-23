@@ -310,7 +310,6 @@ def generate_ec_key_pair(
     return private_key_der, public_key_der_encoded
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "curve",
     [ec.SECP256R1(), ec.SECP384R1(), ec.SECP521R1()],
@@ -340,7 +339,6 @@ def test_auth_keypair_ecdsa(curve):
     assert rest.master_token == "MASTER_TOKEN"
 
 
-@pytest.mark.skipolddriver
 def test_auth_keypair_ecdsa_with_passphrase():
     """ECDSA Key Pair test with passphrase."""
     passphrase = b"test"
@@ -369,7 +367,6 @@ def test_auth_keypair_ecdsa_with_passphrase():
     assert rest.master_token == "MASTER_TOKEN"
 
 
-@pytest.mark.skipolddriver
 def test_auth_keypair_ecdsa_abc():
     """ECDSA Key Pair test using abstraction layer."""
     private_key_der, _ = generate_ec_key_pair(ec.SECP256R1())
@@ -403,7 +400,6 @@ def test_auth_keypair_ecdsa_abc():
     assert rest.master_token == "MASTER_TOKEN"
 
 
-@pytest.mark.skipolddriver
 def test_auth_keypair_ecdsa_unsupported_curve():
     """Test that unsupported EC curve raises error."""
     from snowflake.connector.errors import ProgrammingError
@@ -421,7 +417,6 @@ def test_auth_keypair_ecdsa_unsupported_curve():
     assert "Unsupported EC curve" in str(ex.value)
 
 
-@pytest.mark.skipolddriver
 def test_expand_tilde(monkeypatch, tmp_path):
     """Test tilde expansion on both Windows and Linux/Mac"""
     import sys

@@ -12,17 +12,6 @@ import random
 import re
 from contextlib import asynccontextmanager
 from datetime import timedelta
-
-import numpy
-import pytest
-
-import snowflake.connector.aio._cursor
-from snowflake.connector.errors import OperationalError, ProgrammingError
-
-pytestmark = [
-    pytest.mark.skipolddriver,  # old test driver tests won't run this module
-]
-
 from test.integ.test_arrow_result import (
     DATATYPE_TEST_CONFIGURATIONS,
     ICEBERG_CONFIG,
@@ -41,6 +30,12 @@ from test.integ.test_arrow_result import (
     random_string,
     serialize,
 )
+
+import numpy
+import pytest
+
+import snowflake.connector.aio._cursor
+from snowflake.connector.errors import OperationalError, ProgrammingError
 
 try:
     from snowflake.connector.aio._pandas_tools import write_pandas

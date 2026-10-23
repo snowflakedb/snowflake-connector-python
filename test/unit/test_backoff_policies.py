@@ -1,5 +1,3 @@
-import pytest
-
 try:
     from snowflake.connector.backoff_policies import (
         DEFAULT_BACKOFF_CAP,
@@ -10,7 +8,6 @@ except ImportError:
     pass
 
 
-@pytest.mark.skipolddriver
 def test_linear_backoff():
     # test default w/ config
     backoff_generator = linear_backoff()()
@@ -35,7 +32,6 @@ def test_linear_backoff():
     ] + [100] * 10
 
 
-@pytest.mark.skipolddriver
 def test_exponential_backoff():
     # test default w/ enable_jitter config
     backoff_generator = exponential_backoff()()

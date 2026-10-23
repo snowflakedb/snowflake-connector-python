@@ -341,7 +341,6 @@ def test_auth_okta_step3_negative():
     assert rest._connection.errorhandler.called  # auth failure error
 
 
-@pytest.mark.skipolddriver
 def test_auth_okta_step4_negative(caplog):
     """Authentication by OKTA step4 negative test case."""
     authenticator = "https://testsso.snowflake.net/"
@@ -409,7 +408,6 @@ def test_auth_okta_step4_negative(caplog):
         assert not rest._connection.errorhandler.called
 
 
-@pytest.mark.skipolddriver
 def test_auth_okta_step4_login_timeout_exhausted_by_token_generation():
     """An exhausted login budget must surface as a clean timeout, not a negative timeout.
 
@@ -464,7 +462,6 @@ def test_auth_okta_step4_login_timeout_exhausted_by_token_generation():
     assert "Timed out" in error_value["msg"]
 
 
-@pytest.mark.skipolddriver
 def test_auth_okta_step4_login_timeout_while_refreshing_token():
     """Running out of budget while retrying on RefreshTokenError must report a clean timeout.
 

@@ -8,8 +8,6 @@ try:
 except ImportError:
     pass
 
-pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
-
 
 def test_random_string_generation_with_same_global_seed():
     random.seed(42)

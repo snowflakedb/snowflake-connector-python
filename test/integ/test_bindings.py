@@ -43,7 +43,7 @@ def test_invalid_binding_option(conn_cnx):
 
 @pytest.mark.parametrize(
     "bulk_array_optimization",
-    [pytest.param(True, marks=pytest.mark.skipolddriver), False],
+    [True, False],
 )
 def test_binding(conn_cnx, db_parameters, bulk_array_optimization):
     """Paramstyle qmark binding tests to cover basic data types."""
@@ -392,9 +392,7 @@ drop table if exists {name}
             )
 
 
-@pytest.mark.parametrize(
-    "num_rows", [pytest.param(100000, marks=pytest.mark.skipolddriver), 4]
-)
+@pytest.mark.parametrize("num_rows", [100000, 4])
 def test_binding_bulk_insert(conn_cnx, db_parameters, num_rows):
     """Bulk insert test."""
     with conn_cnx() as cnx:
@@ -427,7 +425,6 @@ drop table if exists {name}
             )
 
 
-@pytest.mark.skipolddriver
 def test_binding_bulk_insert_date(conn_cnx, db_parameters):
     """Bulk insert test."""
     with conn_cnx() as cnx:
@@ -476,7 +473,6 @@ drop table if exists {name}
             )
 
 
-@pytest.mark.skipolddriver
 def test_binding_insert_date(conn_cnx, db_parameters):
     bind_query = "SELECT TRY_TO_DATE(TO_CHAR(?,?),?)"
     bind_variables = (date(2016, 4, 10), "YYYY-MM-DD", "YYYY-MM-DD")
@@ -489,7 +485,6 @@ def test_binding_insert_date(conn_cnx, db_parameters):
         assert cursor.execute(bind_query, bind_variables_2).fetchall() == [(None,)]
 
 
-@pytest.mark.skipolddriver
 def test_bulk_insert_binding_fallback(conn_cnx):
     """When stage creation fails, bulk inserts falls back to server side binding and disables stage optimization."""
     with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as csr:
@@ -640,7 +635,6 @@ def insert_multiple_records(
         assert len(res1) == 0 and len(res2) == 0
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "timestamp_type, timestamp_precision, timestamp, expected_style",
     [

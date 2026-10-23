@@ -46,9 +46,6 @@ from snowflake.connector.errors import (
 from snowflake.connector.network import STATUS_TO_EXCEPTION, RetryRequest
 from snowflake.connector.vendored.requests.exceptions import SSLError
 
-pytestmark = pytest.mark.skipolddriver
-
-
 # Module and class path constants for easier refactoring
 ASYNC_SESSION_MANAGER_MODULE = "snowflake.connector.aio._session_manager"
 ASYNC_SESSION_MANAGER = f"{ASYNC_SESSION_MANAGER_MODULE}.SessionManager"

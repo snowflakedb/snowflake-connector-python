@@ -10,7 +10,7 @@ from snowflake.connector import DatabaseError, ProgrammingError
 from snowflake.connector.cursor import DictCursor, SnowflakeCursor
 
 # Mark all tests in this file to time out after 2 minutes to prevent hanging forever
-pytestmark = [pytest.mark.timeout(120), pytest.mark.skipolddriver]
+pytestmark = pytest.mark.timeout(120)
 
 try:  # pragma: no cover
     from snowflake.connector.constants import QueryStatus

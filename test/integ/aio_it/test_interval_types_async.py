@@ -8,8 +8,6 @@ import pytest
 
 from snowflake.connector import constants
 
-pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
-
 
 @pytest.mark.parametrize("use_numpy", [True, False])
 @pytest.mark.parametrize("result_format", ["json", "arrow"])

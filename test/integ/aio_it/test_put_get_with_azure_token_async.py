@@ -36,9 +36,7 @@ logger = getLogger(__name__)
 pytestmark = [pytest.mark.asyncio, pytest.mark.azure]
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 async def test_put_get_with_azure(tmpdir, aio_connection, from_path, caplog):
     """[azure] Puts and Gets a small text using Azure."""
     # create a data file

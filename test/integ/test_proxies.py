@@ -24,7 +24,6 @@ except ImportError:
     from ..randomize import random_string
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(
     sys.version_info < (3, 12),
     reason="mitmproxy requires Python 3.12+ (mitmproxy 12+ needed for cryptography >=46)",
@@ -60,7 +59,6 @@ def test_put_with_https_proxy(conn_cnx, tmp_path, mitm_proxy, monkeypatch):
             assert len(ls_result) > 0
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(
     sys.version_info < (3, 12) or IS_WINDOWS,
     reason="mitmproxy requires Python 3.12+ (mitmproxy 12+ needed for cryptography >=46)",

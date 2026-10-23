@@ -14,7 +14,6 @@ import pytest
 from snowflake.connector.aio._file_transfer_agent import SnowflakeFileTransferAgent
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.aws
 async def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters):
     """[s3] Puts and Copies into large files."""

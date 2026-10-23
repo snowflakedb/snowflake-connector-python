@@ -455,9 +455,7 @@ union
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 def test_put_with_auto_compress_false(
     tmp_path: pathlib.Path,
     conn_cnx,
@@ -497,9 +495,7 @@ def test_put_with_auto_compress_false(
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 def test_put_overwrite(tmp_path: pathlib.Path, from_path, conn_cnx):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
     tmp_dir = tmp_path / "data"
@@ -558,13 +554,10 @@ def test_put_overwrite(tmp_path: pathlib.Path, from_path, conn_cnx):
             cnx.cursor().execute("RM @~/test_put_overwrite")
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 def test_put_overwrite_skip_on_content_match(
     tmp_path: pathlib.Path, from_path, conn_cnx
 ):
@@ -622,7 +615,6 @@ def test_put_overwrite_skip_on_content_match(
             cnx.cursor().execute("RM @~/test_put_overwrite_skip_on_content_match")
 
 
-@pytest.mark.skipolddriver
 def test_utf8_filename(tmp_path, conn_cnx):
     test_file = tmp_path / "utf卡豆.csv"
     test_file.write_text("1,2,3\n")
@@ -639,7 +631,6 @@ def test_utf8_filename(tmp_path, conn_cnx):
             assert cur.fetchone() == ("1", "2", "3")
 
 
-@pytest.mark.skipolddriver
 def test_put_threshold(tmp_path, conn_cnx, is_public_test):
     if is_public_test:
         pytest.xfail(
@@ -664,7 +655,6 @@ def test_put_threshold(tmp_path, conn_cnx, is_public_test):
 # Snowflake on GCP does not support multipart uploads
 @pytest.mark.aws
 @pytest.mark.azure
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("use_stream", [False, True])
 def test_multipart_put(conn_cnx, tmp_path, use_stream):
     """This test does a multipart upload of a smaller file and then downloads it."""
@@ -708,7 +698,6 @@ def test_multipart_put(conn_cnx, tmp_path, use_stream):
     assert filecmp.cmp(upload_file, downloaded_file)
 
 
-@pytest.mark.skipolddriver
 def test_put_special_file_name(tmp_path, conn_cnx):
     test_file = tmp_path / "data~%23.csv"
     test_file.write_text("1,2,3\n")
@@ -724,7 +713,6 @@ def test_put_special_file_name(tmp_path, conn_cnx):
             assert cur.fetchone() == ("1", "2", "3")
 
 
-@pytest.mark.skipolddriver
 def test_get_empty_file(tmp_path, conn_cnx):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
@@ -743,7 +731,6 @@ def test_get_empty_file(tmp_path, conn_cnx):
 
 
 @pytest.mark.parametrize("auto_compress", ["TRUE", "FALSE"])
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(IS_WINDOWS, reason="not supported on Windows")
 def test_get_file_permission(tmp_path, conn_cnx, caplog, auto_compress):
     test_file = tmp_path / "data.csv"
@@ -775,7 +762,6 @@ def test_get_file_permission(tmp_path, conn_cnx, caplog, auto_compress):
 
 
 @pytest.mark.parametrize("auto_compress", ["TRUE", "FALSE"])
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(IS_WINDOWS, reason="not supported on Windows")
 def test_get_unsafe_file_permission_when_flag_set(
     tmp_path, conn_cnx, caplog, auto_compress
@@ -811,7 +797,6 @@ def test_get_unsafe_file_permission_when_flag_set(
         cnx.unsafe_file_write = False
 
 
-@pytest.mark.skipolddriver
 def test_get_multiple_files_with_same_name(tmp_path, conn_cnx, caplog):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
@@ -855,7 +840,6 @@ def test_get_multiple_files_with_same_name(tmp_path, conn_cnx, caplog):
             ), f"Expected warning not found in logs: {caplog.text}"
 
 
-@pytest.mark.skipolddriver
 def test_put_md5(tmp_path, conn_cnx):
     """This test uploads a single and a multi part file and makes sure that md5 is populated."""
     # Create files directly without subfolders for efficiency
@@ -894,7 +878,6 @@ def test_put_md5(tmp_path, conn_cnx):
             ), "MD5 should be populated for all uploaded files"
 
 
-@pytest.mark.skipolddriver
 def test_iobound_limit(tmp_path, conn_cnx, caplog):
     tmp_stage_name = random_string(5, "test_iobound_limit")
     file0 = tmp_path / "file0"

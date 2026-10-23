@@ -5,11 +5,6 @@ import logging
 import os
 from tempfile import NamedTemporaryFile
 
-import pytest
-
-pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
-
-
 import snowflake.connector
 
 try:

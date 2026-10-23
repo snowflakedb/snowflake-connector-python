@@ -741,7 +741,6 @@ async def test_invalid_bind_data_type(conn_cnx):
             await cnx.cursor().execute("select 1 from dual where 1=%s", ([1, 2, 3],))
 
 
-@pytest.mark.skipolddriver
 async def test_timeout_query(conn_cnx):
     async with conn_cnx() as cnx:
         async with cnx.cursor() as c:
@@ -1697,7 +1696,6 @@ async def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_met
                 await fetch_next_fn()
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("result_format", ("json", "arrow"))
 async def test_out_of_range_year_followed_by_correct_year(conn_cnx, result_format):
     """Tests whether the year 10000 is out of range exception is raised as expected."""
@@ -1871,7 +1869,6 @@ async def test_fetch_download_timeout_setting(conn_cnx):
             assert len(await (await cur.execute(sql)).fetchall()) == 100000
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "request_id",
     [
@@ -1893,7 +1890,6 @@ async def test_custom_request_id_negative(request_id, conn_cnx):
                 )
 
 
-@pytest.mark.skipolddriver
 async def test_custom_request_id(conn_cnx):
     request_id = uuid.uuid4()
 

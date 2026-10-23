@@ -1,14 +1,11 @@
-import stat
-
-import pytest
-
-pytestmark = pytest.mark.skipolddriver
-
 import os.path
 import platform
+import stat
 from logging import FileHandler, getLogger
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
+
+import pytest
 
 try:
     import tomlkit

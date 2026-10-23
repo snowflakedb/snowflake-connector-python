@@ -612,7 +612,6 @@ async def test_timestampltz(conn_cnx, scale, timezone):
         await finish(conn, table)
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas is missing.",
@@ -1064,7 +1063,7 @@ async def test_query_resultscan_combos(conn_cnx, query_format, resultscan_format
     "use_decimal,expected",
     [
         (False, numpy.float64),
-        pytest.param(True, decimal.Decimal, marks=pytest.mark.skipolddriver),
+        (True, decimal.Decimal),
     ],
 )
 async def test_number_fetchall_retrieve_type(conn_cnx, use_decimal, expected):
@@ -1083,7 +1082,7 @@ async def test_number_fetchall_retrieve_type(conn_cnx, use_decimal, expected):
             False,
             numpy.float64,
         ),
-        pytest.param(True, decimal.Decimal, marks=pytest.mark.skipolddriver),
+        (True, decimal.Decimal),
     ],
 )
 async def test_number_fetchbatches_retrieve_type(

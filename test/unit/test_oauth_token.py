@@ -130,7 +130,6 @@ def oauth_redirect_uri() -> str:
     return _oauth_redirect_uri()
 
 
-@pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_successful_flow(
     wiremock_client: WiremockClient,
@@ -174,7 +173,6 @@ def test_oauth_code_successful_flow(
             cnx.close()
 
 
-@pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_invalid_state(
     wiremock_client: WiremockClient,
@@ -211,7 +209,6 @@ def test_oauth_code_invalid_state(
     assert str(execinfo.value).endswith("State changed during OAuth process.")
 
 
-@pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_scope_error(
     wiremock_client: WiremockClient,
@@ -248,7 +245,6 @@ def test_oauth_code_scope_error(
         )
 
 
-@pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_token_request_error(
     wiremock_oauth_authorization_code_dir,
@@ -287,7 +283,6 @@ def test_oauth_code_token_request_error(
         )
 
 
-@pytest.mark.skipolddriver
 def test_oauth_code_browser_timeout(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
@@ -327,7 +322,6 @@ def test_oauth_code_browser_timeout(
     )
 
 
-@pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_custom_urls(
     wiremock_client: WiremockClient,
@@ -371,7 +365,6 @@ def test_oauth_code_custom_urls(
             cnx.close()
 
 
-@pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_local_application_custom_urls_successful_flow(
     wiremock_client: WiremockClient,
@@ -416,7 +409,6 @@ def test_oauth_code_local_application_custom_urls_successful_flow(
             cnx.close()
 
 
-@pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_successful_refresh_token_flow(
     wiremock_client: WiremockClient,
@@ -475,7 +467,6 @@ def test_oauth_code_successful_refresh_token_flow(
     assert new_refresh_token == "refresh-token-123"
 
 
-@pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_invalid_access_token_triggers_refresh(
     wiremock_client: WiremockClient,
@@ -538,7 +529,6 @@ def test_oauth_code_invalid_access_token_triggers_refresh(
     assert temp_cache.retrieve(refresh_token_key) == "refresh-token-123"
 
 
-@pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_proactive_refresh_without_cached_access_token(
     wiremock_client: WiremockClient,
@@ -607,7 +597,6 @@ def test_oauth_code_proactive_refresh_without_cached_access_token(
     assert temp_cache.retrieve(access_token_key) == "access-token-123"
 
 
-@pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_expired_refresh_token_flow(
     wiremock_client: WiremockClient,
@@ -678,7 +667,6 @@ def test_oauth_code_expired_refresh_token_flow(
     assert new_refresh_token == "refresh-token-123"
 
 
-@pytest.mark.skipolddriver
 def test_client_creds_oauth_type():
     """Simple OAuth Client credentials type test."""
     auth = AuthByOauthCredentials(
@@ -696,7 +684,6 @@ def test_client_creds_oauth_type():
     )
 
 
-@pytest.mark.skipolddriver
 def test_client_creds_successful_flow(
     wiremock_client: WiremockClient,
     wiremock_oauth_client_creds_dir,
@@ -747,7 +734,6 @@ def test_client_creds_successful_flow(
     assert cached_refresh_token == "unused-refresh-token-123"
 
 
-@pytest.mark.skipolddriver
 def test_client_creds_token_request_error(
     wiremock_client: WiremockClient,
     wiremock_oauth_client_creds_dir,
@@ -785,7 +771,6 @@ def test_client_creds_token_request_error(
         )
 
 
-@pytest.mark.skipolddriver
 def test_client_creds_expired_refresh_token_flow(
     wiremock_client: WiremockClient,
     wiremock_oauth_refresh_token_dir,
@@ -843,7 +828,6 @@ def test_client_creds_expired_refresh_token_flow(
     assert cached_refresh_token == "expired-refresh-token-123"
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("proxy_method", ["explicit_args", "env_vars"])
 def test_client_credentials_flow_via_explicit_proxy(
     wiremock_oauth_client_creds_dir,
@@ -930,7 +914,6 @@ def test_client_credentials_flow_via_explicit_proxy(
     )
 
 
-@pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_successful_flow_through_proxy(
     wiremock_oauth_authorization_code_dir,

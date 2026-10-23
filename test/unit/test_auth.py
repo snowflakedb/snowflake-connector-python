@@ -384,7 +384,6 @@ def _mock_oauth_token_expired_rest_response(url, headers, body, **kwargs):
     }
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "auth_instance, expected_exc_type",
     [
@@ -446,7 +445,6 @@ def _mock_oauth_token_invalid_rest_response(url, headers, body, **kwargs):
     }
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "auth_instance, expected_exc_type",
     [

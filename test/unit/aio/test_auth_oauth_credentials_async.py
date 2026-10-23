@@ -144,7 +144,6 @@ async def test_oauth_client_credentials_authenticator_is_case_insensitive(
     await conn.close()
 
 
-@pytest.mark.skipolddriver
 async def test_oauth_client_credentials_allows_empty_user(monkeypatch):
     """Test that OAUTH_CLIENT_CREDENTIALS authenticator allows connection without user parameter."""
     import snowflake.connector.aio

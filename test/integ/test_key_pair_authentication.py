@@ -15,7 +15,6 @@ from cryptography.hazmat.primitives.asymmetric import dsa, rsa
 import snowflake.connector
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "input_account,expected_account",
     [
@@ -62,7 +61,6 @@ def test_get_token_from_private_key(input_account, expected_account):
     ) > datetime.fromtimestamp(decoded_token.get("exp"))
 
 
-@pytest.mark.skipolddriver
 def test_different_key_length(is_public_test, request, conn_cnx, db_parameters):
     if is_public_test:
         pytest.skip("This test requires ACCOUNTADMIN privilege to set the public key")
@@ -129,7 +127,6 @@ def test_different_key_length(is_public_test, request, conn_cnx, db_parameters):
                 pass
 
 
-@pytest.mark.skipolddriver
 def test_multiple_key_pair(is_public_test, request, conn_cnx, db_parameters):
     if is_public_test:
         pytest.skip("This test requires ACCOUNTADMIN privilege to set the public key")

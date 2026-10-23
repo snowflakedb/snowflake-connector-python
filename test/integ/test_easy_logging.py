@@ -1,13 +1,10 @@
+import os.path
 import stat
+from logging import getLogger
+from pathlib import Path
 from test.integ.conftest import create_connection
 
 import pytest
-
-pytestmark = pytest.mark.skipolddriver
-
-import os.path
-from logging import getLogger
-from pathlib import Path
 
 try:
     import tomlkit

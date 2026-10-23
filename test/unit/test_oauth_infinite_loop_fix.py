@@ -14,8 +14,6 @@ from snowflake.connector.auth import AuthByOauthCode
 from snowflake.connector.errors import DatabaseError
 from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
-pytestmark = pytest.mark.skipolddriver
-
 
 @pytest.fixture()
 def mock_connection():

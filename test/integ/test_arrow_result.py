@@ -21,7 +21,6 @@ try:
 except ImportError:
     from ..randomize import random_string
 
-pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
 
 try:
     from snowflake.connector.nanoarrow_arrow_iterator import PyArrowIterator  # NOQA

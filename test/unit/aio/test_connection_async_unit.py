@@ -203,7 +203,6 @@ async def test_partner_env_var(mock_post_requests, monkeypatch):
     )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "sys_modules,application",
     [
@@ -830,7 +829,6 @@ async def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode_a
         assert conn.auth_class._enable_single_use_refresh_tokens == rtr_enabled
 
 
-@pytest.mark.skipolddriver
 async def test_invalid_authenticator():
     with pytest.raises(ProgrammingError) as excinfo:
         conn = snowflake.connector.aio.SnowflakeConnection(
@@ -841,7 +839,6 @@ async def test_invalid_authenticator():
     assert "Unknown authenticator: INVALID" in str(excinfo.value)
 
 
-@pytest.mark.skipolddriver
 def test_connect_metadata_preservation():
     """Test that the async connect function preserves metadata from SnowflakeConnection.__init__.
 
@@ -934,7 +931,6 @@ def test_connect_metadata_preservation():
     # Should have parameters like account, user, password, etc.
 
 
-@pytest.mark.skipolddriver
 async def test_server_session_keep_alive_skips_async_check(mock_post_requests):
     """Test that server_session_keep_alive=True skips _all_async_queries_finished check."""
     conn = fake_connector(server_session_keep_alive=True)
@@ -956,7 +952,6 @@ async def test_server_session_keep_alive_skips_async_check(mock_post_requests):
     delete_session_mock.assert_not_called()
 
 
-@pytest.mark.skipolddriver
 async def test_server_session_keep_alive_false_calls_async_check(mock_post_requests):
     """Test that server_session_keep_alive=False calls _all_async_queries_finished check."""
     conn = fake_connector(server_session_keep_alive=False)

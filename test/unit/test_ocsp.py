@@ -356,7 +356,6 @@ def test_ocsp_with_file_cache(tmpdir):
         assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
-@pytest.mark.skipolddriver
 def test_ocsp_with_bogus_cache_files(
     tmpdir, random_ocsp_response_validation_cache, monkeypatch
 ):
@@ -397,7 +396,6 @@ def test_ocsp_with_bogus_cache_files(
             )
 
 
-@pytest.mark.skipolddriver
 def test_ocsp_with_outdated_cache(
     tmpdir, random_ocsp_response_validation_cache, monkeypatch
 ):
@@ -781,7 +779,6 @@ def test_ocsp_server_domain_name():
     )
 
 
-@pytest.mark.skipolddriver
 def test_privatelink_ocsp_cache_url_is_per_connection(monkeypatch):
     """SNOW-3675581: a PrivateLink host's OCSP cache URL is derived from that
     connection's own hostname and stored on the per-connection OCSPServer,
@@ -809,7 +806,6 @@ def test_privatelink_ocsp_cache_url_is_per_connection(monkeypatch):
     assert "SF_OCSP_RESPONSE_CACHE_SERVER_URL" not in os.environ
 
 
-@pytest.mark.skipolddriver
 def test_operator_ocsp_cache_url_takes_precedence_over_privatelink(monkeypatch):
     """An operator-set SF_OCSP_RESPONSE_CACHE_SERVER_URL (trusted, process-wide)
     wins over the connector-derived PrivateLink URL."""
@@ -823,7 +819,6 @@ def test_operator_ocsp_cache_url_takes_precedence_over_privatelink(monkeypatch):
     )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "host,is_privatelink",
     [
@@ -880,7 +875,6 @@ def test_privatelink_host_detection_is_label_boundary_anchored(host, is_privatel
     assert OCSPServer._is_privatelink_host(host) is is_privatelink
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "host,expected_authority",
     [
@@ -920,7 +914,6 @@ def test_privatelink_cache_url_is_built_from_the_normalized_host(
     )
 
 
-@pytest.mark.skipolddriver
 def test_non_privatelink_host_uses_default_cache_url(monkeypatch):
     """A host that merely contains the PrivateLink domain as a non-terminal
     label falls through to the default OCSP cache URL, and its trailing labels
@@ -946,7 +939,6 @@ def test_non_privatelink_host_uses_default_cache_url(monkeypatch):
     )
 
 
-@pytest.mark.skipolddriver
 def test_json_cache_serialization_and_deserialization(tmpdir):
     from snowflake.connector.ocsp_snowflake import (
         OCSPResponseValidationResult,
@@ -1130,7 +1122,6 @@ def _make_cert_id(serial):
     )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("status", ["good", "revoked"])
 def test_process_ocsp_response_rejects_certid_mismatch(status):
     """SNOW-3675581: a validly-signed OCSP response whose CertID does not match
@@ -1153,7 +1144,6 @@ def test_process_ocsp_response_rejects_certid_mismatch(status):
     assert exc_info.value.errno == ER_OCSP_RESPONSE_CERT_ID_MISMATCH
 
 
-@pytest.mark.skipolddriver
 def test_process_ocsp_response_accepts_matching_certid():
     """A response whose CertID matches the validated certificate must pass the
     CertID check (it may fail later for unrelated reasons, but never with the
@@ -1174,7 +1164,6 @@ def test_process_ocsp_response_accepts_matching_certid():
             assert err.errno != ER_OCSP_RESPONSE_CERT_ID_MISMATCH
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "errno_name",
     [
@@ -1213,7 +1202,6 @@ def test_fail_open_treats_definitive_results_as_authoritative(errno_name, monkey
     ), "a definitive OCSP result must propagate even in fail-open mode"
 
 
-@pytest.mark.skipolddriver
 def test_fail_open_tolerates_unavailable_responder(monkeypatch):
     """A soft/transient failure (responder unreachable) is still tolerated in
     fail-open mode -- that is the purpose of fail-open, and this change must not
@@ -1239,7 +1227,6 @@ def test_fail_open_tolerates_unavailable_responder(monkeypatch):
     ), "an unavailable responder must still be tolerated in fail-open mode"
 
 
-@pytest.mark.skipolddriver
 def test_cached_ocsp_result_is_revalidated_before_use(tmp_path):
     """SNOW-3675581 (on-disk verdict cache): a memoized OCSPResponseValidationResult
     loaded from the on-disk OCSP_RESPONSE_VALIDATION_CACHE is re-verified before

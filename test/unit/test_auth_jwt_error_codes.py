@@ -37,7 +37,6 @@ def _generate_private_key_der() -> bytes:
     )
 
 
-@pytest.mark.skipolddriver
 def test_jwt_credential_rejection_surfaces_server_errno_and_sqlstate_authorization_failure(
     wiremock_client: WiremockClient,
 ) -> None:
@@ -60,7 +59,6 @@ def test_jwt_credential_rejection_surfaces_server_errno_and_sqlstate_authorizati
     assert exc_info.value.sqlstate == SQLSTATE_AUTHORIZATION_FAILURE
 
 
-@pytest.mark.skipolddriver
 def test_jwt_non_credential_rejection_uses_sqlstate_connection_not_established(
     wiremock_client: WiremockClient,
 ) -> None:

@@ -1,12 +1,8 @@
-import pytest
-
 from ...helpers import (
     _arrow_error_stream_chunk_remove_random_length_bytes_test,
     _arrow_error_stream_chunk_remove_single_byte_test,
     _arrow_error_stream_random_input_test,
 )
-
-pytestmark = pytest.mark.skipolddriver
 
 
 def test_connector_error_base64_stream_chunk_remove_single_byte():

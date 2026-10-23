@@ -34,9 +34,7 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.gcp]
 
 
 @pytest.mark.parametrize("enable_gcs_downscoped", [True])
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 async def test_put_get_with_gcp(
     tmpdir,
     aio_connection,
@@ -363,9 +361,7 @@ async def test_auto_compress_off_gcp(
         await cursor.execute(f"drop stage {stage_name}")
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 async def test_put_overwrite_with_downscope(
     tmpdir,
     aio_connection,

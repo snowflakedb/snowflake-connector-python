@@ -137,7 +137,6 @@ def test_with_config(conn_cnx):
             ), "Expected client_session_keep_alive=False when server default unknown"
 
 
-@pytest.mark.skipolddriver
 def test_with_tokens(conn_cnx):
     """Creates a connection using session and master token."""
     try:
@@ -161,7 +160,6 @@ def test_with_tokens(conn_cnx):
         pytest.fail("something failed", pytrace=False)
 
 
-@pytest.mark.skipolddriver
 def test_with_tokens_expired(conn_cnx):
     """Creates a connection using session and master token."""
     try:
@@ -204,7 +202,6 @@ def test_keep_alive_heartbeat_frequency(conn_cnx):
         assert cnx.client_session_keep_alive_heartbeat_frequency == 1000
 
 
-@pytest.mark.skipolddriver
 def test_keep_alive_heartbeat_frequency_min(conn_cnx):
     """Tests heartbeat setting with custom frequency.
 
@@ -221,7 +218,6 @@ def test_keep_alive_heartbeat_frequency_min(conn_cnx):
         assert cnx.client_session_keep_alive_heartbeat_frequency == 900
 
 
-@pytest.mark.skipolddriver
 def test_platform_detection_timeout(conn_cnx):
     """Tests platform detection timeout.
 
@@ -232,7 +228,6 @@ def test_platform_detection_timeout(conn_cnx):
         assert cnx.platform_detection_timeout_seconds == 2.5
 
 
-@pytest.mark.skipolddriver
 def test_platform_detection_zero_timeout(conn_cnx):
     """Tests platform detection with timeout set to zero.
 
@@ -438,7 +433,6 @@ def test_drop_create_user(conn_cnx):
 
 
 @pytest.mark.timeout(15)
-@pytest.mark.skipolddriver
 def test_invalid_account_timeout(conn_cnx):
     with pytest.raises(HttpError):
         with conn_cnx(account="bogus", user="test", password="test", login_timeout=5):
@@ -479,7 +473,6 @@ def test_invalid_proxy(conn_cnx):
             pass
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.timeout(20)
 def test_invalid_proxy_not_impacting_env_vars(conn_cnx):
     http_proxy = os.environ.get("HTTP_PROXY")
@@ -502,7 +495,6 @@ def test_invalid_proxy_not_impacting_env_vars(conn_cnx):
 
 
 @pytest.mark.timeout(15)
-@pytest.mark.skipolddriver
 def test_eu_connection(tmpdir, conn_cnx):
     """Tests setting custom region.
 
@@ -530,7 +522,6 @@ def test_eu_connection(tmpdir, conn_cnx):
             pass
 
 
-@pytest.mark.skipolddriver
 def test_us_west_connection(tmpdir, conn_cnx):
     """Tests default region setting.
 
@@ -628,7 +619,6 @@ def test_privatelink_ocsp_url_operator_override_wins(monkeypatch):
     assert OCSPServer(hostname=hostname).CACHE_SERVER_URL == operator_url
 
 
-@pytest.mark.skipolddriver
 def test_uppercase_privatelink_ocsp_url_creation(monkeypatch):
     monkeypatch.delenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", raising=False)
     account = "TESTACCOUNT.US-EAST-1.PRIVATELINK"
@@ -687,7 +677,6 @@ class ExecPrivatelinkThread(threading.Thread):
             self.bucket.put("Success")
 
 
-@pytest.mark.skipolddriver
 def test_okta_url(conn_cnx):
     orig_authenticator = "https://someaccount.okta.com/snowflake/oO56fExYCGnfV83/2345"
 
@@ -757,7 +746,6 @@ def test_dashed_url_account_name():
             )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "name,value,exc_warn",
     [
@@ -865,7 +853,6 @@ def test_invalid_connection_parameters_only_warns(conn_cnx):
             assert len(filtered_w) >= 0
 
 
-@pytest.mark.skipolddriver
 def test_region_deprecation(conn_cnx):
     """Tests whether region raises a deprecation warning."""
     with conn_cnx() as conn:
@@ -956,7 +943,6 @@ def test_empty_response(conn_cnx, resp):
             assert conn.cmd_query("select 1", 0, uuid4()) == {"data": {}}
 
 
-@pytest.mark.skipolddriver
 def test_authenticate_error(conn_cnx, caplog):
     """Test Reauthenticate error handling while authenticating."""
     # The docs say unsafe should make this test work, but
@@ -977,7 +963,6 @@ def test_authenticate_error(conn_cnx, caplog):
         ) in caplog.record_tuples
 
 
-@pytest.mark.skipolddriver
 def test_process_qmark_params_error(conn_cnx):
     """Tests errors thrown in _process_params_qmarks."""
     sql = "select 1;"
@@ -1014,7 +999,6 @@ def test_process_qmark_params_error(conn_cnx):
             assert pe.value.errno == ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
 
 
-@pytest.mark.skipolddriver
 def test_process_param_dict_error(conn_cnx):
     """Tests whether exceptions in __process_params_dict are handled correctly."""
     with conn_cnx() as conn:
@@ -1029,7 +1013,6 @@ def test_process_param_dict_error(conn_cnx):
             assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
 
 
-@pytest.mark.skipolddriver
 def test_process_param_error(conn_cnx):
     """Tests whether exceptions in __process_params_dict are handled correctly."""
     with conn_cnx() as conn:
@@ -1044,9 +1027,7 @@ def test_process_param_error(conn_cnx):
             assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
 
 
-@pytest.mark.parametrize(
-    "auto_commit", [pytest.param(True, marks=pytest.mark.skipolddriver), False]
-)
+@pytest.mark.parametrize("auto_commit", [True, False])
 def test_autocommit(conn_cnx, auto_commit):
     with conn_cnx() as conn:
         with mock.patch.object(conn, "commit") as mocked_commit:
@@ -1065,7 +1046,6 @@ def test_autocommit(conn_cnx, auto_commit):
             pass
 
 
-@pytest.mark.skipolddriver
 def test_client_prefetch_threads_setting(conn_cnx):
     """Tests whether client_prefetch_threads updated and is propagated to result set."""
     with conn_cnx() as conn:
@@ -1077,7 +1057,6 @@ def test_client_prefetch_threads_setting(conn_cnx):
         assert conn.client_prefetch_threads == new_thread_count
 
 
-@pytest.mark.skipolddriver
 def test_client_fetch_threads_setting(conn_cnx):
     """Tests whether client_fetch_threads is None by default and setting the parameter has effect."""
     with conn_cnx() as conn:
@@ -1086,7 +1065,6 @@ def test_client_fetch_threads_setting(conn_cnx):
         assert conn.client_fetch_threads == 32
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("disable_request_pooling", [True, False])
 def test_ocsp_and_rest_pool_isolation(conn_cnx, disable_request_pooling):
     """Each connection's SessionManager is isolated; OCSP picks the right one."""
@@ -1145,7 +1123,6 @@ def test_connection_gc(conn_cnx):
     assert conn_wref() is None
 
 
-@pytest.mark.skipolddriver
 def test_connection_cant_be_reused(conn_cnx):
     row_count = 50_000
     with conn_cnx() as conn:
@@ -1157,7 +1134,6 @@ def test_connection_cant_be_reused(conn_cnx):
 
 
 @pytest.mark.external
-@pytest.mark.skipolddriver
 def test_ocsp_cache_working(conn_cnx):
     """Verifies that the OCSP cache is functioning.
 
@@ -1178,7 +1154,6 @@ def test_ocsp_cache_working(conn_cnx):
     )
 
 
-@pytest.mark.skipolddriver
 def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry):
     # these imports are not used but for testing
     import html.parser  # noqa: F401
@@ -1252,7 +1227,6 @@ def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry):
         assert len(telemetry_test.records) == 0
 
 
-@pytest.mark.skipolddriver
 def test_minicore_import_telemetry(conn_cnx, capture_sf_telemetry):
     """Test that minicore import telemetry is logged with all required fields and correct values."""
     with (
@@ -1284,7 +1258,6 @@ def test_minicore_import_telemetry(conn_cnx, capture_sf_telemetry):
         ), "Minicore telemetry not found in telemetry records"
 
 
-@pytest.mark.skipolddriver
 def test_disable_query_context_cache(conn_cnx) -> None:
     with conn_cnx(disable_query_context_cache=True) as conn:
         # check that connector function correctly when query context
@@ -1295,7 +1268,6 @@ def test_disable_query_context_cache(conn_cnx) -> None:
 
 
 @pytest.mark.aws
-@pytest.mark.skipolddriver
 def test_qcc_tracks_multi_database_hybrid_tables(conn_cnx) -> None:
     """Verify QCC grows as queries touch hybrid tables in different databases.
 
@@ -1376,7 +1348,6 @@ def test_qcc_tracks_multi_database_hybrid_tables(conn_cnx) -> None:
                 cur.execute(f"DROP DATABASE IF EXISTS {db}")
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("mode", ("file", "env"))
 @pytest.mark.parametrize("connection_name", ["default", "custom_connection_for_test"])
 def test_connection_name_loading(
@@ -1414,7 +1385,6 @@ def test_connection_name_loading(
         pytest.fail("something failed", pytrace=False)
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("connection_name", ["default", "custom_connection_for_test"])
 def test_default_connection_name_loading(monkeypatch, db_parameters, connection_name):
     import tomlkit
@@ -1441,7 +1411,6 @@ def test_default_connection_name_loading(monkeypatch, db_parameters, connection_
         pytest.fail("something failed", pytrace=False)
 
 
-@pytest.mark.skipolddriver
 def test_not_found_connection_name():
     connection_name = random_string(5)
     with pytest.raises(
@@ -1451,7 +1420,6 @@ def test_not_found_connection_name():
         snowflake.connector.connect(connection_name=connection_name)
 
 
-@pytest.mark.skipolddriver
 def test_server_session_keep_alive(conn_cnx):
     mock_delete_session = mock.MagicMock()
     with conn_cnx(server_session_keep_alive=True) as conn:
@@ -1464,7 +1432,6 @@ def test_server_session_keep_alive(conn_cnx):
     mock_delete_session.assert_called_once()
 
 
-@pytest.mark.skipolddriver
 def test_ocsp_mode_disable_ocsp_checks(
     conn_cnx, is_public_test, is_local_dev_setup, caplog, isolate_feature_ocsp_mode
 ):
@@ -1486,7 +1453,6 @@ def test_ocsp_mode_disable_ocsp_checks(
             assert "This connection does not perform OCSP checks." in caplog.text
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "ocsp_fail_open,expected_mode", [(True, "FAIL_OPEN"), (False, "FAIL_CLOSED")]
 )
@@ -1511,7 +1477,6 @@ def test_ocsp_mode_opt_in_fail_open(
             assert "snowflake.connector.ocsp_snowflake" not in caplog.text
 
 
-@pytest.mark.skipolddriver
 def test_ocsp_cache_filename_ignored_when_ocsp_off(
     conn_cnx, tmp_path, caplog, isolate_feature_ocsp_mode
 ):
@@ -1527,7 +1492,6 @@ def test_ocsp_cache_filename_ignored_when_ocsp_off(
         assert "OCSP is disabled unless you opt in" in caplog.text
 
 
-@pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode(
     conn_cnx, is_public_test, is_local_dev_setup, caplog, isolate_feature_ocsp_mode
 ):
@@ -1539,7 +1503,6 @@ def test_ocsp_mode_insecure_mode(
             assert "This connection does not perform OCSP checks." in caplog.text
 
 
-@pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_match(
     conn_cnx, is_public_test, is_local_dev_setup, caplog, isolate_feature_ocsp_mode
 ):
@@ -1558,7 +1521,6 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_match(
             assert "This connection does not perform OCSP checks." in caplog.text
 
 
-@pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_disabled(
     conn_cnx, is_public_test, is_local_dev_setup, caplog, isolate_feature_ocsp_mode
 ):
@@ -1660,12 +1622,11 @@ def _assert_log_bytes_within_tolerance(actual_bytes, expected_bytes, tolerance):
     """Assert that log bytes are within acceptable tolerance."""
     assert actual_bytes == pytest.approx(expected_bytes, rel=tolerance), (
         f"Log bytes {actual_bytes} is not approximately equal to expected {expected_bytes} "
-        f"within {tolerance*100}% tolerance. "
+        f"within {tolerance * 100}% tolerance. "
         f"This may indicate unwanted logs being produced or changes in logging behavior."
     )
 
 
-@pytest.mark.skipolddriver
 def test_logs_size_during_basic_query_stays_unchanged(conn_cnx, caplog):
     """Test that the amount of bytes logged during normal select 1 flow is within acceptable range. Related to: SNOW-2268606"""
     caplog.set_level(logging.INFO, "snowflake.connector")
@@ -1715,7 +1676,6 @@ def test_logs_size_during_basic_query_stays_unchanged(conn_cnx, caplog):
             )
 
 
-@pytest.mark.skipolddriver
 def test_no_new_warnings_or_errors_on_successful_basic_select(conn_cnx, caplog):
     """Test that the number of warning/error log entries stays the same during successful basic select operations. Related to: SNOW-2268606"""
     caplog.set_level(logging.WARNING, "snowflake.connector")
@@ -1747,7 +1707,6 @@ def test_no_new_warnings_or_errors_on_successful_basic_select(conn_cnx, caplog):
     )
 
 
-@pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
     conn_cnx, is_public_test, is_local_dev_setup, caplog, isolate_feature_ocsp_mode
 ):
@@ -1770,7 +1729,6 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
             assert "snowflake.connector.ocsp_snowflake" not in caplog.text
 
 
-@pytest.mark.skipolddriver
 def test_root_certs_dict_lock_timeout_fail_open(conn_cnx):
     """Test OCSP root certificates lock timeout with fail-open mode and side effect mock."""
 
@@ -1799,7 +1757,6 @@ def test_root_certs_dict_lock_timeout_fail_open(conn_cnx):
                 conn.close()
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "ocsp_fail_open,timeout_value,expected_timeout",
     [
@@ -1832,7 +1789,6 @@ def test_root_certs_dict_lock_timeout_with_property_mock(
             conn.close()
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "config,expected_timeout",
     [
@@ -1852,7 +1808,6 @@ def test_root_certs_dict_lock_timeout_basic_config(conn_cnx, config, expected_ti
             conn.close()
 
 
-@pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_deprecation_warning(conn_cnx):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("ignore")
@@ -1867,7 +1822,6 @@ def test_ocsp_mode_insecure_mode_deprecation_warning(conn_cnx):
             )
 
 
-@pytest.mark.skipolddriver
 def test_connection_atexit_close(conn_cnx):
     """Basic Connection test without schema."""
     with conn_cnx() as conn:
@@ -1875,7 +1829,6 @@ def test_connection_atexit_close(conn_cnx):
         assert conn.is_closed()
 
 
-@pytest.mark.skipolddriver
 def test_token_file_path(tmp_path):
     fake_token = "some token"
     token_file_path = tmp_path / "token"
@@ -1891,7 +1844,6 @@ def test_token_file_path(tmp_path):
     conn.close()
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(not RUNNING_ON_GH, reason="no ocsp in the environment")
 def test_mock_non_existing_server(conn_cnx, caplog):
     from snowflake.connector.cache import SFDictCache
@@ -1923,7 +1875,6 @@ def test_mock_non_existing_server(conn_cnx, caplog):
         )
 
 
-@pytest.mark.skipolddriver
 def test_disable_telemetry(conn_cnx, caplog):
     # default behavior, closing connection, it will send telemetry
     with caplog.at_level(logging.DEBUG):
@@ -1968,7 +1919,6 @@ def test_disable_telemetry(conn_cnx, caplog):
     assert "POST /telemetry/send" not in caplog.text
 
 
-@pytest.mark.skipolddriver
 def test_is_valid(conn_cnx):
     """Tests whether connection and session validation happens."""
     with conn_cnx() as conn:
@@ -1977,7 +1927,6 @@ def test_is_valid(conn_cnx):
     assert conn.is_valid() is False
 
 
-@pytest.mark.skipolddriver
 def test_no_auth_connection_negative_case():
     # AuthNoAuth does not exist in old drivers, so we import at test level to
     # skip importing it for old driver tests.
@@ -2003,14 +1952,12 @@ def test_no_auth_connection_negative_case():
 
 # _file_operation_parser and _stream_downloader are newly introduced and
 # therefore should not be tested on old drivers.
-@pytest.mark.skipolddriver
 def test_file_utils_sanity_check():
     conn = create_connection("default")
     assert hasattr(conn._file_operation_parser, "parse_file_operation")
     assert hasattr(conn._stream_downloader, "download_as_stream")
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
 def test_unsafe_skip_file_permissions_check_skips_config_permissions_check(
     db_parameters, tmp_path
@@ -2064,7 +2011,6 @@ def test_unsafe_skip_file_permissions_check_skips_config_permissions_check(
 
 
 # The property snowflake_version is newly introduced and therefore should not be tested on old drivers.
-@pytest.mark.skipolddriver
 def test_snowflake_version():
     import re
 
@@ -2087,7 +2033,6 @@ def test_snowflake_version():
     ), f"snowflake_version should match pattern 'x.y.z', but got '{conn.snowflake_version}'"
 
 
-@pytest.mark.skipolddriver
 def test_ctas_stats(conn_cnx):
     """Test that cursor.rowcount and cursor.stats work for CTAS operations."""
     with conn_cnx() as conn:
@@ -2108,7 +2053,6 @@ def test_ctas_stats(conn_cnx):
             assert cur.stats.num_dml_duplicates == 0
 
 
-@pytest.mark.skipolddriver
 def test_create_view_stats(conn_cnx):
     """Test that cursor.stats returns None fields for VIEW operations."""
     with conn_cnx() as conn:
@@ -2127,7 +2071,6 @@ def test_create_view_stats(conn_cnx):
             assert cur.stats.num_dml_duplicates is None
 
 
-@pytest.mark.skipolddriver
 def test_cvas_separate_cursors_stats(conn_cnx):
     """Test cursor.stats with CVAS in separate cursor from the one used for CTAS of the table."""
     with conn_cnx() as conn:
@@ -2148,7 +2091,6 @@ def test_cvas_separate_cursors_stats(conn_cnx):
             assert cur.stats.num_dml_duplicates is None
 
 
-@pytest.mark.skipolddriver
 def test_cvas_one_cursor_stats(conn_cnx):
     """Test cursor.stats with CVAS in the same cursor - make sure it's cleaned up after usage."""
     with conn_cnx() as conn:
@@ -2199,7 +2141,6 @@ def _assert_stats(actual_stats, expected_stats):
     ), f"Expected num_dml_duplicates={expected_stats.num_dml_duplicates}, got {actual_stats.num_dml_duplicates}"
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "operation,setup_sql,test_sql,expected_stats",
     [
@@ -2371,7 +2312,6 @@ def test_dml_stats_operations(conn_cnx, operation, setup_sql, test_sql, expected
             _assert_stats(cur.stats, expected_stats)
 
 
-@pytest.mark.skipolddriver
 def test_copy_into_stats_with_stage(conn_cnx, tmp_path):
     """Test cursor.stats for COPY INTO operations with actual stage files."""
     import csv
@@ -2410,7 +2350,6 @@ def test_copy_into_stats_with_stage(conn_cnx, tmp_path):
             assert cur.stats.num_dml_duplicates == 0
 
 
-@pytest.mark.skipolddriver
 def test_update_with_dml_duplicates(conn_cnx):
     """Test cursor.stats for UPDATE operations that generate numDmlDuplicates.
 
@@ -2455,7 +2394,6 @@ def test_update_with_dml_duplicates(conn_cnx):
             )
 
 
-@pytest.mark.skipolddriver
 def test_multi_table_insert_overwrite_stats(conn_cnx):
     """Test cursor.stats for multi-table INSERT OVERWRITE operations."""
     with conn_cnx() as conn:
@@ -2502,7 +2440,6 @@ def test_multi_table_insert_overwrite_stats(conn_cnx):
 
 
 @pytest.mark.xfail(reason="Multi-statements does not return stats field")
-@pytest.mark.skipolddriver
 def test_multi_statement_in_one_execute(conn_cnx):
     """Test that stats reflect the last statement when multiple statements are in one execute."""
     with conn_cnx(session_parameters={PARAMETER_MULTI_STATEMENT_COUNT: 0}) as conn:
@@ -2530,7 +2467,6 @@ def test_multi_statement_in_one_execute(conn_cnx):
             )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.xfail(
     reason="execute_async stats are not returned from monitoring endpoint yet"
 )
@@ -2615,7 +2551,6 @@ def test_execute_async_stats(conn_cnx, operation, setup_sql, test_sql, expected_
             _assert_stats(cur.stats, expected_stats)
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.xfail(
     reason="execute_async stats are not returned from monitoring endpoint yet"
 )
@@ -2661,7 +2596,6 @@ def test_execute_async_stats_multiple_queries(conn_cnx):
             )
 
 
-@pytest.mark.skipolddriver
 def test_stats_reset_on_select(conn_cnx):
     """Test that stats are reset to None when executing SELECT queries."""
     with conn_cnx() as conn:
@@ -2692,7 +2626,6 @@ def test_stats_reset_on_select(conn_cnx):
             )
 
 
-@pytest.mark.skipolddriver
 def test_truncate_stats(conn_cnx):
     """Test cursor.stats for TRUNCATE operations."""
     with conn_cnx() as conn:
@@ -2715,7 +2648,6 @@ def test_truncate_stats(conn_cnx):
             )
 
 
-@pytest.mark.skipolddriver
 def test_empty_result_stats(conn_cnx):
     """Test cursor.stats for DML operations that affect zero rows."""
     with conn_cnx() as conn:

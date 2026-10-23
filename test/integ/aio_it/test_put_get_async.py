@@ -279,7 +279,6 @@ async def test_transfer_error_message(tmp_path, aio_connection):
             ).fetchall()
 
 
-@pytest.mark.skipolddriver
 async def test_put_md5(tmp_path, aio_connection):
     """This test uploads a single and a multi part file and makes sure that md5 is populated."""
     # Create files directly without subfolders for efficiency

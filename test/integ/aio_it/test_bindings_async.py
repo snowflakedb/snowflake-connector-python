@@ -387,9 +387,7 @@ drop table if exists {name}
             )
 
 
-@pytest.mark.parametrize(
-    "num_rows", [pytest.param(100000, marks=pytest.mark.skipolddriver), 4]
-)
+@pytest.mark.parametrize("num_rows", [100000, 4])
 async def test_binding_bulk_insert(conn_cnx, db_parameters, num_rows):
     """Bulk insert test."""
     async with conn_cnx() as cnx:
@@ -422,7 +420,6 @@ drop table if exists {name}
             )
 
 
-@pytest.mark.skipolddriver
 async def test_binding_bulk_insert_date(conn_cnx, db_parameters):
     """Bulk insert test."""
     async with conn_cnx() as cnx:
@@ -475,7 +472,6 @@ drop table if exists {name}
             )
 
 
-@pytest.mark.skipolddriver
 async def test_binding_insert_date(conn_cnx, db_parameters):
     bind_query = "SELECT TRY_TO_DATE(TO_CHAR(?,?),?)"
     bind_variables = (date(2016, 4, 10), "YYYY-MM-DD", "YYYY-MM-DD")
@@ -490,7 +486,6 @@ async def test_binding_insert_date(conn_cnx, db_parameters):
         ).fetchall() == [(None,)]
 
 
-@pytest.mark.skipolddriver
 async def test_bulk_insert_binding_fallback(conn_cnx):
     """When stage creation fails, bulk inserts falls back to server side binding and disables stage optimization."""
     async with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as csr:
@@ -637,7 +632,6 @@ async def insert_multiple_records(
         assert len(res1) == 0 and len(res2) == 0
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "timestamp_type, timestamp_precision, timestamp, expected_style",
     [

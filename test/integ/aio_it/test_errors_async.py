@@ -26,7 +26,6 @@ async def test_error_classes(conn_cnx):
         assert ctx.ProgrammingError == errors.ProgrammingError
 
 
-@pytest.mark.skipolddriver
 async def test_error_code(conn_cnx):
     """Error code is included in the exception."""
     syntax_errno = 1494
@@ -50,7 +49,6 @@ async def test_error_code(conn_cnx):
         )
 
 
-@pytest.mark.skipolddriver
 async def test_error_telemetry(conn_cnx):
     async with conn_cnx() as ctx:
         with pytest.raises(errors.ProgrammingError) as e:

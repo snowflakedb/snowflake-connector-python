@@ -1,7 +1,5 @@
 import pytest
 
-pytestmark = pytest.mark.skipolddriver
-
 
 def test_check_chunk_size():
     from snowflake.connector.constants import (

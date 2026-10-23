@@ -150,7 +150,6 @@ def test_cursor_execute_timeout(mockCancelQuery):
 
 # The _upload/_download/_upload_stream/_download_stream are newly introduced
 # and therefore should not be tested in old drivers.
-@pytest.mark.skipolddriver
 class TestUploadDownloadMethods(TestCase):
     """Test the _upload/_download/_upload_stream/_download_stream methods."""
 
@@ -497,7 +496,6 @@ def _count_urls_matching(target_wm, pattern: str) -> int:
     )
 
 
-@pytest.mark.skipolddriver
 def test_fetchmany_short_remote_chunk_is_not_silent_eof(
     wiremock_generic_mappings_dir,
     wiremock_target_proxy_pair,
@@ -578,7 +576,6 @@ def test_fetchmany_short_remote_chunk_is_not_silent_eof(
     )
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("result_format", _RESULT_FORMATS)
 def test_empty_inline_result_is_recovered_via_query_result_get(
     result_format,
@@ -629,7 +626,6 @@ def test_empty_inline_result_is_recovered_via_query_result_get(
     assert _count_urls_matching(target_wm, result_url) == 1
 
 
-@pytest.mark.skipolddriver
 def test_short_nonempty_json_inline_is_recovered_via_query_result_get(
     wiremock_generic_mappings_dir,
     wiremock_target_proxy_pair,
@@ -676,7 +672,6 @@ def test_short_nonempty_json_inline_is_recovered_via_query_result_get(
     assert _count_urls_matching(target_wm, result_url) == 1
 
 
-@pytest.mark.skipolddriver
 def test_query_result_recovers_empty_inline_via_second_get(
     wiremock_generic_mappings_dir,
     wiremock_target_proxy_pair,
@@ -736,7 +731,6 @@ def test_query_result_recovers_empty_inline_via_second_get(
     assert _count_urls_matching(target_wm, result_url) == 2
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("result_format", _RESULT_FORMATS)
 def test_empty_inline_with_remote_chunks_is_recovered_via_query_result_get(
     result_format,
@@ -814,7 +808,6 @@ def test_empty_inline_with_remote_chunks_is_recovered_via_query_result_get(
     assert target_wm.saw_urls_matching(["incomplete-inline-recover"])
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("result_format", _RESULT_FORMATS)
 def test_empty_inline_still_raises_when_result_get_also_incomplete(
     result_format,
@@ -856,7 +849,6 @@ def test_empty_inline_still_raises_when_result_get_also_incomplete(
     assert _count_urls_matching(target_wm, result_url) == 1
 
 
-@pytest.mark.skipolddriver
 def test_refetch_keeps_original_when_result_get_raises():
     """A retryable/transport recovery GET failure must keep the original payload."""
     fake_conn = FakeConnection()
@@ -871,7 +863,6 @@ def test_refetch_keeps_original_when_result_get_raises():
     fake_conn._rest.request.assert_called_once()
 
 
-@pytest.mark.skipolddriver
 def test_refetch_keeps_original_when_result_get_success_false():
     """A successful HTTP response with success:false must keep the original payload."""
     fake_conn = FakeConnection()
@@ -891,7 +882,6 @@ def test_refetch_keeps_original_when_result_get_success_false():
     fake_conn._rest.request.assert_called_once()
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "ret",
     [
@@ -914,7 +904,6 @@ def test_refetch_keeps_original_when_result_get_success_with_non_dict_data(ret):
     fake_conn._rest.request.assert_called_once()
 
 
-@pytest.mark.skipolddriver
 def test_refetch_reraises_connection_closed():
     """Closed-connection must not become keep-original + later 252013."""
     from snowflake.connector.errorcode import ER_CONNECTION_IS_CLOSED
@@ -936,7 +925,6 @@ def test_refetch_reraises_connection_closed():
     fake_conn._rest.request.assert_called_once()
 
 
-@pytest.mark.skipolddriver
 def test_is_inline_chunk_incomplete_skips_dml_and_file_transfer():
     from snowflake.connector.cursor import STATEMENT_TYPE_ID_INSERT
 
@@ -960,7 +948,6 @@ def test_is_inline_chunk_incomplete_skips_dml_and_file_transfer():
     assert cursor._is_inline_chunk_incomplete(incomplete) is False
 
 
-@pytest.mark.skipolddriver
 def test_truncated_query_response_body_is_retried(
     wiremock_generic_mappings_dir,
     wiremock_target_proxy_pair,
@@ -1086,7 +1073,6 @@ def _cursor_over_batches(batches, total_row_count) -> SnowflakeCursor:
     return cursor
 
 
-@pytest.mark.skipolddriver
 @pytestmark_result_set
 def test_empty_inline_json_chunk_is_caught_by_the_total_check():
     """Every batch is self-consistent, yet 79 of the 954 rows never arrive.
@@ -1114,7 +1100,6 @@ def test_empty_inline_json_chunk_is_caught_by_the_total_check():
     )
 
 
-@pytest.mark.skipolddriver
 @pytestmark_result_set
 def test_empty_inline_arrow_chunk_with_healthy_remote_chunk_is_loud():
     """End to end on the Arrow path: 954 declared, 875 delivered, no silence.
@@ -1138,7 +1123,6 @@ def test_empty_inline_arrow_chunk_with_healthy_remote_chunk_is_loud():
     assert ex.value.errno == ER_INCOMPLETE_RESULT_CHUNK
 
 
-@pytest.mark.skipolddriver
 @pytestmark_result_set
 def test_complete_result_set_does_not_raise():
     remote, response = _remote_json_batch(
@@ -1154,7 +1138,6 @@ def test_complete_result_set_does_not_raise():
         assert len(_rows_via_fetchmany(cursor, size=100)) == _INCOMPLETE_INLINE_TOTAL
 
 
-@pytest.mark.skipolddriver
 @pytestmark_result_set
 def test_empty_result_set_does_not_raise():
     """A query that legitimately returned nothing declares total = 0."""
@@ -1163,7 +1146,6 @@ def test_empty_result_set_does_not_raise():
     assert cursor.fetchall() == []
 
 
-@pytest.mark.skipolddriver
 @pytestmark_result_set
 def test_result_set_without_declared_total_does_not_raise():
     """Responses that carry no ``total`` promise nothing to compare against."""
@@ -1172,7 +1154,6 @@ def test_result_set_without_declared_total_does_not_raise():
     assert len(cursor.fetchall()) == 3
 
 
-@pytest.mark.skipolddriver
 @pytestmark_result_set
 def test_fetchmany_stopping_early_does_not_raise():
     """Reading part of a healthy result set is normal usage, not a short read."""
@@ -1191,7 +1172,6 @@ def test_fetchmany_stopping_early_does_not_raise():
         cursor.reset()
 
 
-@pytest.mark.skipolddriver
 @pytestmark_result_set
 def test_breaking_out_of_cursor_iteration_does_not_raise():
     remote, response = _remote_json_batch(
@@ -1214,7 +1194,6 @@ def test_breaking_out_of_cursor_iteration_does_not_raise():
     assert len(rows) == 5
 
 
-@pytest.mark.skipolddriver
 @pytestmark_result_set
 def test_result_batches_are_not_row_counted_against_the_total():
     """``get_result_batches()`` hands out batches the user drives themselves."""

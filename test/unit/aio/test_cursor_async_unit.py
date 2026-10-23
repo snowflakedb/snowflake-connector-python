@@ -109,7 +109,6 @@ async def test_cursor_execute_timeout(mockCancelQuery):
 
 # The _upload/_download/_upload_stream/_download_stream are newly introduced
 # and therefore should not be tested in old drivers.
-@pytest.mark.skipolddriver
 class TestUploadDownloadMethods(IsolatedAsyncioTestCase):
     """Test the _upload/_download/_upload_stream/_download_stream methods."""
 

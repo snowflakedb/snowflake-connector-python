@@ -31,9 +31,7 @@ logger = getLogger(__name__)
 pytestmark = pytest.mark.azure
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 def test_put_get_with_azure(tmpdir, conn_cnx, from_path, caplog):
     """[azure] Puts and Gets a small text using Azure."""
     caplog.set_level(DEBUG)

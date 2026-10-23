@@ -16,8 +16,6 @@ import snowflake.connector
 
 from ..test_utils.wiremock.wiremock_utils import WiremockClient
 
-pytestmark = pytest.mark.skipolddriver
-
 WIREMOCK_REDIRECT_DIR = (
     pathlib.Path(__file__).parent.parent / "data" / "wiremock" / "mappings" / "redirect"
 )

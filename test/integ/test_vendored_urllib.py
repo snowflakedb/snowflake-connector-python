@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import pytest
 
 try:
     from snowflake.connector.vendored import urllib3
@@ -9,7 +8,6 @@ except ModuleNotFoundError:
     vendored_imported = False
 
 
-@pytest.mark.skipolddriver(reason="vendored library is not imported for old driver")
 def test_local_fix_for_closed_socket_bug():
     # https://github.com/urllib3/urllib3/issues/1878#issuecomment-641534573
     http = urllib3.PoolManager(maxsize=1)

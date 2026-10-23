@@ -111,7 +111,6 @@ def test_query_large_result_set_n_threads(
 
 
 @pytest.mark.aws
-@pytest.mark.skipolddriver
 def test_query_large_result_set(conn_cnx, db_parameters, ingest_data, caplog):
     """[s3] Gets Large Result set."""
     caplog.set_level(logging.DEBUG)
@@ -182,7 +181,6 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data, caplog):
 
 
 @pytest.mark.aws
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("disable_request_pooling", [True, False])
 def test_cursor_download_uses_original_http_config(
     monkeypatch, conn_cnx, ingest_data, db_parameters, disable_request_pooling
@@ -258,7 +256,6 @@ def _strip_content_encoding(response):
 
 
 @pytest.mark.aws
-@pytest.mark.skipolddriver
 def test_multichunk_json_gzip_decompression_with_fix(
     conn_cnx, db_parameters, ingest_data
 ):

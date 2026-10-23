@@ -50,9 +50,7 @@ def file_src(request) -> tuple[str, int, IO[bytes]]:
     stream.close()
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["put_get_1.txt"], indirect=["file_src"])
 def test_put_copy0(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies a file."""
@@ -109,9 +107,7 @@ ratio number(5,2))
         run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["gzip_sample.txt.gz"], indirect=["file_src"])
 def test_put_copy_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies compressed files."""
@@ -141,9 +137,7 @@ def test_put_copy_compressed(conn_cnx, db_parameters, from_path, file_src):
         run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["bzip2_sample.txt.bz2"], indirect=["file_src"])
 @pytest.mark.skip(reason="BZ2 is not detected in this test case. Need investigation")
 def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src):
@@ -173,9 +167,7 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src):
         run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["brotli_sample.txt.br"], indirect=["file_src"])
 def test_put_copy_brotli_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies brotli compressed files."""
@@ -204,9 +196,7 @@ def test_put_copy_brotli_compressed(conn_cnx, db_parameters, from_path, file_src
         run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["zstd_sample.txt.zst"], indirect=["file_src"])
 def test_put_copy_zstd_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies zstd compressed files."""
@@ -234,9 +224,7 @@ def test_put_copy_zstd_compressed(conn_cnx, db_parameters, from_path, file_src):
         run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["nation.impala.parquet"], indirect=["file_src"])
 def test_put_copy_parquet_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies parquet compressed files."""
@@ -274,9 +262,7 @@ stage_file_format=(type='parquet')
         run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["TestOrcFile.test1.orc"], indirect=["file_src"])
 def test_put_copy_orc_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies ORC compressed files."""
@@ -564,7 +550,6 @@ ratio number(6,2))
             run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.aws
 @pytest.mark.azure
 def test_put_collision(tmpdir, conn_cnx):
@@ -717,9 +702,7 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters):
 
 @pytest.mark.aws
 @pytest.mark.azure
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
+@pytest.mark.parametrize("from_path", [True, False])
 @pytest.mark.parametrize("file_src", ["put_get_1.txt"], indirect=["file_src"])
 def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters, from_path, file_src):
     """SNOW-15153: PUTs and GETs with hint."""

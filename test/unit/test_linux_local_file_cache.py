@@ -27,7 +27,6 @@ CRED_0 = "cred_0"
 CRED_1 = "cred_1"
 
 
-@pytest.mark.skipolddriver
 def test_basic_store(tmpdir, monkeypatch):
     monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
     cache = FileTokenCache.make()
