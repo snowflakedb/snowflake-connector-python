@@ -78,6 +78,18 @@ def test_more_timestamps():
     assert m("-2208943503.0120000") == "1900-01-01 12:34:56.988000000"
 
 
+def test_negative_subsecond_timestamps():
+    # A negative timestamp whose only nonzero fraction is sub-microsecond used to
+    # render one second too high (and could roll the date), because the second
+    # borrowed in the fraction was not mirrored in the integer seconds.
+    conv = ConverterSnowSQL()
+    conv.set_parameter("TIMESTAMP_NTZ_OUTPUT_FORMAT", "YYYY-MM-DD HH24:MI:SS.FF9")
+    m = conv.to_python_method("TIMESTAMP_NTZ", {"scale": 9})
+    assert m("-2208943503.000000001") == "1900-01-01 12:34:56.999999999"
+    assert m("-1.000000001") == "1969-12-31 23:59:58.999999999"
+    assert m("-0.000000001") == "1969-12-31 23:59:59.999999999"
+
+
 def test_converter_to_snowflake_error():
     converter = SnowflakeConverter()
     with pytest.raises(
