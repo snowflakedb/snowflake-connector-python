@@ -43,7 +43,6 @@ docker run --network=host \
     -e SF_PROJECT_ROOT \
     -e cloud_provider \
     -e JENKINS_HOME \
-    -e is_old_driver \
     -e GITHUB_ACTIONS \
     -e USE_PASSWORD=true \
     --mount type=bind,source="${CONNECTOR_DIR}",target=/home/user/snowflake-connector-python \

@@ -38,19 +38,13 @@ curl ${WIREMOCK_BASE_URL}/org/wiremock/wiremock-standalone/${WIREMOCK_VERSION}/w
 
 # Run tests
 cd $CONNECTOR_DIR
-if [[ "$is_old_driver" == "true" ]]; then
-    # Old Driver Test
-    echo "[Info] Running old connector tests"
-    python3.11 -m tox -e olddriver
-else
-    for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
-        echo "[Info] Testing with ${PYTHON_VERSION}"
-        SHORT_VERSION=$(python3.11 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
-        CONNECTOR_WHL=$(ls $CONNECTOR_DIR/dist/snowflake_connector_python*cp${SHORT_VERSION}*manylinux*.whl | sort -r | head -n 1)
-        TEST_LIST=`echo py${PYTHON_VERSION/\./}-{unit-parallel,integ,pandas-parallel,sso}-ci | sed 's/ /,/g'`
-        TEST_ENVLIST=fix_lint,$TEST_LIST,py${PYTHON_VERSION/\./}-coverage
-        echo "[Info] Running tox for ${TEST_ENVLIST}"
+for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
+    echo "[Info] Testing with ${PYTHON_VERSION}"
+    SHORT_VERSION=$(python3.11 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
+    CONNECTOR_WHL=$(ls $CONNECTOR_DIR/dist/snowflake_connector_python*cp${SHORT_VERSION}*manylinux*.whl | sort -r | head -n 1)
+    TEST_LIST=`echo py${PYTHON_VERSION/\./}-{unit-parallel,integ,pandas-parallel,sso}-ci | sed 's/ /,/g'`
+    TEST_ENVLIST=fix_lint,$TEST_LIST,py${PYTHON_VERSION/\./}-coverage
+    echo "[Info] Running tox for ${TEST_ENVLIST}"
 
-        python3.11 -m tox run -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
-    done
-fi
+    python3.11 -m tox run -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
+done

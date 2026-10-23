@@ -62,10 +62,7 @@ Note: running multiple categories in one `tox` run should be done like:
 * **extras**: Tests special cases under separate processes.
 
 Special categories:
-* **skipolddriver**: We run the newest tests on the oldest still supported Python connector to verify that they
-still work. However; some behaviors change over time and new features get added. For this reason tests tagged with
-this marker will not run with old driver version. Any tests that verify new behavior, or old tests that are changed
-to use new features should have this marker on them.
+* **skipolddriver**: Legacy marker kept so existing tests that use it still collect. The old-driver CI job has been removed.
 
 ## Other test tags
 * **internal**: Tests that should only be run on our internal CI.
