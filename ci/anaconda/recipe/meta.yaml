@@ -45,9 +45,7 @@ requirements:
     - python_abi {{ python }}.* *_cp{{ py }}t
     {% endif %}
   run:
-    {% if py == 310 %}
-    - python >=3.10,<3.11.0a0
-    {% elif py == 311 %}
+    {% if py == 311 %}
     - python >=3.11,<3.12.0a0
     {% elif py == 312 %}
     - python >=3.12,<3.13.0a0

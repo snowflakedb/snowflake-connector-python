@@ -9,6 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v4.8.1 (Unreleased)
   - Integration tests reset the process-global OCSP mode around each test. A test that opted into OCSP fail-closed otherwise left later tests on the same worker checking revocation. Google Cloud Storage certificates publish no OCSP URL, so PUT and GET on GCP then failed with RevocationCheckError 254001.
+  - Dropped support for Python 3.10. The minimum supported version is now Python 3.11.
   - Bumped vendored `urllib3` to `2.8.0`. This includes the upstream fix for importing the connector on Python built against OpenSSL 4, where `ssl.PROTOCOL_TLSv1` no longer exists (SNOW-4232077).
   - Fixed large result set batch chunk download logging every transient retry at ERROR level with a traceback. Intermediate retries now log at WARNING; only the final failure after all retries are exhausted logs at ERROR with a traceback. These retry and failure logs now also include the S3 request IDs (`x-amz-request-id` / `x-amz-id-2`) when present, to aid troubleshooting and correlation with AWS-side records (SNOW-4218352).
   - Fixed a spurious `RequestsDependencyWarning` emitted at import time by the vendored `requests` when a newer `chardet` (7.x) or `charset_normalizer` is installed. `check_compatibility()` still requires `chardet >= 3.0.2` and `charset_normalizer >= 2.0.0`, but no longer rejects newer majors (SNOW-3559506).

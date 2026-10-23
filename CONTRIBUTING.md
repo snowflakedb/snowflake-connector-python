@@ -30,8 +30,8 @@ dependencies installed with `snowflake-connector-python` installed as an editabl
 Setting up a development environment is super easy with this [one simple tox command](https://tox.wiki/en/legacy/example/devenv.html).
 
 ```shell
-tox --devenv venv310 -e py310
-. venv310/bin/activate
+tox --devenv venv311 -e py311
+. venv311/bin/activate
 ```
 
 Note: we suggest using the lowest supported Python version for development.
