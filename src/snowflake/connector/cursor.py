@@ -82,7 +82,7 @@ from .errors import (
     NotSupportedError,
     ProgrammingError,
 )
-from .options import installed_pandas
+from .options import installed_pandas, missing_pandas_extra_message
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
@@ -1373,10 +1373,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
     def check_can_use_pandas(self) -> None:
         if not installed_pandas:
-            msg = (
-                "Optional dependency: 'pandas' is not installed, please see the following link for install "
-                "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation"
-            )
+            msg = missing_pandas_extra_message()
             errno = ER_NO_PYARROW
 
             Error.errorhandler_wrapper(
