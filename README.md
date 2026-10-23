@@ -1,4 +1,4 @@
-# Snowflake Connector for Python
+# Snowflake Connector for Python..
 
 > [!IMPORTANT]
 > Version 5.0.0 of the Snowflake Connector for Python has been released. Development has moved to [snowflakedb/drivers](https://github.com/snowflakedb/drivers). See the [documentation](https://docs.snowflake.com/en/developer-guide/universal-core/universal-core) for more information.
