@@ -926,7 +926,15 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
       for (int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++) {
         if (!ArrowArrayViewIsNull(columnArray, rowIdx)) {
           val = ArrowArrayViewGetIntUnsafe(columnArray, rowIdx);
-          val *= sf::internal::powTenSB4[9 - scale];
+          if (has_overflow_to_downscale) {
+            // force_microsecond_precision requests a timestamp[us] column, so
+            // the int64-encoded (nanosecond) value must be truncated to
+            // microseconds instead of being scaled up to nanoseconds.
+            val = val * sf::internal::powTenSB4[9 - scale] /
+                  sf::internal::powTenSB4[3];
+          } else {
+            val *= sf::internal::powTenSB4[9 - scale];
+          }
           returnCode = ArrowArrayAppendInt(newArray, val);
           SF_CHECK_ARROW_RC(returnCode,
                             "[Snowflake Exception] error appending int to "
