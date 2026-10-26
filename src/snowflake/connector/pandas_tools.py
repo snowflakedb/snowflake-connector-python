@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import collections.abc
 import os
+import re
 import warnings
 from functools import partial
 from logging import getLogger
@@ -40,6 +41,36 @@ if TYPE_CHECKING:  # pragma: no cover
 T = TypeVar("T", bound=collections.abc.Sequence)
 
 logger = getLogger(__name__)
+
+# Snowflake unquoted identifiers: start with letter/underscore, then alnum/_/$.
+# https://docs.snowflake.com/en/sql-reference/identifiers-syntax
+_UNQUOTED_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
+
+
+def _quote_sql_identifier(name: str) -> str:
+    """Double-quote a SQL identifier, escaping internal double quotes."""
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def _sql_column_identifier(name: str, quote_identifiers: bool) -> str:
+    """Format a DataFrame column name for interpolation into DDL/DML.
+
+    When quote_identifiers is True, the name is always emitted as a quoted
+    identifier. When False, the name is left unquoted so Snowflake can
+    case-fold it, but only if it is a valid unquoted identifier — otherwise
+    SQL metacharacters in the name would be interpolated as SQL.
+    """
+    name = str(name)
+    if quote_identifiers:
+        return _quote_sql_identifier(name)
+    if not _UNQUOTED_IDENTIFIER_RE.fullmatch(name):
+        raise ProgrammingError(
+            f"Invalid unquoted identifier {name!r}. Column names used with "
+            "quote_identifiers=False must be valid Snowflake unquoted identifiers "
+            "(letter or underscore, then letters, digits, underscores, or dollar "
+            "signs). Set quote_identifiers=True to use arbitrary column names."
+        )
+    return name
 
 
 def chunk_helper(
@@ -207,17 +238,18 @@ def _create_temp_file_format(
     return file_format_location
 
 
-def _convert_value_to_sql_option(value: Union[str, bool, int, float]) -> str:
+def _convert_value_to_sql_option(value: str | bool | int | float) -> str:
+    """Convert a Python value to a SQL option literal for iceberg config.
+
+    String values are always emitted as one escaped single-quoted literal,
+    including values that already start and end with quotes. Backslashes are
+    doubled before quotes because Snowflake treats ``\\`` as an escape inside
+    ``'...'``.
+    """
     if isinstance(value, str):
-        if len(value) > 1 and value.startswith("'") and value.endswith("'"):
-            return value
-        else:
-            value = value.replace(
-                "'", "''"
-            )  # escape single quotes before adding a pair of quotes
-            return f"'{value}'"
-    else:
-        return str(value)
+        escaped = value.replace("\\", "\\\\").replace("'", "''")
+        return f"'{escaped}'"
+    return str(value)
 
 
 def _iceberg_config_statement_helper(iceberg_config: dict[str, str]) -> str:
@@ -316,7 +348,8 @@ def write_pandas(
             https://docs.snowflake.com/en/sql-reference/sql/put.html#optional-parameters (Default value = 4).
         quote_identifiers: By default, identifiers, specifically database, schema, table and column names
             (from df.columns) will be quoted. If set to False, identifiers are passed on to Snowflake without quoting.
-            I.e. identifiers will be coerced to uppercase by Snowflake.  (Default value = True)
+            I.e. identifiers will be coerced to uppercase by Snowflake. Column names in this mode must be valid
+            Snowflake unquoted identifiers.  (Default value = True)
         infer_schema: Perform explicit schema inference on the data in the DataFrame and use the inferred data types
             when selecting columns from the DataFrame. (Default value = False)
         auto_create_table: When true, will automatically create a table with corresponding columns for each column in
@@ -422,6 +455,15 @@ def write_pandas(
     else:
         sql_use_logical_type = " USE_LOGICAL_TYPE = FALSE"
 
+    # Validate/quote column names before creating temp objects or uploading.
+    # `$1:"field"` path syntax does not support IDENTIFIER(?) or ? bindings; always quote it.
+    # quote_identifiers only controls CREATE/COPY column lists (case-folding), not the parquet path.
+    snowflake_column_names = [
+        _sql_column_identifier(c, quote_identifiers) for c in df.columns
+    ]
+    parquet_field_names = [_quote_sql_identifier(c) for c in df.columns]
+    columns = ",".join(snowflake_column_names)
+
     cursor = conn.cursor()
     stage_location = _create_temp_stage(
         cursor,
@@ -459,18 +501,6 @@ def write_pandas(
                 stage_location="@" + stage_location,
                 options={"parallel": parallel, "source_compression": "auto_detect"},
             )
-
-    # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
-    # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
-    if quote_identifiers:
-        quote = '"'
-        # if the column name contains a double quote, we need to escape it by replacing with two double quotes
-        # https://docs.snowflake.com/en/sql-reference/identifiers-syntax#double-quoted-identifiers
-        snowflake_column_names = [str(c).replace('"', '""') for c in df.columns]
-    else:
-        quote = ""
-        snowflake_column_names = list(df.columns)
-    columns = quote + f"{quote},{quote}".join(snowflake_column_names) + quote
 
     def drop_object(name: str, object_type: str) -> None:
         drop_sql = f"DROP {object_type.upper()} IF EXISTS identifier(?) /* Python:snowflake.connector.pandas_tools.write_pandas() */"
@@ -512,7 +542,7 @@ def write_pandas(
         # columns in order
         create_table_columns = ", ".join(
             [
-                f"{quote}{snowflake_col}{quote} {column_type_mapping[col]}"
+                f"{snowflake_col} {column_type_mapping[col]}"
                 for snowflake_col, col in zip(snowflake_column_names, df.columns)
             ]
         )
@@ -553,8 +583,8 @@ def write_pandas(
 
         # need explicit casting when the underlying table schema is inferred
         parquet_columns = "$1:" + ",$1:".join(
-            f"{quote}{snowflake_col}{quote}::{column_type_mapping[col]}"
-            for snowflake_col, col in zip(snowflake_column_names, df.columns)
+            f"{parquet_field}::{column_type_mapping[col]}"
+            for parquet_field, col in zip(parquet_field_names, df.columns)
         )
     else:
         target_table_location = build_location_helper(
@@ -563,9 +593,7 @@ def write_pandas(
             name=table_name,
             quote_identifiers=quote_identifiers,
         )
-        parquet_columns = "$1:" + ",$1:".join(
-            f"{quote}{snowflake_col}{quote}" for snowflake_col in snowflake_column_names
-        )
+        parquet_columns = "$1:" + ",$1:".join(parquet_field_names)
 
     try:
         if overwrite and (not auto_create_table):

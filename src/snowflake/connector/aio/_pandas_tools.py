@@ -12,6 +12,8 @@ from snowflake.connector.options import pandas
 # Import utilities from sync version
 from snowflake.connector.pandas_tools import (
     _iceberg_config_statement_helper,
+    _quote_sql_identifier,
+    _sql_column_identifier,
     build_location_helper,
     chunk_helper,
 )
@@ -240,7 +242,8 @@ async def write_pandas(
             https://docs.snowflake.com/en/sql-reference/sql/put.html#optional-parameters (Default value = 4).
         quote_identifiers: By default, identifiers, specifically database, schema, table and column names
             (from df.columns) will be quoted. If set to False, identifiers are passed on to Snowflake without quoting.
-            I.e. identifiers will be coerced to uppercase by Snowflake.  (Default value = True)
+            I.e. identifiers will be coerced to uppercase by Snowflake. Column names in this mode must be valid
+            Snowflake unquoted identifiers.  (Default value = True)
         infer_schema: Perform explicit schema inference on the data in the DataFrame and use the inferred data types
             when selecting columns from the DataFrame. (Default value = False)
         auto_create_table: When true, will automatically create a table with corresponding columns for each column in
@@ -335,6 +338,15 @@ async def write_pandas(
     else:
         sql_use_logical_type = " USE_LOGICAL_TYPE = FALSE"
 
+    # Validate/quote column names before creating temp objects or uploading.
+    # `$1:"field"` path syntax does not support IDENTIFIER(?) or ? bindings; always quote it.
+    # quote_identifiers only controls CREATE/COPY column lists (case-folding), not the parquet path.
+    snowflake_column_names = [
+        _sql_column_identifier(c, quote_identifiers) for c in df.columns
+    ]
+    parquet_field_names = [_quote_sql_identifier(c) for c in df.columns]
+    columns = ",".join(snowflake_column_names)
+
     cursor = conn.cursor()
     stage_location = await _create_temp_stage(
         cursor,
@@ -372,18 +384,6 @@ async def write_pandas(
                 stage_location="@" + stage_location,
                 options={"parallel": parallel, "source_compression": "auto_detect"},
             )
-
-    # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
-    # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
-    if quote_identifiers:
-        quote = '"'
-        # if the column name contains a double quote, we need to escape it by replacing with two double quotes
-        # https://docs.snowflake.com/en/sql-reference/identifiers-syntax#double-quoted-identifiers
-        snowflake_column_names = [str(c).replace('"', '""') for c in df.columns]
-    else:
-        quote = ""
-        snowflake_column_names = list(df.columns)
-    columns = quote + f"{quote},{quote}".join(snowflake_column_names) + quote
 
     async def drop_object(name: str, object_type: str) -> None:
         drop_sql = f"DROP {object_type.upper()} IF EXISTS identifier(?) /* Python:snowflake.connector.aio._pandas_tools.write_pandas() */"
@@ -427,7 +427,7 @@ async def write_pandas(
         # columns in order
         create_table_columns = ", ".join(
             [
-                f"{quote}{snowflake_col}{quote} {column_type_mapping[col]}"
+                f"{snowflake_col} {column_type_mapping[col]}"
                 for snowflake_col, col in zip(snowflake_column_names, df.columns)
             ]
         )
@@ -468,8 +468,8 @@ async def write_pandas(
 
         # need explicit casting when the underlying table schema is inferred
         parquet_columns = "$1:" + ",$1:".join(
-            f"{quote}{snowflake_col}{quote}::{column_type_mapping[col]}"
-            for snowflake_col, col in zip(snowflake_column_names, df.columns)
+            f"{parquet_field}::{column_type_mapping[col]}"
+            for parquet_field, col in zip(parquet_field_names, df.columns)
         )
     else:
         target_table_location = build_location_helper(
@@ -478,9 +478,7 @@ async def write_pandas(
             name=table_name,
             quote_identifiers=quote_identifiers,
         )
-        parquet_columns = "$1:" + ",$1:".join(
-            f"{quote}{snowflake_col}{quote}" for snowflake_col in snowflake_column_names
-        )
+        parquet_columns = "$1:" + ",$1:".join(parquet_field_names)
 
     try:
         if overwrite and (not auto_create_table):

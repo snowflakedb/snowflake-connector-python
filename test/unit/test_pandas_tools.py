@@ -180,3 +180,94 @@ class TestTempObjectNameUniqueness:
 
         name = random_name_for_temp_object(TempObjectType.STAGE)
         assert re.match(r"^SNOWPARK_TEMP_STAGE_[A-Z0-9]{10}$", name)
+
+
+@pytest.mark.pandas
+@pytest.mark.unit
+class TestWritePandasSqlQuoting:
+    """SNOW-3833768 / SNOW-4063884: column names and iceberg options must not
+    be interpolated as raw SQL."""
+
+    def test_unquoted_identifier_rejects_sql_metacharacters(self):
+        from snowflake.connector import ProgrammingError
+        from snowflake.connector.pandas_tools import _sql_column_identifier
+
+        with pytest.raises(ProgrammingError, match="Invalid unquoted identifier"):
+            _sql_column_identifier("x INT) AS SELECT 1 --", quote_identifiers=False)
+        with pytest.raises(ProgrammingError, match="Invalid unquoted identifier"):
+            _sql_column_identifier('a"b', quote_identifiers=False)
+        assert _sql_column_identifier("ok_col$1", quote_identifiers=False) == "ok_col$1"
+
+    def test_quoted_identifier_escapes_internal_quotes(self):
+        from snowflake.connector.pandas_tools import _sql_column_identifier
+
+        assert _sql_column_identifier('a"b', quote_identifiers=True) == '"a""b"'
+        assert (
+            _sql_column_identifier("x INT) AS SELECT 1 --", quote_identifiers=True)
+            == '"x INT) AS SELECT 1 --"'
+        )
+
+    def test_iceberg_option_always_one_literal(self):
+        from snowflake.connector.pandas_tools import _convert_value_to_sql_option
+
+        assert _convert_value_to_sql_option("vol") == "'vol'"
+        assert _convert_value_to_sql_option("'my_volume'") == "'''my_volume'''"
+        assert _convert_value_to_sql_option("it's") == "'it''s'"
+        assert _convert_value_to_sql_option("vol\\") == "'vol\\\\'"
+        assert _convert_value_to_sql_option("vol\\'") == "'vol\\\\'''"
+        value = "'x' CATALOG='evil'"
+        assert (
+            _convert_value_to_sql_option(value) == "'" + value.replace("'", "''") + "'"
+        )
+
+    @patch(
+        "snowflake.connector.pandas_tools._create_temp_stage", return_value="tmp_stage"
+    )
+    def test_copy_sql_quotes_parquet_path_with_internal_quotes(
+        self, mock_stage, mock_connection, mock_cursor
+    ):
+        from snowflake.connector.pandas_tools import write_pandas
+
+        df = pandas.DataFrame([(1,)], columns=['a"b'])
+        write_pandas(mock_connection, df, "test_table", quote_identifiers=True)
+
+        copy_sql = next(s for s in _get_executed_sqls(mock_cursor) if "COPY INTO" in s)
+        assert '$1:"a""b"' in copy_sql
+        assert '$1:"a"b"' not in copy_sql
+        assert '("a""b")' in copy_sql
+
+    @patch(
+        "snowflake.connector.pandas_tools._create_temp_stage", return_value="tmp_stage"
+    )
+    def test_copy_sql_always_quotes_parquet_path_when_unquoted_aliases(
+        self, mock_stage, mock_connection, mock_cursor
+    ):
+        from snowflake.connector.pandas_tools import write_pandas
+
+        df = pandas.DataFrame([(1,)], columns=["ab"])
+        write_pandas(mock_connection, df, "test_table", quote_identifiers=False)
+
+        copy_sql = next(s for s in _get_executed_sqls(mock_cursor) if "COPY INTO" in s)
+        assert '$1:"ab"' in copy_sql
+        assert "(ab)" in copy_sql
+        assert '("ab")' not in copy_sql
+
+    @patch(
+        "snowflake.connector.pandas_tools._create_temp_stage", return_value="tmp_stage"
+    )
+    def test_quote_identifiers_false_rejects_injection_column_before_execute(
+        self, mock_stage, mock_connection, mock_cursor
+    ):
+        from snowflake.connector import ProgrammingError
+        from snowflake.connector.pandas_tools import write_pandas
+
+        df = pandas.DataFrame([(1,)], columns=["x INT) AS SELECT * FROM secrets --"])
+        with pytest.raises(ProgrammingError, match="Invalid unquoted identifier"):
+            write_pandas(
+                mock_connection,
+                df,
+                "test_table",
+                quote_identifiers=False,
+                auto_create_table=True,
+            )
+        assert _get_executed_sqls(mock_cursor) == []

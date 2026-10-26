@@ -195,7 +195,9 @@ def test_write_pandas_with_overwrite(
                     cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
                 )
                 # the column name contains special char which should fail
-                with pytest.raises(ProgrammingError, match="unexpected '%'"):
+                with pytest.raises(
+                    ProgrammingError, match="Invalid unquoted identifier 'name%'"
+                ):
                     write_pandas(
                         cnx,
                         df4,
@@ -1060,13 +1062,13 @@ def test__iceberg_config_statement_helper():
     }
     assert (
         _iceberg_config_statement_helper(config)
-        == "EXTERNAL_VOLUME='vol' CATALOG='SNOWFLAKE' BASE_LOCATION='/root' CATALOG_SYNC='foo' STORAGE_SERIALIZATION_POLICY='bar'"
+        == "EXTERNAL_VOLUME='vol' CATALOG='''SNOWFLAKE''' BASE_LOCATION='/root' CATALOG_SYNC='foo' STORAGE_SERIALIZATION_POLICY='bar'"
     )
 
     config["STORAGE_SERIALIZATION_POLICY"] = None
     assert (
         _iceberg_config_statement_helper(config)
-        == "EXTERNAL_VOLUME='vol' CATALOG='SNOWFLAKE' BASE_LOCATION='/root' CATALOG_SYNC='foo'"
+        == "EXTERNAL_VOLUME='vol' CATALOG='''SNOWFLAKE''' BASE_LOCATION='/root' CATALOG_SYNC='foo'"
     )
 
     config["foo"] = True

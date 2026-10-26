@@ -197,7 +197,9 @@ async def test_write_pandas_with_overwrite(
                     await cnx.cursor(DictCursor).execute(select_count_sql)
                 ).fetchone()
                 # the column name contains special char which should fail
-                with pytest.raises(ProgrammingError, match="unexpected '%'"):
+                with pytest.raises(
+                    ProgrammingError, match="Invalid unquoted identifier 'name%'"
+                ):
                     await write_pandas(
                         cnx,
                         df4,

@@ -141,3 +141,49 @@ class TestWritePandasAsyncOverwriteWithoutAutoCreate:
         assert not any(
             "TRUNCATE" in sql for sql in executed_sqls
         ), "Should not TRUNCATE when overwrite=False"
+
+
+@pytest.mark.pandas
+@pytest.mark.unit
+class TestAsyncWritePandasSqlQuoting:
+    @pytest.mark.asyncio
+    @patch(
+        "snowflake.connector.aio._pandas_tools._create_temp_stage",
+        new_callable=AsyncMock,
+        return_value="tmp_stage",
+    )
+    async def test_copy_sql_quotes_parquet_path_with_internal_quotes(
+        self, mock_stage, mock_connection, mock_cursor
+    ):
+        from snowflake.connector.aio._pandas_tools import write_pandas
+
+        df = pandas.DataFrame([(1,)], columns=['a"b'])
+        await write_pandas(mock_connection, df, "test_table", quote_identifiers=True)
+
+        copy_sql = next(s for s in _get_executed_sqls(mock_cursor) if "COPY INTO" in s)
+        assert '$1:"a""b"' in copy_sql
+        assert '$1:"a"b"' not in copy_sql
+        assert '("a""b")' in copy_sql
+
+    @pytest.mark.asyncio
+    @patch(
+        "snowflake.connector.aio._pandas_tools._create_temp_stage",
+        new_callable=AsyncMock,
+        return_value="tmp_stage",
+    )
+    async def test_quote_identifiers_false_rejects_injection_column_before_execute(
+        self, mock_stage, mock_connection, mock_cursor
+    ):
+        from snowflake.connector import ProgrammingError
+        from snowflake.connector.aio._pandas_tools import write_pandas
+
+        df = pandas.DataFrame([(1,)], columns=["x INT) AS SELECT * FROM secrets --"])
+        with pytest.raises(ProgrammingError, match="Invalid unquoted identifier"):
+            await write_pandas(
+                mock_connection,
+                df,
+                "test_table",
+                quote_identifiers=False,
+                auto_create_table=True,
+            )
+        assert _get_executed_sqls(mock_cursor) == []

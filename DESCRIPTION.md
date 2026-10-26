@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v4.8.1(Oct 26,2026)
+  - Fixed `write_pandas` identifier quoting. Parquet field paths are quoted, Iceberg option values are escaped string literals, and `quote_identifiers=False` accepts only valid unquoted identifiers.
   - Dropped support for Python 3.10. The minimum supported version is now Python 3.11.
   - Bumped vendored `urllib3` to `2.8.0`. This includes the upstream fix for importing the connector on Python built against OpenSSL 4, where `ssl.PROTOCOL_TLSv1` no longer exists (SNOW-4232077).
   - Fixed large result set batch chunk download logging every transient retry at ERROR level with a traceback. Intermediate retries now log at WARNING; only the final failure after all retries are exhausted logs at ERROR with a traceback. These retry and failure logs now also include the S3 request IDs (`x-amz-request-id` / `x-amz-id-2`) when present, to aid troubleshooting and correlation with AWS-side records (SNOW-4218352).
