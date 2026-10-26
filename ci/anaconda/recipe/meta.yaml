@@ -70,7 +70,7 @@ requirements:
     - idna >=3.7,<4
     - certifi >=2024.7.4
     - typing_extensions >=4.3,<5
-    - filelock >=3.5,<4
+    - filelock >=3.12,<5
     - sortedcontainers >=2.4.0
     - platformdirs >=2.6.0,<5.0.0
     - tomlkit

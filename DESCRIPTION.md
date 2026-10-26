@@ -14,6 +14,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed large result set batch chunk download logging every transient retry at ERROR level with a traceback. Intermediate retries now log at WARNING; only the final failure after all retries are exhausted logs at ERROR with a traceback. These retry and failure logs now also include the S3 request IDs (`x-amz-request-id` / `x-amz-id-2`) when present, to aid troubleshooting and correlation with AWS-side records (SNOW-4218352).
   - Fixed a spurious `RequestsDependencyWarning` emitted at import time by the vendored `requests` when a newer `chardet` (7.x) or `charset_normalizer` is installed. `check_compatibility()` still requires `chardet >= 3.0.2` and `charset_normalizer >= 2.0.0`, but no longer rejects newer majors (SNOW-3559506).
   - Raised the minimum certifi requirement to 2026.10.18
+  - Raised filelock upper bound dependency to allow installation of filelock 4.X.
 
 - v4.8.0(Sep 30,2026)
   - Fixed external-browser (SSO) authentication to validate the `Origin` header on the local callback server, rejecting tokens delivered from unexpected origins. A trailing slash in the origin (e.g. `https://account.snowflakecomputing.com/`) is now accepted on par with the bare origin, matching JDBC and other driver behaviour. Preconnect probe connections (empty recv) no longer count against the retry budget and no longer abort the login flow.
