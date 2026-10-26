@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v4.8.1 (Unreleased)
+  - Added tilde (`~`) expansion to the `token_file_path` connection parameter, matching `private_key_file` (SNOW-3995071, #3006).
   - Integration tests reset the process-global OCSP mode around each test. A test that opted into OCSP fail-closed otherwise left later tests on the same worker checking revocation. Google Cloud Storage certificates publish no OCSP URL, so PUT and GET on GCP then failed with RevocationCheckError 254001.
   - Dropped support for Python 3.10. The minimum supported version is now Python 3.11.
   - Bumped vendored `urllib3` to `2.8.0`. This includes the upstream fix for importing the connector on Python built against OpenSSL 4, where `ssl.PROTOCOL_TLSv1` no longer exists (SNOW-4232077).
