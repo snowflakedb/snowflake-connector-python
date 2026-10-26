@@ -2321,8 +2321,8 @@ def test_trusted_certificates_helpers(cert_gen):
         (timedelta(days=1), timedelta(days=365), False),
         # Edge case - just became valid
         (timedelta(seconds=-1), timedelta(days=365), True),
-        # Edge case - about to expire
-        (timedelta(days=-365), timedelta(seconds=1), True),
+        # Still valid, but close to expiry. A 1s window can elapse before the assert.
+        (timedelta(days=-365), timedelta(seconds=30), True),
     ],
 )
 def test_is_within_validity_dates(timedelta_before, timedelta_after, expected_result):

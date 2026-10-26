@@ -119,7 +119,8 @@ def test_async_error(conn_cnx, caplog):
                 cur.get_results_from_sfqid(q_id)
             assert e1.value.errno == e2.value.errno == sync_error.value.errno
 
-            sfqid = cur.execute_async("SELECT SYSTEM$WAIT(2)")["queryId"]
+            # The wait has to outlast cancel scheduling. WAIT(2) can finish first.
+            sfqid = cur.execute_async("SELECT SYSTEM$WAIT(30)")["queryId"]
             cur.get_results_from_sfqid(sfqid)
             with con.cursor() as cancel_cursor:
                 # use separate cursor to cancel as execute will overwrite the previous query status

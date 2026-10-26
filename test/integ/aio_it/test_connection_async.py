@@ -418,7 +418,9 @@ async def test_invalid_account_timeout(conn_cnx):
             pass
 
 
-@pytest.mark.timeout(20)
+# login_timeout stops new retries, but one backoff sleep (up to 16s) can
+# still run after that deadline. The pytest limit has to cover it.
+@pytest.mark.timeout(45)
 async def test_invalid_proxy(conn_cnx):
     http_proxy = os.environ.get("HTTP_PROXY")
     https_proxy = os.environ.get("HTTPS_PROXY")
@@ -449,7 +451,7 @@ async def test_invalid_proxy(conn_cnx):
             pass
 
 
-@pytest.mark.timeout(20)
+@pytest.mark.timeout(45)
 async def test_invalid_proxy_not_impacting_env_vars(conn_cnx):
     http_proxy = os.environ.get("HTTP_PROXY")
     https_proxy = os.environ.get("HTTPS_PROXY")
