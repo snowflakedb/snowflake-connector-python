@@ -197,7 +197,23 @@ jobs:
           java-package: 'jre'
       - name: Fetch Wiremock
         shell: bash
-        run: curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output .wiremock/wiremock-standalone.jar
+        run: |
+          set -euo pipefail
+          jar=".wiremock/wiremock-standalone.jar"
+          url="https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar"
+          # Maven Central sometimes returns a tiny successful body. curl then
+          # exits 0 and every Wiremock test fails on a corrupt jar.
+          for attempt in 1 2 3 4 5; do
+            rm -f "$jar"
+            if curl --fail --location --retry 3 --retry-delay 2 --output "$jar" "$url" \
+              && python -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).close()" "$jar"; then
+              exit 0
+            fi
+            echo "Wiremock jar download attempt ${attempt} did not produce a valid jar"
+            sleep $((attempt * 2))
+          done
+          echo "Failed to download a valid Wiremock jar"
+          exit 1
       - name: Setup parameters file
         shell: bash
         env:
@@ -437,7 +453,23 @@ jobs:
           java-package: 'jre'
       - name: Fetch Wiremock
         shell: bash
-        run: curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output .wiremock/wiremock-standalone.jar
+        run: |
+          set -euo pipefail
+          jar=".wiremock/wiremock-standalone.jar"
+          url="https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar"
+          # Maven Central sometimes returns a tiny successful body. curl then
+          # exits 0 and every Wiremock test fails on a corrupt jar.
+          for attempt in 1 2 3 4 5; do
+            rm -f "$jar"
+            if curl --fail --location --retry 3 --retry-delay 2 --output "$jar" "$url" \
+              && python -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).close()" "$jar"; then
+              exit 0
+            fi
+            echo "Wiremock jar download attempt ${attempt} did not produce a valid jar"
+            sleep $((attempt * 2))
+          done
+          echo "Failed to download a valid Wiremock jar"
+          exit 1
       - name: Setup parameters file
         shell: bash
         env:
