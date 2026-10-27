@@ -7,6 +7,10 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- Upcoming release
+  - Added connection parameters `log_query_text` and `log_query_parameters`, both off by default. When `log_query_text` is enabled, the INFO line is the statement with client-side placeholders left in place; bind values are written only when both parameters are enabled. Enabling either parameter can write confidential query text and bind values to logs (SNOW-2835375).
+  - Integration tests reset the process-global OCSP mode around each test. A test that opted into OCSP fail-closed otherwise left later tests on the same worker checking revocation. Google Cloud Storage certificates publish no OCSP URL, so PUT and GET on GCP then failed with RevocationCheckError 254001.
+
 - v4.8.1(Oct 26,2026)
   - Fixed `write_pandas` identifier quoting. Parquet field paths are quoted, Iceberg option values are escaped string literals, and `quote_identifiers=False` accepts only valid unquoted identifiers.
   - Dropped support for Python 3.10. The minimum supported version is now Python 3.11.

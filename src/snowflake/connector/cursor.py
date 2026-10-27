@@ -430,6 +430,9 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         )
 
         self._rownumber: int | None = None
+        # Statement and binds from before executemany inlines them into the SQL.
+        self._info_query_text: str | None = None
+        self._info_log_params: Any = None
 
         self.reset()
 
@@ -626,6 +629,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         _is_put_get=None,
         _no_retry: bool = False,
         dataframe_ast: str | None = None,
+        _log_params: Any = None,
+        _log_query: str | None = None,
     ) -> dict[str, Any]:
         del self.messages[:]
 
@@ -685,6 +690,11 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         logger.debug(f"Request id: {self._request_id}")
 
         logger.debug("running query [%s]", self._format_query_for_log_lazy(query))
+        self._connection._log_query_at_info(
+            query if _log_query is None else _log_query,
+            _log_params,
+            log=logger,
+        )
         if _is_put_get is not None:
             # if told the query is PUT or GET, use the information
             self._is_file_transfer = _is_put_get
@@ -964,6 +974,10 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         """
         if _exec_async:
             _no_results = True
+        info_query_text = self._info_query_text
+        info_log_params = self._info_log_params
+        self._info_query_text = None
+        self._info_log_params = None
         logger.debug("executing SQL/command")
         if self.is_closed():
             Error.errorhandler_wrapper(
@@ -1035,7 +1049,19 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             )
             query = query1
 
-        ret = self._execute_helper(query, **kwargs)
+        if self._connection.log_query_parameters:
+            query_for_info = query
+        else:
+            query_for_info = command if info_query_text is None else info_query_text
+        log_params = kwargs.get("binding_params", params)
+        if log_params is None:
+            log_params = info_log_params
+        ret = self._execute_helper(
+            query,
+            _log_params=log_params,
+            _log_query=query_for_info,
+            **kwargs,
+        )
         self._sfqid = (
             ret["data"]["queryId"]
             if "data" in ret and "queryId" in ret["data"]
@@ -1581,8 +1607,10 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                     values.append(
                         fmt % self._connection._process_params_pyformat(param, self)
                     )
-                command = command.replace(fmt, ",".join(values), 1)
-                self.execute(command, **kwargs)
+                inlined = command.replace(fmt, ",".join(values), 1)
+                self._info_query_text = command
+                self._info_log_params = seqparams
+                self.execute(inlined, **kwargs)
                 return self
             else:
                 logger.debug("bulk insert")
@@ -1639,12 +1667,15 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             if self._connection.is_pyformat and not kwargs.get(
                 "_force_qmark_paramstyle", False
             ):
+                placeholder = command * len(seqparams)
                 processed_queries = [
                     self._preprocess_pyformat_query(command, params)
                     for params in seqparams
                 ]
                 query = "".join(processed_queries)
                 params = None
+                self._info_query_text = placeholder
+                self._info_log_params = seqparams
             else:
                 query = command * len(seqparams)
                 params = [param for parameters in seqparams for param in parameters]

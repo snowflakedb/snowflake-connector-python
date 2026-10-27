@@ -333,6 +333,11 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "service_name": (None, (type(None), str)),  # snowflake
     "support_negative_year": (True, bool),  # snowflake
     "log_max_query_length": (LOG_MAX_QUERY_LENGTH, int),  # snowflake
+    # SQL text and bind values can contain confidential data. Both stay off
+    # until opted in. log_query_parameters has no effect unless log_query_text
+    # is also true. Each enabled flag logs one warning at connect time.
+    "log_query_text": (False, bool),
+    "log_query_parameters": (False, bool),
     "disable_request_pooling": (False, bool),  # snowflake
     # Cache SSO ID tokens to avoid repeated browser popups. Must be enabled on the server-side.
     # Storage: keyring (macOS/Windows), file (Linux). Auto-enabled on macOS/Windows.
@@ -549,22 +554,23 @@ logger = getLogger(__name__)
 
 
 class _LazyQueryLog:
-    """Defer query mask+format until a DEBUG record is actually emitted.
+    """Defer query mask+format until a log record is actually emitted.
 
     ``logging`` only calls ``str()`` on a positional arg when a handler emits
     the record (i.e. after the level check passes), so wrapping the
-    ``SecretDetector`` masking here avoids paying for it when DEBUG is disabled,
-    without a ``getEffectiveLevel()`` guard at each call site.
+    ``SecretDetector`` masking here avoids paying for it when the record is
+    disabled, without a ``getEffectiveLevel()`` guard at each call site.
     """
 
     __slots__ = ("_format", "_query")
 
-    def __init__(self, format_fn: Callable[[str], str], query: str) -> None:
+    def __init__(self, format_fn: Callable[[str], str], query: Any) -> None:
         self._format = format_fn
         self._query = query
 
     def __str__(self) -> str:
-        return self._format(self._query)
+        query = self._query if isinstance(self._query, str) else str(self._query)
+        return self._format(query)
 
 
 class TypeAndBinding(NamedTuple):
@@ -1171,6 +1177,32 @@ class SnowflakeConnection:
     @property
     def log_max_query_length(self) -> int:
         return self._log_max_query_length
+
+    @property
+    def log_query_text(self) -> bool:
+        """Whether SQL text is written to INFO logs.
+
+        Defaults to false. Query text can contain confidential data, so it
+        stays out of INFO logs unless this is enabled. When enabled, the INFO
+        line is the statement with client-side placeholders still in place.
+        Bind values are included only when ``log_query_parameters`` is also
+        enabled; that line is then the SQL sent to the server. Text is masked
+        and truncated with ``log_max_query_length``, and a warning is logged
+        at connect time. Protect those logs as confidential.
+        """
+        return bool(getattr(self, "_log_query_text", False))
+
+    @property
+    def log_query_parameters(self) -> bool:
+        """Whether bind-parameter values are written to INFO logs.
+
+        Defaults to false and has no effect unless ``log_query_text`` is also
+        true. Bind values can contain confidential data. When both are
+        enabled, values are masked and truncated with ``log_max_query_length``
+        before they are written, and a warning is logged at connect time.
+        Protect those logs as confidential.
+        """
+        return bool(getattr(self, "_log_query_parameters", False))
 
     @property
     def disable_request_pooling(self) -> bool:
@@ -1863,6 +1895,8 @@ class SnowflakeConnection:
                         stacklevel=4,
                     )
             setattr(self, "_" + name, value)
+
+        self._warn_query_logging_risk()
 
         if self._numpy:
             try:
@@ -2560,6 +2594,45 @@ class SnowflakeConnection:
             elif PARAMETER_QUERY_CONTEXT_CACHE_SIZE == name:
                 self.query_context_cache_size = value
 
+    def _warn_query_logging_risk(self) -> None:
+        """Log one warning for each query-logging flag that is enabled.
+
+        ``log_query_parameters`` warns on its own. Bind values are written
+        only when ``log_query_text`` is also true.
+        """
+        if self.log_query_text:
+            logger.warning(
+                "log_query_text is enabled: SQL query text will appear in logs - "
+                "ensure logs are protected as confidential data"
+            )
+        if self.log_query_parameters:
+            logger.warning(
+                "log_query_parameters is enabled: bind parameter values will appear in logs - "
+                "ensure logs are protected as confidential data"
+            )
+
+    def _log_query_at_info(
+        self,
+        query: str,
+        params: Any = None,
+        *,
+        log: logging.Logger | None = None,
+    ) -> None:
+        """INFO-log SQL text and, when both flags are on, bind values.
+
+        ``log_query_parameters`` is ignored unless ``log_query_text`` is true.
+        Masking and truncation run only if the record is emitted.
+        """
+        if not self.log_query_text:
+            return
+        active = logger if log is None else log
+        active.info("query: [%s]", self._format_query_for_log_lazy(query))
+        if self.log_query_parameters and params is not None:
+            active.info(
+                "query parameters: [%s]",
+                self._format_query_for_log_lazy(params),
+            )
+
     def _format_query_for_log(self, query: str) -> str:
         ret = " ".join(line.strip() for line in query.split("\n"))
         # SNOW-3675590: SQL text can embed cloud credentials (e.g. COPY/CREATE
@@ -2572,7 +2645,7 @@ class SnowflakeConnection:
             else ret[0 : self.log_max_query_length] + "..."
         )
 
-    def _format_query_for_log_lazy(self, query: str) -> _LazyQueryLog:
+    def _format_query_for_log_lazy(self, query: Any) -> _LazyQueryLog:
         """Lazy ``_format_query_for_log`` — masks only if the record is emitted."""
         return _LazyQueryLog(self._format_query_for_log, query)
 
