@@ -9,7 +9,6 @@ from concurrent.futures import TimeoutError as FutureTimeoutError
 from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import contextmanager
 from enum import Enum
-from functools import cache
 
 from .constants import (
     ENV_VAR_BOOL_POSITIVE_VALUES_LOWERCASED,
@@ -465,8 +464,7 @@ def is_aws_wif_outbound_token_enabled():
     )
 
 
-@cache
-def detect_platforms(
+def _detect_platforms(
     platform_detection_timeout_seconds: float | None,
     session_manager: SessionManager | None = None,
 ) -> list[str]:
@@ -590,3 +588,36 @@ def detect_platforms(
             return detected_platforms
     except Exception:
         return []
+
+
+class _CachedPlatformDetection:
+    """Runs platform detection at most once per timeout value for the process.
+
+    The session manager is intentionally not part of the cache key: the caller
+    passes a fresh clone on every connection, which made ``functools.cache``
+    miss every time and rerun detection (including its network probes) on each
+    ``connect()``.
+    """
+
+    def __init__(self) -> None:
+        self._results: dict[float | None, list[str]] = {}
+        self._lock = threading.Lock()
+
+    def __call__(
+        self,
+        platform_detection_timeout_seconds: float | None,
+        session_manager: SessionManager | None = None,
+    ) -> list[str]:
+        with self._lock:
+            if platform_detection_timeout_seconds not in self._results:
+                self._results[platform_detection_timeout_seconds] = _detect_platforms(
+                    platform_detection_timeout_seconds, session_manager
+                )
+            return self._results[platform_detection_timeout_seconds]
+
+    def cache_clear(self) -> None:
+        with self._lock:
+            self._results.clear()
+
+
+detect_platforms = _CachedPlatformDetection()
