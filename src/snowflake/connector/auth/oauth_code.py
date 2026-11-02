@@ -66,6 +66,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         enable_single_use_refresh_tokens: bool = False,
         connection: SnowflakeConnection | None = None,
         uri: str | None = None,
+        role: str = "",
         **kwargs,
     ) -> None:
         authentication_url, redirect_uri = self._validate_oauth_code_uris(
@@ -95,6 +96,8 @@ class AuthByOauthCode(AuthByOAuthBase):
             is_snowflake_as_idp=self._is_snowflake_as_idp(
                 authentication_url, token_request_url, host
             ),
+            snowflake_host=host,
+            role=role,
             **kwargs,
         )
         self._application = application

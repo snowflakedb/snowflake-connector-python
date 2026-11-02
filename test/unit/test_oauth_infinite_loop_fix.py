@@ -90,9 +90,9 @@ class TestOAuthTokenCacheLoading:
         """Verify both access and refresh tokens are loaded."""
 
         def mock_retrieve(key: TokenKey):
-            if key.tokenType == TokenType.OAUTH_ACCESS_TOKEN:
+            if key.token_type == TokenType.OAUTH_ACCESS_TOKEN:
                 return "test_access_token"
-            elif key.tokenType == TokenType.OAUTH_REFRESH_TOKEN:
+            elif key.token_type == TokenType.OAUTH_REFRESH_TOKEN:
                 return "test_refresh_token"
             return None
 
@@ -533,7 +533,7 @@ class TestOAuthPrepareProactiveRefresh:
         """No cached access token + valid cached refresh token -> silent refresh, no browser."""
 
         def mock_retrieve(key: TokenKey):
-            if key.tokenType == TokenType.OAUTH_REFRESH_TOKEN:
+            if key.token_type == TokenType.OAUTH_REFRESH_TOKEN:
                 return "cached_refresh_token"
             return None  # no access token cached
 
@@ -566,7 +566,7 @@ class TestOAuthPrepareProactiveRefresh:
         """If refresh does not produce an access token, fall back to interactive auth."""
 
         def mock_retrieve(key: TokenKey):
-            if key.tokenType == TokenType.OAUTH_REFRESH_TOKEN:
+            if key.token_type == TokenType.OAUTH_REFRESH_TOKEN:
                 return "cached_refresh_token"
             return None
 
@@ -597,7 +597,7 @@ class TestOAuthPrepareProactiveRefresh:
         connection: prepare() swallows it and falls back to interactive auth."""
 
         def mock_retrieve(key: TokenKey):
-            if key.tokenType == TokenType.OAUTH_REFRESH_TOKEN:
+            if key.token_type == TokenType.OAUTH_REFRESH_TOKEN:
                 return "cached_refresh_token"
             return None
 
@@ -631,9 +631,9 @@ class TestOAuthPrepareProactiveRefresh:
         """A cached access token short-circuits before any refresh attempt."""
 
         def mock_retrieve(key: TokenKey):
-            if key.tokenType == TokenType.OAUTH_ACCESS_TOKEN:
+            if key.token_type == TokenType.OAUTH_ACCESS_TOKEN:
                 return "cached_access_token"
-            if key.tokenType == TokenType.OAUTH_REFRESH_TOKEN:
+            if key.token_type == TokenType.OAUTH_REFRESH_TOKEN:
                 return "cached_refresh_token"
             return None
 
@@ -845,7 +845,7 @@ class TestOAuthAccessTokenEviction:
         assert auth._access_token is None
         mock_token_cache.remove.assert_called_once()
         removed_key = mock_token_cache.remove.call_args.args[0]
-        assert removed_key.tokenType == TokenType.OAUTH_ACCESS_TOKEN
+        assert removed_key.token_type == TokenType.OAUTH_ACCESS_TOKEN
         mock_token_cache.store.assert_not_called()
 
     def test_reauthenticate_evicts_access_token_on_terminal_failure(
@@ -867,7 +867,7 @@ class TestOAuthAccessTokenEviction:
         # The poisoned access token was removed and nothing was stored on failure.
         mock_token_cache.remove.assert_called_once()
         removed_key = mock_token_cache.remove.call_args.args[0]
-        assert removed_key.tokenType == TokenType.OAUTH_ACCESS_TOKEN
+        assert removed_key.token_type == TokenType.OAUTH_ACCESS_TOKEN
         mock_token_cache.store.assert_not_called()
 
     def test_reauthenticate_success_does_not_evict_access_token(
