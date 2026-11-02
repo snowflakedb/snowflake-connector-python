@@ -217,6 +217,55 @@ def test_retries_until_success(caplog):
         assert all("S3 request id: test-req-id" in r.getMessage() for r in warning_logs)
 
 
+def test_download_retry_log_omits_presigned_query(caplog):
+    """Transport failures must not write the chunk URL query string."""
+    from snowflake.connector.result_batch import _chunk_url_for_log
+    from snowflake.connector.vendored.requests.exceptions import ConnectionError
+
+    signed_url = (
+        "https://user:sas@acct.blob.core.windows.net:443/results/chunk-1"
+        "?sv=2024-11-04&sig=supersecretsignaturevalue&se=2099-01-01T00:00:00Z"
+    )
+    secret = "supersecretsignaturevalue"
+    assert _chunk_url_for_log(signed_url) == (
+        "acct.blob.core.windows.net:443/results/chunk-1"
+    )
+    assert _chunk_url_for_log(None) == "<unknown>"
+    assert _chunk_url_for_log("not a url") == "<unknown>"
+
+    batch = JSONResultBatch(100, None, MockRemoteChunkInfo(signed_url), [], [], True)
+    with mock.patch(SESSION_FROM_REQUEST_MODULE_PATH + ".get") as mock_get:
+        mock_get.side_effect = ConnectionError(
+            f"Max retries exceeded with url: {signed_url}"
+        )
+        with mock.patch("time.sleep", return_value=None):
+            with caplog.at_level(
+                logging.WARNING, logger="snowflake.connector.result_batch"
+            ):
+                with pytest.raises(ConnectionError):
+                    batch._download()
+    assert mock_get.call_count == MAX_DOWNLOAD_RETRY
+    retry_logs = [
+        r
+        for r in caplog.records
+        if r.name == "snowflake.connector.result_batch"
+        and r.levelno in (logging.WARNING, logging.ERROR)
+    ]
+    assert sum(r.levelno == logging.WARNING for r in retry_logs) == (
+        MAX_DOWNLOAD_RETRY - 1
+    )
+    assert sum(r.levelno == logging.ERROR for r in retry_logs) == 1
+    assert all(r.exc_info is None for r in retry_logs)
+    text = "\n".join(r.getMessage() for r in retry_logs)
+    assert secret not in text
+    assert "sig=" not in text
+    assert "sv=" not in text
+    assert "user:sas" not in text
+    assert "acct.blob.core.windows.net:443/results/chunk-1" in text
+    assert "error_type=ConnectionError" in text
+    assert "chunk-1" in text
+
+
 # ---------------------------------------------------------------------------
 # Gzip decompression fallback tests
 #

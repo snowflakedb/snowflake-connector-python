@@ -138,6 +138,49 @@ async def test_retryable_response_download(errcode, error_class, caplog):
         )
 
 
+async def test_download_retry_log_omits_presigned_query(caplog):
+    """Transport failures must not write the chunk URL query string."""
+    import aiohttp
+
+    signed_url = (
+        "https://acct.blob.core.windows.net/results/chunk-1"
+        "?sv=2024-11-04&sig=supersecretsignaturevalue&se=2099-01-01T00:00:00Z"
+    )
+    secret = "supersecretsignaturevalue"
+    batch = JSONResultBatch(100, None, MockRemoteChunkInfo(signed_url), [], [], True)
+    with mock.patch(
+        REQUEST_MODULE_PATH + ".get",
+        side_effect=aiohttp.ClientConnectionError(
+            f"Cannot connect to host {signed_url}"
+        ),
+    ) as mock_get:
+        with mock.patch("asyncio.sleep", return_value=None):
+            with caplog.at_level(
+                logging.WARNING, logger="snowflake.connector.aio._result_batch"
+            ):
+                with pytest.raises(aiohttp.ClientConnectionError):
+                    await batch._download()
+    assert mock_get.call_count == MAX_DOWNLOAD_RETRY
+    retry_logs = [
+        r
+        for r in caplog.records
+        if r.name == "snowflake.connector.aio._result_batch"
+        and r.levelno in (logging.WARNING, logging.ERROR)
+    ]
+    assert sum(r.levelno == logging.WARNING for r in retry_logs) == (
+        MAX_DOWNLOAD_RETRY - 1
+    )
+    assert sum(r.levelno == logging.ERROR for r in retry_logs) == 1
+    assert all(r.exc_info is None for r in retry_logs)
+    text = "\n".join(r.getMessage() for r in retry_logs)
+    assert secret not in text
+    assert "sig=" not in text
+    assert "sv=" not in text
+    assert "acct.blob.core.windows.net/results/chunk-1" in text
+    assert "error_type=ClientConnectionError" in text
+    assert "chunk-1" in text
+
+
 async def test_unauthorized_response_download():
     """This tests that the Unauthorized response (401 status code) is handled correctly."""
     with mock.patch(

@@ -34,6 +34,7 @@ from snowflake.connector.result_batch import RemoteChunkInfo
 from snowflake.connector.result_batch import ResultBatch as ResultBatchSync
 from snowflake.connector.result_batch import (
     _create_nanoarrow_iterator,
+    _log_chunk_download_failure,
     _s3_request_id_log_suffix,
     inline_first_chunk_rowcount,
 )
@@ -234,6 +235,7 @@ class ResultBatch(ResultBatchSync):
         content, encoding = None, None
         for retry in range(max(MAX_DOWNLOAD_RETRY, 1)):
             amz_request_id_suffix = ""
+            chunk_url = ""
             try:
 
                 async with TimerContextManager() as download_metric:
@@ -301,22 +303,24 @@ class ResultBatch(ResultBatchSync):
                         raise_failed_request_error(None, chunk_url, "get", response)
 
             except (RetryRequest, Exception) as e:
-                if retry == MAX_DOWNLOAD_RETRY - 1:
+                final = retry == MAX_DOWNLOAD_RETRY - 1
+                if not final:
+                    sleep_timer = next(backoff)
+                _log_chunk_download_failure(
+                    logger,
+                    batch_id=self.id,
+                    attempt=retry + 1,
+                    max_attempts=MAX_DOWNLOAD_RETRY,
+                    sleep_timer=None if final else sleep_timer,
+                    error=e,
+                    chunk_url=chunk_url,
+                    amz_request_id_suffix=amz_request_id_suffix,
+                    final=final,
+                )
+                if final:
                     # Re-throw if we failed on the last retry
                     e = e.args[0] if isinstance(e, RetryRequest) else e
-                    logger.error(
-                        f"Failed to fetch the large result set batch "
-                        f"{self.id} after {MAX_DOWNLOAD_RETRY} attempts, "
-                        f"giving up for the reason: '{e}'{amz_request_id_suffix}",
-                        exc_info=True,
-                    )
                     raise e
-                sleep_timer = next(backoff)
-                logger.warning(
-                    f"Failed to fetch the large result set batch "
-                    f"{self.id} for the {retry + 1} th time, "
-                    f"backing off for {sleep_timer}s for the reason: '{e}'{amz_request_id_suffix}"
-                )
                 await asyncio.sleep(sleep_timer)
 
         self._metrics[DownloadMetrics.download.value] = (

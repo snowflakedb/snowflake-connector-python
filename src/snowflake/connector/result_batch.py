@@ -6,7 +6,7 @@ import json
 import time
 from base64 import b64decode
 from enum import Enum, unique
-from logging import getLogger
+from logging import Logger, getLogger
 from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Sequence
 
 from typing_extensions import Self
@@ -76,6 +76,58 @@ def _s3_request_id_log_suffix(response: Response | None) -> str:
         if isinstance(value, str) and value:
             parts.append(f"{label}: {value}")
     return f", {', '.join(parts)}" if parts else ""
+
+
+def _chunk_url_for_log(url: str | None) -> str:
+    """Host and path of a result-chunk URL.
+
+    Presigned chunk URLs carry the credential in the query string.
+    """
+    if not url:
+        return "<unknown>"
+    parsed = urlparse(url)
+    host = parsed.hostname
+    if not host:
+        return "<unknown>"
+    port = f":{parsed.port}" if parsed.port else ""
+    return f"{host}{port}{parsed.path}"
+
+
+def _logged_download_error(error: BaseException) -> BaseException:
+    if isinstance(error, RetryRequest) and error.args:
+        inner = error.args[0]
+        if isinstance(inner, BaseException):
+            return inner
+    return error
+
+
+def _log_chunk_download_failure(
+    log: Logger,
+    *,
+    batch_id: str,
+    attempt: int,
+    max_attempts: int,
+    sleep_timer: int | float | None,
+    error: BaseException,
+    chunk_url: str,
+    amz_request_id_suffix: str,
+    final: bool,
+) -> None:
+    logged = _logged_download_error(error)
+    safe_url = _chunk_url_for_log(chunk_url)
+    error_type = type(logged).__name__
+    if final:
+        log.error(
+            f"Failed to fetch the large result set batch {batch_id} after "
+            f"{max_attempts} attempts, giving up. error_type={error_type} "
+            f"url={safe_url}{amz_request_id_suffix}"
+        )
+        return
+    log.warning(
+        f"Failed to fetch the large result set batch {batch_id} for the "
+        f"{attempt} th time, backing off for {sleep_timer}s. "
+        f"error_type={error_type} url={safe_url}{amz_request_id_suffix}"
+    )
 
 
 def inline_first_chunk_rowcount(data: dict[str, Any]) -> int:
@@ -544,6 +596,7 @@ class ResultBatch(abc.ABC):
         )
         for retry in range(MAX_DOWNLOAD_RETRY):
             amz_request_id_suffix = ""
+            chunk_url = ""
             try:
                 with TimerContextManager() as download_metric:
                     logger.debug(f"started downloading result batch id: {self.id}")
@@ -603,22 +656,24 @@ class ResultBatch(abc.ABC):
                         raise_failed_request_error(None, chunk_url, "get", response)
 
             except (RetryRequest, Exception) as e:
-                if retry == MAX_DOWNLOAD_RETRY - 1:
+                final = retry == MAX_DOWNLOAD_RETRY - 1
+                if not final:
+                    sleep_timer = next(backoff)
+                _log_chunk_download_failure(
+                    logger,
+                    batch_id=self.id,
+                    attempt=retry + 1,
+                    max_attempts=MAX_DOWNLOAD_RETRY,
+                    sleep_timer=None if final else sleep_timer,
+                    error=e,
+                    chunk_url=chunk_url,
+                    amz_request_id_suffix=amz_request_id_suffix,
+                    final=final,
+                )
+                if final:
                     # Re-throw if we failed on the last retry
                     e = e.args[0] if isinstance(e, RetryRequest) else e
-                    logger.error(
-                        f"Failed to fetch the large result set batch "
-                        f"{self.id} after {MAX_DOWNLOAD_RETRY} attempts, "
-                        f"giving up for the reason: '{e}'{amz_request_id_suffix}",
-                        exc_info=True,
-                    )
                     raise e
-                sleep_timer = next(backoff)
-                logger.warning(
-                    f"Failed to fetch the large result set batch "
-                    f"{self.id} for the {retry + 1} th time, "
-                    f"backing off for {sleep_timer}s for the reason: '{e}'{amz_request_id_suffix}"
-                )
                 time.sleep(sleep_timer)
 
         self._metrics[DownloadMetrics.download.value] = (
