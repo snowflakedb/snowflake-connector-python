@@ -384,8 +384,9 @@ def test_cleanup_loop_handles_exceptions_gracefully(
     # Start the cleanup loop
     cache_factory.start_periodic_cleanup(timedelta(milliseconds=50))
 
-    # Wait for multiple cleanup cycles to occur
-    time.sleep(0.15)
+    # The loop waits 50ms between calls. With the CPUs busy that gap reached
+    # 571ms, so a 150ms sleep can see only the first call.
+    time.sleep(1.2)
 
     # Stop the cleanup loop
     cache_factory.stop_periodic_cleanup()
