@@ -159,8 +159,8 @@ jobs:
                     `were imported internally and merged as [\`${t.commitSha.slice(0, 12)}\`](${commitUrl}).\n\n` +
                     `However, **new commits have been pushed to this PR since the import** ` +
                     `(current head: \`${pr.head.sha.slice(0, 12)}\`). Those newer commits ` +
-                    `have **not** been merged. A maintainer will need to re-label with ` +
-                    `\`ok-to-import\` to bring them in, or you can close this PR if the ` +
+                    `have **not** been merged. A maintainer can run another import with ` +
+                    `the new HEAD SHA to bring them in, or you can close this PR if the ` +
                     `imported snapshot is sufficient.`;
                   await github.rest.issues.createComment({
                     owner, repo, issue_number: t.prNumber, body,
