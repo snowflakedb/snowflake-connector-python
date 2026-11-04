@@ -28,7 +28,6 @@ exclude .wiremock/*
 prune ci
 prune benchmark
 prune test
-prune tested_requirements
 prune src/snowflake/connector/nanoarrow_cpp/scripts
 prune __pycache__
 prune samples
