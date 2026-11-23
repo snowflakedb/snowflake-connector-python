@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - Upcoming release
+  - Raised the conda recipe's minimum certifi requirement to 2026.10.18 so conda installs no longer accept bundles that still include the compromised eMudhra trust anchors (SNOW-4354085).
   - Changed large-result chunk download retry and failure logs. They record the batch id, attempt, error type, host and path, and S3 request ids when the response has them. They no longer include the exception text or a traceback (SNOW-4404156).
   - Added connection parameters `log_query_text` and `log_query_parameters`, both off by default. When `log_query_text` is enabled, the INFO line is the statement with client-side placeholders left in place; bind values are written only when both parameters are enabled. Enabling either parameter can write confidential query text and bind values to logs (SNOW-2835375).
   - Fixed token cache key collisions for multi-account (shared IdP) and multi-role scenarios by switching to a versioned, SHA256-hashed canonical-JSON key with the token type in the key prefix, applied uniformly across macOS/Windows keyring and the Linux file backend (SNOW-3784431). MFA and ID token keys use only the Snowflake host and username; OAuth keys additionally include the full token-endpoint URL and role. Existing cache entries from prior key layouts are not read; the next connection re-authenticates and writes a v2 entry.
